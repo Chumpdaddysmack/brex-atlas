@@ -1,6 +1,9 @@
 // Shared LLM helpers for the analysis and content pipelines.
-// Uses Anthropic tool_use to force structured JSON output — this eliminates
-// the whole class of "model produced invalid JSON" errors.
+// Uses Anthropic's "assistant message prefill" pattern to force JSON output:
+// we start the assistant's reply with `{` so Claude has to continue with a JSON
+// object. Combined with jsonrepair, this handles all the malformed-JSON edge
+// cases we've hit (trailing commas, smart quotes, comment lines) without
+// requiring a per-call schema.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonrepair } from "jsonrepair";
@@ -57,52 +60,39 @@ export function extractJson(text: string): any {
       }
     }
   }
-  throw new Error("Unbalanced JSON in model output");
+  try {
+    return JSON.parse(jsonrepair(src.slice(startIdx)));
+  } catch {
+    throw new Error("Unbalanced JSON in model output");
+  }
 }
 
 export async function llmJson(system: string, user: string, maxTokens = 4096): Promise<any> {
-  const tool: any = {
-    name: "return_result",
-    description:
-      "Return the structured result described in the system prompt. Follow the schema exactly. Return ONLY this tool call — no other text.",
-    input_schema: {
-      type: "object",
-      additionalProperties: true,
-    },
-  };
-
   const resp = await client.messages.create({
     model: MODEL,
     max_tokens: maxTokens,
     system,
-    tools: [tool],
-    tool_choice: { type: "tool", name: "return_result" } as any,
-    messages: [{ role: "user", content: user }],
+    messages: [
+      { role: "user", content: user },
+      { role: "assistant", content: "{" },
+    ],
   });
 
-  for (const block of resp.content as any[]) {
-    if (block.type === "tool_use" && block.name === "return_result") {
-      const inp = block.input;
-      if (inp && typeof inp === "object" && !Array.isArray(inp)) {
-        const keys = Object.keys(inp);
-        if (keys.length === 1) {
-          const solo = inp[keys[0]];
-          if (Array.isArray(solo)) return solo;
-        }
-      }
-      return inp;
-    }
-  }
-
-  const text = (resp.content as any[])
+  const rawText = (resp.content as any[])
     .filter((b) => b.type === "text")
     .map((b) => b.text)
     .join("\n");
+  const text = "{" + rawText;
+
+  const stopReason = (resp as any).stop_reason;
+  const usage = (resp as any).usage;
+  console.log(
+    `[llmJson] stop=${stopReason} textLen=${text.length} usage=${JSON.stringify(usage)}`,
+  );
+
   try {
     return extractJson(text);
   } catch (e: any) {
-    const stopReason = (resp as any).stop_reason;
-    const usage = (resp as any).usage;
     const tail = text.slice(-500);
     console.error(
       `[llmJson] extract failed. stop_reason=${stopReason} usage=${JSON.stringify(usage)} textLen=${text.length}\nTAIL:\n${tail}`,
