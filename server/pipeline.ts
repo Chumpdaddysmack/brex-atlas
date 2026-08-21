@@ -83,7 +83,7 @@ export async function runPipeline(id: string) {
     const strategy = await llmJson(
       SYS_STRATEGY,
       `Client: ${record.clientName}\nGoals: ${record.goals ?? "(not specified)"}\nRevenue band: ${record.revenueBand ?? "(not specified)"}\nBudget band: ${record.budgetBand ?? "(not specified)"}\n\nEXTRACTION:\n${JSON.stringify(extraction).slice(0, 5000)}\n\nCOMPETITORS:\n${JSON.stringify(competitors).slice(0, 5000)}`,
-      5000,
+      12000,
     );
 
     await storage.updateAnalysis(id, {
@@ -97,7 +97,7 @@ export async function runPipeline(id: string) {
     const sow = await llmJson(
       SYS_SOW,
       `Client: ${record.clientName}\nBudget band: ${record.budgetBand ?? "(not specified)"}\nRevenue band: ${record.revenueBand ?? "(not specified)"}\n\nSTRATEGY:\n${JSON.stringify(strategy).slice(0, 6000)}`,
-      4500,
+      10000,
     );
 
     await storage.updateAnalysis(id, {
