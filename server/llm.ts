@@ -1,6 +1,6 @@
-// Shared LLM helpers and JSON extraction used across both the analysis pipeline
-// and the content-generation pipeline. Extracted so both files use the same
-// bracket-aware JSON scanner.
+// Shared LLM helpers for the analysis and content pipelines.
+// Uses Anthropic tool_use to force structured JSON output — this eliminates
+// the whole class of "model produced invalid JSON" errors.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonrepair } from "jsonrepair";
@@ -61,15 +61,42 @@ export function extractJson(text: string): any {
 }
 
 export async function llmJson(system: string, user: string, maxTokens = 4096): Promise<any> {
+  const tool: any = {
+    name: "return_result",
+    description:
+      "Return the structured result described in the system prompt. Follow the schema exactly. Return ONLY this tool call — no other text.",
+    input_schema: {
+      type: "object",
+      additionalProperties: true,
+    },
+  };
+
   const resp = await client.messages.create({
     model: MODEL,
     max_tokens: maxTokens,
     system,
+    tools: [tool],
+    tool_choice: { type: "tool", name: "return_result" } as any,
     messages: [{ role: "user", content: user }],
   });
-  const text = resp.content
-    .filter((b: any) => b.type === "text")
-    .map((b: any) => b.text)
+
+  for (const block of resp.content as any[]) {
+    if (block.type === "tool_use" && block.name === "return_result") {
+      const inp = block.input;
+      if (inp && typeof inp === "object" && !Array.isArray(inp)) {
+        const keys = Object.keys(inp);
+        if (keys.length === 1) {
+          const solo = inp[keys[0]];
+          if (Array.isArray(solo)) return solo;
+        }
+      }
+      return inp;
+    }
+  }
+
+  const text = (resp.content as any[])
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
     .join("\n");
   try {
     return extractJson(text);
