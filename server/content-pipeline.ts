@@ -5,7 +5,7 @@
 // No per-piece drafting — reviewers work from titles, angles, target queries.
 
 import { storage } from "./storage";
-import { llmJson } from "./llm";
+import { llmJson, SCHEMA_SHELL, SCHEMA_BLOG_BATCH } from "./llm";
 import { BREX_VOICE } from "./voice/brex";
 import { CONCENTRUS_VOICE } from "./voice/concentrus";
 import type {
@@ -173,7 +173,7 @@ export async function runContentPlanGeneration(planId: string) {
 
     const shellMsg = `${contextBlock}\n\n=== CHANNEL COMMITMENTS ===\n- Organic social: LinkedIn (5/wk), Instagram (3/wk), X (3/wk). Return 3-5 starter posts per channel.\n- Paid ads: Meta + LinkedIn. Return 3-5 creative concepts per channel.\n- Landing pages: exactly 5, one per client service/product marketed on the site.\n\nReturn the SHELL JSON now (no blog calendar — that comes in the next pass).`;
 
-    const shell = await llmJson(SYS_SHELL, shellMsg, 8000);
+        const shell = await llmJson(SYS_SHELL, shellMsg, 8000, SCHEMA_SHELL);
 
     // ---- Passes 2-4: BLOG BATCHES (weeks 1-4, 5-8, 9-12) ----
     const pillarNames: string[] = (shell.contentPillars ?? []).map((p: any) => p.name);
@@ -194,7 +194,7 @@ export async function runContentPlanGeneration(planId: string) {
 
       const blogMsg = `${contextBlock}\n\n=== SHELL (already generated — use these pillars) ===\n${JSON.stringify({ contentPillars: shell.contentPillars, adBriefAudience: shell.adBrief?.[0]?.audience, landingPages: (shell.landingPages ?? []).map((p: any) => p.title) }, null, 2)}\n\n=== YOUR JOB ===\nWrite blog calendar weeks ${b.start} through ${b.end} inclusive (${b.end - b.start + 1} weeks × 10 posts = ${(b.end - b.start + 1) * 10} posts).\n\nPlan starts Monday ${startISO} (that's week 1). weekOf = startMonday + (weekNumber - 1) × 7 days.\n\nAssign each post to a pillar from this list (use these exact names):\n${pillarNames.map((n) => `- ${n}`).join("\n")}\n\n${previousTitles.length ? `Do NOT reuse any of these titles from earlier batches:\n${previousTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}` : ""}\n\nReturn the JSON now.`;
 
-      const batchOut = await llmJson(SYS_BLOG_BATCH, blogMsg, 8000);
+            const batchOut = await llmJson(SYS_BLOG_BATCH, blogMsg, 8000, SCHEMA_BLOG_BATCH);
       const weeks = batchOut.blogCalendar ?? [];
       allWeeks.push(...weeks);
       for (const w of weeks) for (const p of w.posts ?? []) previousTitles.push(p.title);
