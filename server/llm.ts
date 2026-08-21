@@ -3,6 +3,7 @@
 // bracket-aware JSON scanner.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { jsonrepair } from "jsonrepair";
 
 // The client picks up ANTHROPIC_API_KEY from the environment.
 // - In the dev sandbox, api_credentials=["llm-api:website"] injects a proxy key + base URL
@@ -73,10 +74,12 @@ export function extractJson(text: string): any {
     else if (c === closeChar) {
       depth--;
       if (depth === 0) {
-        return JSON.parse(src.slice(startIdx, i + 1));
-      }
-    }
-  }
+      const slice = src.slice(startIdx, i + 1);
+        try {
+          return JSON.parse(slice);
+        } catch (parseErr) {
+          return JSON.parse(jsonrepair(slice));
+        }
   throw new Error("Unbalanced JSON in model output");
 }
 
