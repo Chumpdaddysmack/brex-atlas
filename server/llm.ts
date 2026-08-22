@@ -65,6 +65,14 @@ export function extractJson(text: string): any {
   }
 }
 
+/**
+ * Force Claude to return structured JSON via tool_use.
+ *
+ * If `schema` is provided, we use it as the tool's input_schema — Claude will
+ * refuse to call the tool unless required fields are present.
+ *
+ * If `schema` is omitted, we fall back to a text response + jsonrepair.
+ */
 export async function llmJson(
   system: string,
   user: string,
@@ -72,6 +80,7 @@ export async function llmJson(
   schema?: any,
 ): Promise<any> {
   if (schema) {
+    // tool_use path with real schema — Claude MUST fill required fields
     const tool: any = {
       name: "return_result",
       description:
@@ -113,6 +122,7 @@ export async function llmJson(
     throw new Error(`Model did not call return_result tool (stop_reason=${stopReason})`);
   }
 
+  // Text path with jsonrepair (used when no schema is provided)
   const resp = await client.messages.create({
     model: MODEL,
     max_tokens: maxTokens,
@@ -139,6 +149,9 @@ export async function llmJson(
     throw new Error(`${e.message} (stop_reason=${stopReason}, textLen=${text.length})`);
   }
 }
+
+// Common schemas — permissive on nested details, strict on the top-level shape.
+// This ensures Claude can't return {} and satisfy the tool call.
 
 export const SCHEMA_STRATEGY = {
   type: "object",
@@ -184,13 +197,37 @@ export const SCHEMA_EXTRACT = {
 export const SCHEMA_SHELL = {
   type: "object",
   additionalProperties: true,
-  required: ["summary", "contentPillars", "socialCadence", "adBrief", "landingPages"],
+  required: [
+    "summary",
+    "contentPillars",
+    "socialCadence",
+    "adBrief",
+    "landingPages",
+    "heroMetaAd",
+    "heroLinkedInAd",
+    "heroColdEmail",
+  ],
   properties: {
     summary: { type: "string" },
     contentPillars: { type: "array", minItems: 1 },
     socialCadence: { type: "array" },
     adBrief: { type: "array" },
     landingPages: { type: "array" },
+    heroMetaAd: {
+      type: "object",
+      additionalProperties: true,
+      required: ["headline", "primaryText", "description", "cta", "visualConcept"],
+    },
+    heroLinkedInAd: {
+      type: "object",
+      additionalProperties: true,
+      required: ["introText", "headline", "description", "cta", "visualConcept"],
+    },
+    heroColdEmail: {
+      type: "object",
+      additionalProperties: true,
+      required: ["subjectLineA", "subjectLineB", "touch1", "touch2", "touch3", "icpTarget"],
+    },
   },
 };
 
