@@ -163,6 +163,13 @@ export type ContentPlanPayload = {
       angle: string;
       keywords: string[];
       scheduledDate: string;
+      // Editorial brief (Option D) — makes each post ready for a writer
+      editorialBrief?: {
+        readerQuestion: string; // what the target reader is really asking
+        angleSummary: string; // 2 sentences: why THIS client, not generic
+        primaryKeyword: string;
+        aeoQuery: string; // the AEO-shaped question this post ranks for
+      };
     }[];
   }[];
   socialCadence: {
@@ -175,6 +182,29 @@ export type ContentPlanPayload = {
     audience: string;
     creatives: { title: string; angle: string; primaryClaim: string; cta: string }[];
   }[];
+  // Hero examples — one FULL sample per channel, demonstrating quality bar
+  heroMetaAd?: {
+    headline: string; // 40 char max
+    primaryText: string; // 125 char sweet spot
+    description: string; // 30 char max
+    cta: string; // one of approved CTAs
+    visualConcept: string; // 1-2 sentence description of the creative
+  };
+  heroLinkedInAd?: {
+    introText: string; // 150 char sweet spot
+    headline: string; // 70 char max
+    description: string; // 100 char max
+    cta: string;
+    visualConcept: string;
+  };
+  heroColdEmail?: {
+    subjectLineA: string;
+    subjectLineB: string;
+    touch1: { day: number; body: string }; // day 0
+    touch2: { day: number; body: string }; // day 3-4
+    touch3: { day: number; body: string }; // day 7-8, breakup email
+    icpTarget: string; // who this sequence targets
+  };
   landingPages: {
     title: string;
     slug: string;
