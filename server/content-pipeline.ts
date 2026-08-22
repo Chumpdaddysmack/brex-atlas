@@ -39,7 +39,7 @@ function voiceFor(analysis: Analysis): string {
 // the model's max_tokens budget and avoid unbalanced-JSON truncation.
 //
 //   1) SHELL — thesis, pillars, ad brief, social cadence, landing pages.
-//   2) BLOG BATCH — 4 weeks of blog calendar at a time (called 3× → 12 weeks).
+//   2) BLOG BATCH — 3 weeks of blog calendar at a time (called 4× → 12 weeks).
 //
 // The shell pass runs first so downstream blog batches can reference the pillar
 // names, ICP, and competitor set the model just committed to.
@@ -135,7 +135,7 @@ Compactness rules (this JSON must fit in ~6000 output tokens):
 - Social starter \"hook\": one sentence, max 20 words.
 - No markdown, no commentary, no trailing text outside the JSON object.`;
 
-const SYS_BLOG_BATCH = `You are a senior B2B content strategist. The Voice & Style Card supplied in the user message is the ONLY source of truth for tone, positioning, and protected phrases — do not import personas from any other brand. You are writing a BATCH of the 12-week blog editorial calendar. You will be told which weeks to write (e.g. weeks 1-4), the content pillars the shell pass locked in, the starting Monday date, and any weeks already covered so you can vary titles.
+const SYS_BLOG_BATCH = `You are a senior B2B content strategist. The Voice & Style Card supplied in the user message is the ONLY source of truth for tone, positioning, and protected phrases — do not import personas from any other brand. You are writing a BATCH of the 12-week blog editorial calendar. You will be told which weeks to write (e.g. weeks 1-3), the content pillars the shell pass locked in, the starting Monday date, and any weeks already covered so you can vary titles.
 
 Return ONE JSON object with this exact shape (no prose, no code fences):
 {
@@ -169,7 +169,7 @@ Hard rules:
 - Every blog post targetQuery should be the exact buyer question a founder/CEO would type into ChatGPT or Google.
 - Assign each blog post to one of the provided pillar names — do not invent new pillars.
 - Diversify: no more than 2 posts per week can target the same targetQuery, and titles across the batch must not repeat.
-- Include at least one competitor-comparison post per 4-week batch when relevant competitors exist.
+- Include at least one competitor-comparison post per batch when relevant competitors exist.
 - Distribute the 10 weekly blog posts across weekdays (2 per day Mon-Fri).
 - weekOf is the Monday of that week. scheduledDate must land Mon-Fri of that week.
 
@@ -180,7 +180,7 @@ Editorial-brief rules:
 - primaryKeyword is one string, not an array.
 - aeoQuery is the answer-engine-shaped version of readerQuestion (an AI would cite this post if it answered exactly this question).
 
-Keep angles short (1-2 sentences) and keywords ≤ 3 per post. The 40-post batch JSON must stay compact.`;
+Keep angles short (1-2 sentences) and keywords ≤ 3 per post. The batch JSON must stay compact.`;
 
 export async function runContentPlanGeneration(planId: string) {
   const plan = await storage.getContentPlan(planId);
@@ -233,37 +233,51 @@ export async function runContentPlanGeneration(planId: string) {
       );
     }
 
-    // ---- Passes 2-4: BLOG BATCHES (weeks 1-4, 5-8, 9-12) ----
+    // ---- Passes 2-5: BLOG BATCHES (weeks 1-3, 4-6, 7-9, 10-12) ----
+    // 3 weeks × 10 posts = 30 posts per batch. Smaller batches keep each
+    // response comfortably under the output token ceiling so Claude doesn't
+    // truncate mid-JSON and hand us back an empty blogCalendar.
     const pillarNames: string[] = (shell.contentPillars ?? []).map((p: any) => p.name);
     const batches: Array<{ start: number; end: number }> = [
-      { start: 1, end: 4 },
-      { start: 5, end: 8 },
-      { start: 9, end: 12 },
+      { start: 1, end: 3 },
+      { start: 4, end: 6 },
+      { start: 7, end: 9 },
+      { start: 10, end: 12 },
     ];
     const allWeeks: any[] = [];
+    const batchErrors: string[] = [];
     let previousTitles: string[] = [];
 
     for (let i = 0; i < batches.length; i++) {
       const b = batches[i];
       await storage.updateContentPlan(planId, {
-        progress: 30 + i * 20,
+        progress: 30 + i * 15,
         currentStep: `Writing blog calendar weeks ${b.start}-${b.end}`,
       });
 
       const blogMsg = `${contextBlock}\n\n=== SHELL (already generated — use these pillars) ===\n${JSON.stringify({ contentPillars: shell.contentPillars, adBriefAudience: shell.adBrief?.[0]?.audience, landingPages: (shell.landingPages ?? []).map((p: any) => p.title) }, null, 2)}\n\n=== YOUR JOB ===\nWrite blog calendar weeks ${b.start} through ${b.end} inclusive (${b.end - b.start + 1} weeks × 10 posts = ${(b.end - b.start + 1) * 10} posts).\n\nPlan starts Monday ${startISO} (that's week 1). weekOf = startMonday + (weekNumber - 1) × 7 days.\n\nAssign each post to a pillar from this list (use these exact names):\n${pillarNames.map((n) => `- ${n}`).join("\n")}\n\n${previousTitles.length ? `Do NOT reuse any of these titles from earlier batches:\n${previousTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}` : ""}\n\nReturn the JSON now.`;
 
-      const batchOut = await llmJson(SYS_BLOG_BATCH, blogMsg, 12000, SCHEMA_BLOG_BATCH);
-      const weeks = batchOut?.blogCalendar ?? [];
-      console.log(
-        `[content-plan] batch ${b.start}-${b.end}: keys=${batchOut ? Object.keys(batchOut).join(",") : "null"} weeks=${weeks.length}`,
-      );
-      allWeeks.push(...weeks);
-      for (const w of weeks) for (const p of w.posts ?? []) previousTitles.push(p.title);
+      try {
+        const batchOut = await llmJson(SYS_BLOG_BATCH, blogMsg, 16000, SCHEMA_BLOG_BATCH);
+        const weeks = batchOut?.blogCalendar ?? [];
+        console.log(
+          `[content-plan] batch ${b.start}-${b.end}: keys=${batchOut ? Object.keys(batchOut).join(",") : "null"} weeks=${weeks.length}`,
+        );
+        if (weeks.length === 0) {
+          batchErrors.push(`weeks ${b.start}-${b.end}: returned 0 weeks`);
+        }
+        allWeeks.push(...weeks);
+        for (const w of weeks) for (const p of w.posts ?? []) previousTitles.push(p.title);
+      } catch (err: any) {
+        const msg = String(err?.message || err).slice(0, 300);
+        console.error(`[content-plan] batch ${b.start}-${b.end} threw: ${msg}`);
+        batchErrors.push(`weeks ${b.start}-${b.end}: ${msg}`);
+      }
     }
 
     if (allWeeks.length === 0) {
       throw new Error(
-        `Blog batches returned 0 weeks total. Shell had ${shell.contentPillars.length} pillars.`,
+        `Blog batches returned 0 weeks total. Shell had ${shell.contentPillars.length} pillars. Batch errors: ${batchErrors.join(" | ")}`,
       );
     }
 
