@@ -157,7 +157,7 @@ export default function Home() {
             Only the website is required. Adding context sharpens the recommendations.
           </p>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5" autoComplete="off">
               <div className="grid sm:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -167,7 +167,8 @@ export default function Home() {
                       <FormLabel>Client name</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="Concentrus"
+                          placeholder="e.g. Acme Corp"
+                          autoComplete="off"
                           data-testid="input-client-name"
                           {...field}
                         />
@@ -184,7 +185,8 @@ export default function Home() {
                       <FormLabel>Website URL</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="concentrus.com"
+                          placeholder="e.g. acme.com"
+                          autoComplete="off"
                           data-testid="input-client-url"
                           {...field}
                         />
@@ -204,7 +206,8 @@ export default function Home() {
                       <FormLabel>Industry</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="ERP consulting"
+                          placeholder="e.g. SaaS, manufacturing"
+                          autoComplete="off"
                           data-testid="input-industry"
                           {...field}
                         />
