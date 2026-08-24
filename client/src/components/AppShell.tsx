@@ -14,10 +14,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return res.json();
     },
     onSuccess: () => {
-      // Invalidate auth status so the app re-renders as logged out
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/status"] });
-      // Also clear any cached queries so the next login doesn't see stale data
+      // Clear all cached data and reload the page so the auth gate re-runs
+      // and any stale in-memory state is wiped. Reliable across all cache configs.
       queryClient.clear();
+      window.location.href = "/";
+      window.location.reload();
+    },
+    onError: () => {
+      // Even on error, force reload — server cookie is likely already cleared
+      window.location.href = "/";
+      window.location.reload();
     },
   });
 
