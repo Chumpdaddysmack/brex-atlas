@@ -5,7 +5,19 @@ const API_BASE = "__PORT_5050__".startsWith("__") ? "" : "__PORT_5050__";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    // Try to extract a clean {error: "..."} message from JSON responses
+    let message = text;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed.error === "string") {
+        message = parsed.error;
+      }
+    } catch {
+      // Not JSON — leave text as-is
+    }
+    const err = new Error(message) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
 }
 
@@ -18,6 +30,7 @@ export async function apiRequest(
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
+    credentials: "include", // send session cookie
   });
 
   await throwIfResNotOk(res);
@@ -30,7 +43,9 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(`${API_BASE}${queryKey.join("/")}`);
+    const res = await fetch(`${API_BASE}${queryKey.join("/")}`, {
+      credentials: "include", // send session cookie
+    });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;
