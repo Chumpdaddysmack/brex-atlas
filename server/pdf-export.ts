@@ -56,25 +56,58 @@ export function streamContentPlanPdf({
     },
   });
 
+  // Surface async pdfkit errors so the stream doesn't silently truncate
+  doc.on("error", (err) => {
+    console.error("[pdf-export] pdfkit stream error", err);
+    try {
+      res.end();
+    } catch {}
+  });
+
   doc.pipe(res);
 
-  // -------- Cover page --------
-  renderCover(doc, clientName, clientUrl ?? null, scope);
+  try {
+    // -------- Cover page --------
+    renderCover(doc, clientName, clientUrl ?? null, scope);
 
-  // -------- Content by scope --------
-  if (scope === "summary") {
-    renderExecutiveSummary(doc, payload);
-  } else if (scope === "strategy") {
-    renderStrategyOnly(doc, payload);
-  } else {
-    renderFullPlan(doc, payload);
-  }
+    // -------- Content by scope --------
+    if (scope === "summary") {
+      renderExecutiveSummary(doc, payload);
+    } else if (scope === "strategy") {
+      renderStrategyOnly(doc, payload);
+    } else {
+      renderFullPlan(doc, payload);
+    }
 
-  // -------- Footer on every page --------
-  const range = doc.bufferedPageRange();
-  for (let i = 0; i < range.count; i++) {
-    doc.switchToPage(range.start + i);
-    renderFooter(doc, clientName, i + 1, range.count);
+    // -------- Footer on every page --------
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      try {
+        doc.switchToPage(range.start + i);
+        renderFooter(doc, clientName, i + 1, range.count);
+      } catch (err) {
+        console.error(`[pdf-export] footer failed on page ${i + 1}`, err);
+      }
+    }
+  } catch (err) {
+    console.error("[pdf-export] render failed, closing PDF gracefully", err);
+    // Write an error page so the PDF at least closes cleanly
+    try {
+      doc.addPage();
+      doc
+        .fillColor(BRAND.navy)
+        .font(FONTS.sansBold)
+        .fontSize(14)
+        .text("Report generation ended early", { align: "center" });
+      doc
+        .fillColor(BRAND.muted)
+        .font(FONTS.sans)
+        .fontSize(10)
+        .text(
+          "An unexpected data issue interrupted the export. Please try again or contact support if this repeats.",
+          { align: "center" },
+        );
+    } catch {}
   }
 
   doc.end();
@@ -231,20 +264,32 @@ function renderStrategyOnly(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
 
   sectionHeader(doc, "12-Week Blog Calendar");
   for (const week of p.blogCalendar ?? []) {
-    renderWeek(doc, week);
+    try {
+      renderWeek(doc, week);
+    } catch (err) {
+      console.error(`[pdf-export] week ${week?.weekNumber} render failed, skipping`, err);
+    }
   }
 
   if (p.socialCadence?.length) {
     sectionHeader(doc, "Organic Social Cadence");
     for (const social of p.socialCadence) {
-      renderSocial(doc, social);
+      try {
+        renderSocial(doc, social);
+      } catch (err) {
+        console.error("[pdf-export] social render failed, skipping", err);
+      }
     }
   }
 
   if (p.landingPages?.length) {
     sectionHeader(doc, "AEO Landing Pages");
     for (const lp of p.landingPages) {
-      renderLandingPage(doc, lp);
+      try {
+        renderLandingPage(doc, lp);
+      } catch (err) {
+        console.error("[pdf-export] landing page render failed, skipping", err);
+      }
     }
   }
 }
@@ -400,6 +445,13 @@ function emailTouch(
   doc.moveDown(0.5);
 }
 
+function safe(v: unknown, fallback = ""): string {
+  if (v === null || v === undefined) return fallback;
+  const s = String(v);
+  // Strip control chars that can trip pdfkit's PDF spec writer
+  return s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+}
+
 function renderWeek(
   doc: PDFKit.PDFDocument,
   week: ContentPlanPayload["blogCalendar"][number],
@@ -411,41 +463,48 @@ function renderWeek(
     .fillColor(BRAND.accent)
     .font(FONTS.sansBold)
     .fontSize(9)
-    .text(`WEEK ${week.weekNumber} · PUBLISHING ${week.weekOf}`, {
+    .text(`WEEK ${safe(week.weekNumber, "?")} · PUBLISHING ${safe(week.weekOf, "TBD")}`, {
       characterSpacing: 1.2,
     });
 
   doc.moveDown(0.2);
 
   for (const post of week.posts ?? []) {
-    ensureSpace(doc, opts.compact ? 40 : 50);
-    doc
-      .fillColor(BRAND.navy)
-      .font(FONTS.sansBold)
-      .fontSize(10.5)
-      .text(post.title, { lineGap: 1 });
-
-    doc
-      .fillColor(BRAND.muted)
-      .font(FONTS.sans)
-      .fontSize(9)
-      .text(`${post.pillar}  ·  ${post.scheduledDate}`);
-
-    doc
-      .fillColor(BRAND.text)
-      .font(FONTS.sansOblique)
-      .fontSize(9)
-      .text(`Answers: "${post.targetQuery}"`, { lineGap: 1 });
-
-    if (!opts.compact && post.angle) {
+    try {
+      ensureSpace(doc, opts.compact ? 40 : 50);
       doc
-        .fillColor(BRAND.text)
+        .fillColor(BRAND.navy)
+        .font(FONTS.sansBold)
+        .fontSize(10.5)
+        .text(safe(post.title, "Untitled post"), { lineGap: 1 });
+
+      doc
+        .fillColor(BRAND.muted)
         .font(FONTS.sans)
         .fontSize(9)
-        .text(post.angle, { lineGap: 1 });
-    }
+        .text(`${safe(post.pillar, "General")}  ·  ${safe(post.scheduledDate, "TBD")}`);
 
-    doc.moveDown(0.35);
+      const query = safe(post.targetQuery);
+      if (query) {
+        doc
+          .fillColor(BRAND.text)
+          .font(FONTS.sansOblique)
+          .fontSize(9)
+          .text(`Answers: "${query}"`, { lineGap: 1 });
+      }
+
+      if (!opts.compact && post.angle) {
+        doc
+          .fillColor(BRAND.text)
+          .font(FONTS.sans)
+          .fontSize(9)
+          .text(safe(post.angle), { lineGap: 1 });
+      }
+
+      doc.moveDown(0.35);
+    } catch (err) {
+      console.error("[pdf-export] post render failed, skipping", err);
+    }
   }
   doc.moveDown(0.3);
 }
