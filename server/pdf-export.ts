@@ -393,4 +393,215 @@ function emailTouch(
 
   doc
     .fillColor(BRAND.text)
-   
+    .font(FONTS.sans)
+    .fontSize(10)
+    .text(touch.body, { lineGap: 2 });
+
+  doc.moveDown(0.5);
+}
+
+function renderWeek(
+  doc: PDFKit.PDFDocument,
+  week: ContentPlanPayload["blogCalendar"][number],
+  opts: { compact?: boolean } = {},
+) {
+  ensureSpace(doc, 80);
+
+  doc
+    .fillColor(BRAND.accent)
+    .font(FONTS.sansBold)
+    .fontSize(9)
+    .text(`WEEK ${week.weekNumber} · PUBLISHING ${week.weekOf}`, {
+      characterSpacing: 1.2,
+    });
+
+  doc.moveDown(0.2);
+
+  for (const post of week.posts ?? []) {
+    ensureSpace(doc, opts.compact ? 40 : 50);
+    doc
+      .fillColor(BRAND.navy)
+      .font(FONTS.sansBold)
+      .fontSize(10.5)
+      .text(post.title, { lineGap: 1 });
+
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sans)
+      .fontSize(9)
+      .text(`${post.pillar}  ·  ${post.scheduledDate}`);
+
+    doc
+      .fillColor(BRAND.text)
+      .font(FONTS.sansOblique)
+      .fontSize(9)
+      .text(`Answers: "${post.targetQuery}"`, { lineGap: 1 });
+
+    if (!opts.compact && post.angle) {
+      doc
+        .fillColor(BRAND.text)
+        .font(FONTS.sans)
+        .fontSize(9)
+        .text(post.angle, { lineGap: 1 });
+    }
+
+    doc.moveDown(0.35);
+  }
+  doc.moveDown(0.3);
+}
+
+function renderSocial(
+  doc: PDFKit.PDFDocument,
+  social: ContentPlanPayload["socialCadence"][number],
+) {
+  ensureSpace(doc, 60);
+  doc
+    .fillColor(BRAND.accent)
+    .font(FONTS.sansBold)
+    .fontSize(10)
+    .text(`${social.channel.toUpperCase()} · ${social.postsPerWeek} posts/week`);
+
+  for (const p of social.starterPosts ?? []) {
+    ensureSpace(doc, 30);
+    doc
+      .fillColor(BRAND.navy)
+      .font(FONTS.sansBold)
+      .fontSize(10)
+      .text(p.title);
+
+    doc
+      .fillColor(BRAND.text)
+      .font(FONTS.sans)
+      .fontSize(9.5)
+      .text(p.hook, { lineGap: 1 });
+
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sansOblique)
+      .fontSize(8.5)
+      .text(`Answers: "${p.targetQuery}"`);
+
+    doc.moveDown(0.3);
+  }
+  doc.moveDown(0.3);
+}
+
+function renderAdBrief(
+  doc: PDFKit.PDFDocument,
+  brief: ContentPlanPayload["adBrief"][number],
+) {
+  ensureSpace(doc, 60);
+  doc
+    .fillColor(BRAND.accent)
+    .font(FONTS.sansBold)
+    .fontSize(10)
+    .text(brief.channel.replace("_", " ").toUpperCase());
+
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sans)
+    .fontSize(10)
+    .text(`Audience: ${brief.audience}`, { lineGap: 1 });
+
+  for (const c of brief.creatives ?? []) {
+    ensureSpace(doc, 40);
+    doc
+      .fillColor(BRAND.navy)
+      .font(FONTS.sansBold)
+      .fontSize(10)
+      .text(c.title);
+
+    doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(9.5);
+    doc.text(`Angle: ${c.angle}`, { lineGap: 1 });
+    doc.text(`Primary claim: ${c.primaryClaim}`, { lineGap: 1 });
+    doc.text(`CTA: ${c.cta}`);
+    doc.moveDown(0.3);
+  }
+  doc.moveDown(0.3);
+}
+
+function renderLandingPage(
+  doc: PDFKit.PDFDocument,
+  lp: ContentPlanPayload["landingPages"][number],
+) {
+  ensureSpace(doc, 60);
+  doc
+    .fillColor(BRAND.navy)
+    .font(FONTS.sansBold)
+    .fontSize(11)
+    .text(lp.title);
+
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(9)
+    .text(`/${lp.slug}  ·  ${lp.serviceOrProduct}`);
+
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sansOblique)
+    .fontSize(9)
+    .text(`Target query: "${lp.targetQuery}"`, { lineGap: 1 });
+
+  for (const item of lp.outline ?? []) {
+    doc
+      .fillColor(BRAND.text)
+      .font(FONTS.sans)
+      .fontSize(9.5)
+      .text(`  • ${item}`, { lineGap: 1 });
+  }
+  doc.moveDown(0.4);
+}
+
+function renderFooter(
+  doc: PDFKit.PDFDocument,
+  clientName: string,
+  pageNum: number,
+  total: number,
+) {
+  const { width, height } = doc.page;
+  const y = height - 40;
+
+  // Save current auto-pagination behavior and disable it so footer text
+  // written in the bottom margin doesn't accidentally trigger a new page.
+  const originalBottom = doc.page.margins.bottom;
+  doc.page.margins.bottom = 0;
+
+  // Divider
+  doc
+    .moveTo(72, y)
+    .lineTo(width - 72, y)
+    .strokeColor(BRAND.border)
+    .lineWidth(0.5)
+    .stroke();
+
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(8)
+    .text(`Brex Consulting  ·  ${clientName} content plan`, 72, y + 8, {
+      align: "left",
+      lineBreak: false,
+    });
+
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(8)
+    .text(`${pageNum} / ${total}`, width - 172, y + 8, {
+      width: 100,
+      align: "right",
+      lineBreak: false,
+    });
+
+  // Restore
+  doc.page.margins.bottom = originalBottom;
+}
+
+// Add a new page if fewer than N points remain
+function ensureSpace(doc: PDFKit.PDFDocument, needed: number) {
+  const remaining = doc.page.height - doc.page.margins.bottom - doc.y;
+  if (remaining < needed) {
+    doc.addPage();
+  }
+}

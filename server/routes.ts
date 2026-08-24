@@ -6,6 +6,8 @@ import { intakeSchema } from "@shared/schema";
 import { runPipeline } from "./pipeline";
 import { runContentPlanGeneration } from "./content-pipeline";
 import { requireAuth } from "./auth";
+import { streamContentPlanPdf, type PdfScope } from "./pdf-export";
+import type { ContentPlanPayload } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -72,6 +74,49 @@ export async function registerRoutes(
     const row = await storage.getContentPlanByAnalysis(req.params.id);
     if (!row) return res.status(404).json({ error: "No plan yet" });
     res.json(row);
+  });
+
+  // Export the plan as a branded PDF (streams the file back)
+  // ?scope=full (default) | strategy | summary
+  app.get("/api/content-plans/:id/pdf", async (req, res) => {
+    const plan = await storage.getContentPlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: "Plan not found" });
+    if (plan.status !== "ready" || !plan.planJson) {
+      return res.status(400).json({ error: "Plan is not ready to export" });
+    }
+    const analysis = await storage.getAnalysis(plan.analysisId);
+    if (!analysis) return res.status(404).json({ error: "Analysis not found" });
+
+    const rawScope = typeof req.query.scope === "string" ? req.query.scope : "full";
+    const scope: PdfScope =
+      rawScope === "strategy" || rawScope === "summary" ? rawScope : "full";
+
+    let payload: ContentPlanPayload;
+    try {
+      payload = typeof plan.planJson === "string"
+        ? (JSON.parse(plan.planJson) as ContentPlanPayload)
+        : (plan.planJson as unknown as ContentPlanPayload);
+    } catch {
+      return res.status(500).json({ error: "Plan data is malformed" });
+    }
+
+    try {
+      streamContentPlanPdf({
+        res,
+        payload,
+        clientName: analysis.clientName,
+        clientUrl: analysis.clientUrl,
+        scope,
+      });
+    } catch (err) {
+      console.error("[pdf-export] failed", err);
+      // If headers already sent (stream started), we can only end the response
+      if (!res.headersSent) {
+        res.status(500).json({ error: "PDF generation failed" });
+      } else {
+        res.end();
+      }
+    }
   });
 
   // -------- Content piece endpoints --------

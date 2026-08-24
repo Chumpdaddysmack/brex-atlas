@@ -28,7 +28,18 @@ import {
   CheckCircle2,
   XCircle,
   Copy,
+  Download,
+  FileDown,
+  ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { Analysis, ContentPlan, ContentPiece, ContentPlanPayload } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
@@ -111,6 +122,43 @@ export default function ContentStudio() {
     );
   };
 
+  // Download the branded PDF at the requested scope. Uses fetch (credentials
+  // included) then triggers a blob download so the auth cookie is sent.
+  const exportPdf = async (scope: "full" | "strategy" | "summary") => {
+    if (!plan?.id) return;
+    const scopeLabel =
+      scope === "full" ? "full plan" : scope === "strategy" ? "strategy" : "executive summary";
+    try {
+      toast({ title: "Preparing PDF…", description: `Generating ${scopeLabel}.` });
+      const res = await fetch(`/api/content-plans/${plan.id}/pdf?scope=${scope}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const msg = await res.json().catch(() => ({ error: "Download failed" }));
+        throw new Error(msg?.error ?? "Download failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const clientSafe = (analysisQ.data?.clientName ?? "client").replace(/[^a-z0-9-_]/gi, "_");
+      const scopeSlug =
+        scope === "full" ? "full-plan" : scope === "strategy" ? "strategy" : "executive-summary";
+      a.href = url;
+      a.download = `${clientSafe}-${scopeSlug}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "PDF downloaded", description: `${scopeLabel} saved.` });
+    } catch (e: any) {
+      toast({
+        title: "PDF export failed",
+        description: e?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (!analysisQ.data) {
     return (
       <AppShell>
@@ -148,9 +196,53 @@ export default function ContentStudio() {
               </p>
             </div>
             {plan?.status === "ready" && (
-              <Button variant="outline" onClick={copyFullPlan} data-testid="button-copy-full-plan">
-                <Copy className="h-4 w-4 mr-2" /> Copy full plan
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={copyFullPlan} data-testid="button-copy-full-plan">
+                  <Copy className="h-4 w-4 mr-2" /> Copy full plan
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button data-testid="button-export-pdf">
+                      <FileDown className="h-4 w-4 mr-2" /> Export PDF
+                      <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuLabel>Choose scope</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      data-testid="pdf-scope-full"
+                      onClick={() => exportPdf("full")}
+                      className="flex flex-col items-start gap-0.5 py-2.5"
+                    >
+                      <span className="font-medium">Full plan</span>
+                      <span className="text-xs text-muted-foreground">
+                        Everything — thesis, calendar, ads, email, landing pages
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid="pdf-scope-strategy"
+                      onClick={() => exportPdf("strategy")}
+                      className="flex flex-col items-start gap-0.5 py-2.5"
+                    >
+                      <span className="font-medium">Strategy only</span>
+                      <span className="text-xs text-muted-foreground">
+                        Thesis, pillars, blog calendar, social, landing pages
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid="pdf-scope-summary"
+                      onClick={() => exportPdf("summary")}
+                      className="flex flex-col items-start gap-0.5 py-2.5"
+                    >
+                      <span className="font-medium">Executive summary</span>
+                      <span className="text-xs text-muted-foreground">
+                        Thesis, pillars, week 1 preview, next steps
+                      </span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )}
           </div>
         </div>
@@ -296,7 +388,7 @@ function ChannelPanel({
   onReview: (p: ContentPiece) => void;
 }) {
   if (isLoading) return <Loader2 className="h-6 w-6 animate-spin" />;
-  if (pieces.length === 0 && channel !== "cold_email")
+  if (pieces.length === 0)
     return <div className="text-muted-foreground text-sm">No entries yet for {label}.</div>;
 
   // Blog: grouped by week + calendar header
