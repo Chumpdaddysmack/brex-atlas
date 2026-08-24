@@ -63,7 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
       <main className="flex-1">{children}</main>
       <footer className="border-t border-border">
-        <div className="mx-auto max-w-6xl px-6 py-6 text-xs text-muted-foreground flex flex-wrap items-center justify-between gap-2>
+        <div className="mx-auto max-w-6xl px-6 py-6 text-xs text-muted-foreground flex flex-wrap items-center justify-between gap-2">
           <div>
             Built by <span className="text-foreground">Brex Consulting</span> — Big Rock Method for fractional CMO engagements.
           </div>
