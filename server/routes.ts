@@ -5,11 +5,17 @@ import { storage } from "./storage";
 import { intakeSchema } from "@shared/schema";
 import { runPipeline } from "./pipeline";
 import { runContentPlanGeneration } from "./content-pipeline";
+import { requireAuth } from "./auth";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // All /api routes below require an authenticated session.
+  // Auth endpoints themselves (/api/login, /api/logout, /api/auth/status)
+  // are registered in setupAuth() before this and stay unprotected.
+  app.use("/api", requireAuth);
+
   // Create a new analysis and kick off the pipeline (fire-and-forget)
   app.post("/api/analyses", async (req, res) => {
     const parsed = intakeSchema.safeParse(req.body);
