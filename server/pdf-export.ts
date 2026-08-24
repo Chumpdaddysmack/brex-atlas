@@ -1,115 +1,396 @@
-{
-  "name": "rest-express",
-  "version": "1.0.0",
-  "license": "MIT",
-  "type": "module",
-  "scripts": {
-    "dev": "NODE_ENV=development tsx server/index.ts",
-    "build": "tsx script/build.ts",
-    "build:client": "vite build",
-    "start": "NODE_ENV=production node dist/index.cjs",
-    "check": "tsc",
-    "db:push": "drizzle-kit push",
-    "migrate:supabase": "tsx scripts/migrate-to-supabase.ts"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.120.0",
-    "@hookform/resolvers": "^5.4.0",
-    "@jridgewell/trace-mapping": "^0.3.25",
-    "@radix-ui/react-accordion": "^1.2.4",
-    "@radix-ui/react-alert-dialog": "^1.1.7",
-    "@radix-ui/react-aspect-ratio": "^1.1.3",
-    "@radix-ui/react-avatar": "^1.1.4",
-    "@radix-ui/react-checkbox": "^1.1.5",
-    "@radix-ui/react-collapsible": "^1.1.4",
-    "@radix-ui/react-context-menu": "^2.2.7",
-    "@radix-ui/react-dialog": "^1.1.7",
-    "@radix-ui/react-dropdown-menu": "^2.1.7",
-    "@radix-ui/react-hover-card": "^1.1.7",
-    "@radix-ui/react-label": "^2.1.3",
-    "@radix-ui/react-menubar": "^1.1.7",
-    "@radix-ui/react-navigation-menu": "^1.2.6",
-    "@radix-ui/react-popover": "^1.1.7",
-    "@radix-ui/react-progress": "^1.1.3",
-    "@radix-ui/react-radio-group": "^1.2.4",
-    "@radix-ui/react-scroll-area": "^1.2.4",
-    "@radix-ui/react-select": "^2.1.7",
-    "@radix-ui/react-separator": "^1.1.3",
-    "@radix-ui/react-slider": "^1.2.4",
-    "@radix-ui/react-slot": "^1.2.0",
-    "@radix-ui/react-switch": "^1.1.4",
-    "@radix-ui/react-tabs": "^1.1.4",
-    "@radix-ui/react-toast": "^1.2.7",
-    "@radix-ui/react-toggle": "^1.1.3",
-    "@radix-ui/react-toggle-group": "^1.1.3",
-    "@radix-ui/react-tooltip": "^1.2.0",
-    "@supabase/supabase-js": "^2.49.4",
-    "@tanstack/react-query": "^5.60.5",
-    "better-sqlite3": "^11.7.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "cmdk": "^1.1.1",
-    "date-fns": "^3.6.0",
-    "dotenv": "^16.4.7",
-    "drizzle-orm": "^0.45.2",
-    "drizzle-zod": "^0.7.0",
-    "embla-carousel-react": "^8.6.0",
-    "express": "^5.0.1",
-    "express-session": "^1.18.1",
-    "framer-motion": "^11.13.1",
-    "input-otp": "^1.4.2",
-    "jsonrepair": "^3.15.0",
-    "lucide-react": "^0.453.0",
-    "memorystore": "^1.6.7",
-    "next-themes": "^0.4.6",
-    "passport": "^0.7.0",
-    "passport-local": "^1.0.0",
-    "pdfkit": "^0.15.0",
-    "react": "^18.3.1",
-    "react-day-picker": "^8.10.1",
-    "react-dom": "^18.3.1",
-    "react-hook-form": "^7.55.0",
-    "react-icons": "^5.4.0",
-    "react-resizable-panels": "^2.1.7",
-    "recharts": "^2.15.2",
-    "tailwind-merge": "^2.6.0",
-    "tailwindcss-animate": "^1.0.7",
-    "tw-animate-css": "^1.2.5",
-    "vaul": "^1.1.2",
-    "wouter": "^3.3.5",
-    "ws": "^8.18.0",
-    "zod": "^4.4.3",
-    "zod-validation-error": "^5.0.0"
-  },
-  "devDependencies": {
-    "@tailwindcss/typography": "^0.5.15",
-    "@tailwindcss/vite": "^4.1.18",
-    "@types/better-sqlite3": "^7.6.12",
-    "@types/express": "^5.0.0",
-    "@types/express-session": "^1.18.0",
-    "@types/node": "20.19.27",
-    "@types/passport": "^1.0.16",
-    "@types/pdfkit": "^0.13.4",
-    "@types/passport-local": "^1.0.38",
-    "@types/react": "^18.3.11",
-    "@types/react-dom": "^18.3.1",
-    "@types/ws": "^8.5.13",
-    "@vitejs/plugin-react": "^4.7.0",
-    "autoprefixer": "^10.4.20",
-    "drizzle-kit": "^0.31.8",
-    "esbuild": "^0.25.0",
-    "postcss": "^8.4.47",
-    "tailwindcss": "^3.4.17",
-    "tsx": "^4.20.5",
-    "typescript": "5.6.3",
-    "vite": "^7.3.0"
-  },
-  "optionalDependencies": {
-    "bufferutil": "^4.0.8"
-  },
-  "overrides": {
-    "drizzle-kit": {
-      "@esbuild-kit/esm-loader": "npm:tsx@^4.20.4"
+import PDFDocument from "pdfkit";
+import type { ContentPlanPayload } from "@shared/schema";
+import type { Response } from "express";
+
+export type PdfScope = "full" | "strategy" | "summary";
+
+// Brex Consulting brand colors
+const BRAND = {
+  navy: "#0B1929",
+  accent: "#D97706", // warm amber accent
+  text: "#1F2937",
+  muted: "#6B7280",
+  light: "#F3F4F6",
+  border: "#E5E7EB",
+};
+
+const FONTS = {
+  sansBold: "Helvetica-Bold",
+  sans: "Helvetica",
+  sansOblique: "Helvetica-Oblique",
+  serif: "Times-Bold",
+};
+
+interface StreamPdfArgs {
+  res: Response;
+  payload: ContentPlanPayload;
+  clientName: string;
+  clientUrl?: string | null;
+  scope: PdfScope;
+}
+
+export function streamContentPlanPdf({
+  res,
+  payload,
+  clientName,
+  clientUrl,
+  scope,
+}: StreamPdfArgs) {
+  const safeName = (clientName || "client").replace(/[^a-z0-9-_]/gi, "_");
+  const scopeLabel =
+    scope === "full" ? "full-plan" : scope === "strategy" ? "strategy" : "executive-summary";
+  const filename = `${safeName}-${scopeLabel}.pdf`;
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+  const doc = new PDFDocument({
+    size: "LETTER",
+    margins: { top: 72, bottom: 72, left: 72, right: 72 },
+    bufferPages: true,
+    info: {
+      Title: `${clientName} — 12-week content strategy`,
+      Author: "Brex Consulting",
+      Subject: "Content strategy plan",
+      Creator: "Brex Atlas",
+    },
+  });
+
+  doc.pipe(res);
+
+  // -------- Cover page --------
+  renderCover(doc, clientName, clientUrl ?? null, scope);
+
+  // -------- Content by scope --------
+  if (scope === "summary") {
+    renderExecutiveSummary(doc, payload);
+  } else if (scope === "strategy") {
+    renderStrategyOnly(doc, payload);
+  } else {
+    renderFullPlan(doc, payload);
+  }
+
+  // -------- Footer on every page --------
+  const range = doc.bufferedPageRange();
+  for (let i = 0; i < range.count; i++) {
+    doc.switchToPage(range.start + i);
+    renderFooter(doc, clientName, i + 1, range.count);
+  }
+
+  doc.end();
+}
+
+// =============================================================
+// Cover page
+// =============================================================
+function renderCover(
+  doc: PDFKit.PDFDocument,
+  clientName: string,
+  clientUrl: string | null,
+  scope: PdfScope,
+) {
+  const { width, height } = doc.page;
+
+  // Navy header band
+  doc.rect(0, 0, width, 180).fill(BRAND.navy);
+
+  // Accent slash
+  doc.rect(0, 178, width, 3).fill(BRAND.accent);
+
+  // Brex Consulting wordmark
+  doc
+    .fillColor("#FFFFFF")
+    .font(FONTS.sansBold)
+    .fontSize(11)
+    .text("BREX CONSULTING", 72, 60, { characterSpacing: 2 });
+
+  doc
+    .fillColor(BRAND.accent)
+    .font(FONTS.sans)
+    .fontSize(9)
+    .text("BIG ROCK METHOD · FRACTIONAL CMO", 72, 78, { characterSpacing: 1.5 });
+
+  // Title block
+  const scopeTitle =
+    scope === "summary"
+      ? "Executive Summary"
+      : scope === "strategy"
+        ? "Content Strategy"
+        : "12-Week Content Plan";
+
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.serif)
+    .fontSize(36)
+    .text(clientName, 72, 240, { width: width - 144 });
+
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sansOblique)
+    .fontSize(16)
+    .text(scopeTitle, 72, doc.y + 4);
+
+  if (clientUrl) {
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sans)
+      .fontSize(11)
+      .text(clientUrl.replace(/^https?:\/\//, ""), 72, doc.y + 8);
+  }
+
+  // Divider
+  doc
+    .moveTo(72, height - 180)
+    .lineTo(width - 72, height - 180)
+    .strokeColor(BRAND.border)
+    .lineWidth(0.5)
+    .stroke();
+
+  // Prepared-by block
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sansBold)
+    .fontSize(9)
+    .text("PREPARED BY", 72, height - 160, { characterSpacing: 1.5 });
+
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sansBold)
+    .fontSize(14)
+    .text("Brex Consulting", 72, height - 145);
+
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(10)
+    .text("brexconsulting.com", 72, height - 128);
+
+  // Date block on the right
+  const dateStr = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sansBold)
+    .fontSize(9)
+    .text("PREPARED ON", width - 200, height - 160, {
+      width: 128,
+      align: "right",
+      characterSpacing: 1.5,
+    });
+
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sansBold)
+    .fontSize(14)
+    .text(dateStr, width - 200, height - 145, { width: 128, align: "right" });
+
+  doc.addPage();
+}
+
+// =============================================================
+// Executive Summary (thesis + pillars + week-1 preview)
+// =============================================================
+function renderExecutiveSummary(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  sectionHeader(doc, "12-Week Thesis");
+  bodyParagraph(doc, p.summary);
+
+  sectionHeader(doc, "Content Pillars");
+  for (const pillar of p.contentPillars ?? []) {
+    pillarBlock(doc, pillar.name, pillar.description);
+  }
+
+  if (p.blogCalendar?.[0]) {
+    sectionHeader(doc, "Week 1 Preview");
+    renderWeek(doc, p.blogCalendar[0], { compact: true });
+  }
+
+  sectionHeader(doc, "Next Steps");
+  bulletList(doc, [
+    "Approve the strategy direction and pillar framing.",
+    "Confirm publishing cadence — 10 posts / week baseline.",
+    "Kick off week 1 briefs with Brex team.",
+    "Schedule biweekly review checkpoint.",
+  ]);
+}
+
+// =============================================================
+// Strategy Only (thesis + pillars + blog calendar + organic social)
+// =============================================================
+function renderStrategyOnly(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  sectionHeader(doc, "12-Week Thesis");
+  bodyParagraph(doc, p.summary);
+
+  sectionHeader(doc, "Content Pillars");
+  for (const pillar of p.contentPillars ?? []) {
+    pillarBlock(doc, pillar.name, pillar.description);
+  }
+
+  sectionHeader(doc, "12-Week Blog Calendar");
+  for (const week of p.blogCalendar ?? []) {
+    renderWeek(doc, week);
+  }
+
+  if (p.socialCadence?.length) {
+    sectionHeader(doc, "Organic Social Cadence");
+    for (const social of p.socialCadence) {
+      renderSocial(doc, social);
+    }
+  }
+
+  if (p.landingPages?.length) {
+    sectionHeader(doc, "AEO Landing Pages");
+    for (const lp of p.landingPages) {
+      renderLandingPage(doc, lp);
     }
   }
 }
+
+// =============================================================
+// Full Plan (everything)
+// =============================================================
+function renderFullPlan(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  renderStrategyOnly(doc, p);
+
+  if (p.heroMetaAd) {
+    sectionHeader(doc, "Hero Meta Ad");
+    labeled(doc, "Headline", p.heroMetaAd.headline);
+    labeled(doc, "Primary Text", p.heroMetaAd.primaryText);
+    labeled(doc, "Description", p.heroMetaAd.description);
+    labeled(doc, "CTA", p.heroMetaAd.cta);
+    labeled(doc, "Visual Concept", p.heroMetaAd.visualConcept);
+  }
+
+  if (p.heroLinkedInAd) {
+    sectionHeader(doc, "Hero LinkedIn Ad");
+    labeled(doc, "Intro Text", p.heroLinkedInAd.introText);
+    labeled(doc, "Headline", p.heroLinkedInAd.headline);
+    labeled(doc, "Description", p.heroLinkedInAd.description);
+    labeled(doc, "CTA", p.heroLinkedInAd.cta);
+    labeled(doc, "Visual Concept", p.heroLinkedInAd.visualConcept);
+  }
+
+  if (p.heroColdEmail) {
+    sectionHeader(doc, "Hero Cold Email Sequence");
+    labeled(doc, "ICP Target", p.heroColdEmail.icpTarget);
+    labeled(doc, "Subject Line (A)", p.heroColdEmail.subjectLineA);
+    labeled(doc, "Subject Line (B)", p.heroColdEmail.subjectLineB);
+
+    emailTouch(doc, "Touch 1", p.heroColdEmail.touch1);
+    emailTouch(doc, "Touch 2", p.heroColdEmail.touch2);
+    emailTouch(doc, "Touch 3 (Breakup)", p.heroColdEmail.touch3);
+  }
+
+  if (p.adBrief?.length) {
+    sectionHeader(doc, "Paid Ad Briefs");
+    for (const brief of p.adBrief) {
+      renderAdBrief(doc, brief);
+    }
+  }
+}
+
+// =============================================================
+// Section primitives
+// =============================================================
+function sectionHeader(doc: PDFKit.PDFDocument, title: string) {
+  ensureSpace(doc, 60);
+  doc.moveDown(0.5);
+
+  const y = doc.y;
+  doc
+    .rect(72, y, 3, 20)
+    .fill(BRAND.accent);
+
+  doc
+    .fillColor(BRAND.navy)
+    .font(FONTS.sansBold)
+    .fontSize(16)
+    .text(title, 82, y + 2);
+
+  doc.moveDown(0.5);
+}
+
+function bodyParagraph(doc: PDFKit.PDFDocument, text: string) {
+  ensureSpace(doc, 40);
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sans)
+    .fontSize(10.5)
+    .text(text, { align: "left", lineGap: 3 });
+  doc.moveDown(0.6);
+}
+
+function pillarBlock(doc: PDFKit.PDFDocument, name: string, description: string) {
+  ensureSpace(doc, 60);
+  doc
+    .fillColor(BRAND.accent)
+    .font(FONTS.sansBold)
+    .fontSize(9)
+    .text("PILLAR", { characterSpacing: 1.5 });
+
+  doc
+    .fillColor(BRAND.navy)
+    .font(FONTS.sansBold)
+    .fontSize(13)
+    .text(name);
+
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sans)
+    .fontSize(10)
+    .text(description, { lineGap: 2 });
+
+  doc.moveDown(0.5);
+}
+
+function bulletList(doc: PDFKit.PDFDocument, items: string[]) {
+  for (const item of items) {
+    ensureSpace(doc, 20);
+    doc
+      .fillColor(BRAND.accent)
+      .font(FONTS.sansBold)
+      .fontSize(10)
+      .text("•", 72, doc.y, { continued: true, indent: 0 })
+      .fillColor(BRAND.text)
+      .font(FONTS.sans)
+      .fontSize(10)
+      .text("  " + item, { lineGap: 2 });
+  }
+  doc.moveDown(0.5);
+}
+
+function labeled(doc: PDFKit.PDFDocument, label: string, value: string) {
+  ensureSpace(doc, 30);
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sansBold)
+    .fontSize(9)
+    .text(label.toUpperCase(), { characterSpacing: 1.2 });
+
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sans)
+    .fontSize(10.5)
+    .text(value, { lineGap: 2 });
+
+  doc.moveDown(0.4);
+}
+
+function emailTouch(
+  doc: PDFKit.PDFDocument,
+  label: string,
+  touch: { day: number; body: string },
+) {
+  ensureSpace(doc, 60);
+  doc
+    .fillColor(BRAND.accent)
+    .font(FONTS.sansBold)
+    .fontSize(10)
+    .text(`${label} · Day ${touch.day}`);
+
+  doc
+    .fillColor(BRAND.text)
+   
