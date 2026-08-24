@@ -4,9 +4,13 @@ import type { Request } from 'express';
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
+import { setupAuth } from "./auth";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Railway/Cloudflare put us behind a proxy — trust it so req.ip and secure cookies work
+app.set("trust proxy", 1);
 
 declare module "http" {
   interface IncomingMessage {
@@ -23,6 +27,9 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Auth: sets up session middleware + /api/login, /api/logout, /api/auth/status
+setupAuth(app);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
