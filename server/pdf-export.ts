@@ -1,6 +1,19 @@
 import PDFDocument from "pdfkit";
 import type { ContentPlanPayload } from "@shared/schema";
 import type { Response } from "express";
+import {
+  PRICING_BENCHMARKS,
+  BENCHMARK_SOURCES,
+  getSource,
+  positioningLabel,
+} from "./pricing-benchmarks";
+import {
+  drawPillarDonut,
+  drawBenchmarkRow,
+  drawGanttTimeline,
+  drawStatBlock,
+  drawCadenceBar,
+} from "./pdf-charts";
 
 export type PdfScope = "full" | "strategy" | "summary";
 
@@ -77,6 +90,15 @@ export function streamContentPlanPdf({
       renderStrategyOnly(doc, payload);
     } else {
       renderFullPlan(doc, payload);
+    }
+
+    // -------- Sources appendix (always, even if body errored partially) --------
+    if (scope !== "strategy") {
+      try {
+        renderSourcesAppendix(doc);
+      } catch (err) {
+        console.error("[pdf-export] sources appendix failed", err);
+      }
     }
 
     // -------- Footer on every page --------
@@ -225,15 +247,43 @@ function renderCover(
 }
 
 // =============================================================
-// Executive Summary (thesis + pillars + week-1 preview)
+// Executive Summary (infographic + thesis + charts + week-1 preview)
 // =============================================================
 function renderExecutiveSummary(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  // ---- At-a-glance stat block ----
+  try {
+    renderAtAGlance(doc, p);
+  } catch (err) {
+    console.error("[pdf-export] at-a-glance failed", err);
+  }
+
   sectionHeader(doc, "12-Week Thesis");
   bodyParagraph(doc, p.summary);
 
   sectionHeader(doc, "Content Pillars");
   for (const pillar of p.contentPillars ?? []) {
     pillarBlock(doc, pillar.name, pillar.description);
+  }
+
+  // ---- Pillar mix donut ----
+  try {
+    renderPillarMixChart(doc, p);
+  } catch (err) {
+    console.error("[pdf-export] pillar mix chart failed", err);
+  }
+
+  // ---- 12-week timeline ----
+  try {
+    renderTimelineChart(doc, p);
+  } catch (err) {
+    console.error("[pdf-export] timeline chart failed", err);
+  }
+
+  // ---- Investment benchmarks (compact) ----
+  try {
+    renderInvestmentBenchmarks(doc, { compact: true });
+  } catch (err) {
+    console.error("[pdf-export] investment benchmarks failed", err);
   }
 
   if (p.blogCalendar?.[0]) {
@@ -248,18 +298,47 @@ function renderExecutiveSummary(doc: PDFKit.PDFDocument, p: ContentPlanPayload) 
     "Kick off week 1 briefs with Brex team.",
     "Schedule biweekly review checkpoint.",
   ]);
+
 }
 
 // =============================================================
 // Strategy Only (thesis + pillars + blog calendar + organic social)
 // =============================================================
 function renderStrategyOnly(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  // ---- At-a-glance stat block ----
+  try {
+    renderAtAGlance(doc, p);
+  } catch (err) {
+    console.error("[pdf-export] at-a-glance failed", err);
+  }
+
   sectionHeader(doc, "12-Week Thesis");
   bodyParagraph(doc, p.summary);
 
   sectionHeader(doc, "Content Pillars");
   for (const pillar of p.contentPillars ?? []) {
     pillarBlock(doc, pillar.name, pillar.description);
+  }
+
+  // ---- Pillar mix donut ----
+  try {
+    renderPillarMixChart(doc, p);
+  } catch (err) {
+    console.error("[pdf-export] pillar mix chart failed", err);
+  }
+
+  // ---- 12-week timeline ----
+  try {
+    renderTimelineChart(doc, p);
+  } catch (err) {
+    console.error("[pdf-export] timeline chart failed", err);
+  }
+
+  // ---- Weekly cadence bar ----
+  try {
+    renderCadenceChart(doc, p);
+  } catch (err) {
+    console.error("[pdf-export] cadence chart failed", err);
   }
 
   sectionHeader(doc, "12-Week Blog Calendar");
@@ -300,6 +379,13 @@ function renderStrategyOnly(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
 function renderFullPlan(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
   renderStrategyOnly(doc, p);
 
+  // ---- Investment benchmarks (full) ----
+  try {
+    renderInvestmentBenchmarks(doc, { compact: false });
+  } catch (err) {
+    console.error("[pdf-export] investment benchmarks failed", err);
+  }
+
   if (p.heroMetaAd) {
     sectionHeader(doc, "Hero Meta Ad");
     labeled(doc, "Headline", p.heroMetaAd.headline);
@@ -335,7 +421,244 @@ function renderFullPlan(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
       renderAdBrief(doc, brief);
     }
   }
+
 }
+
+// =============================================================
+// Chart & benchmark render helpers
+// =============================================================
+
+function renderAtAGlance(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  ensureSpace(doc, 90);
+  const totalPosts = (p.blogCalendar ?? []).reduce(
+    (sum, w) => sum + (w.posts?.length ?? 0),
+    0,
+  );
+  const pillarCount = p.contentPillars?.length ?? 0;
+  const weekCount = p.blogCalendar?.length ?? 0;
+  const uniqueQueries = new Set<string>();
+  for (const w of p.blogCalendar ?? []) {
+    for (const post of w.posts ?? []) {
+      if (post.targetQuery) uniqueQueries.add(post.targetQuery);
+    }
+  }
+
+  sectionHeader(doc, "At a Glance");
+
+  const y = doc.y;
+  const nextY = drawStatBlock(
+    doc,
+    [
+      { value: String(totalPosts), label: "Total posts" },
+      { value: String(weekCount), label: "Weeks" },
+      { value: String(pillarCount), label: "Pillars" },
+      { value: String(uniqueQueries.size), label: "AEO queries" },
+    ],
+    72,
+    y,
+    doc.page.width - 144,
+  );
+
+  doc.y = nextY;
+  doc.moveDown(0.5);
+}
+
+function renderPillarMixChart(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  if (!p.contentPillars?.length || !p.blogCalendar?.length) return;
+
+  ensureSpace(doc, 180);
+  sectionHeader(doc, "Pillar Mix");
+
+  // Count posts per pillar
+  const counts = new Map<string, number>();
+  for (const pillar of p.contentPillars) counts.set(pillar.name, 0);
+  for (const week of p.blogCalendar) {
+    for (const post of week.posts ?? []) {
+      if (counts.has(post.pillar)) {
+        counts.set(post.pillar, (counts.get(post.pillar) ?? 0) + 1);
+      } else if (post.pillar) {
+        counts.set(post.pillar, 1);
+      }
+    }
+  }
+
+  const pillarCounts = Array.from(counts.entries()).map(([name, count]) => ({
+    name,
+    count,
+  }));
+
+  const startY = doc.y;
+  drawPillarDonut(doc, pillarCounts, 72, startY, 55);
+  doc.y = startY + 130;
+  doc.moveDown(0.3);
+}
+
+function renderTimelineChart(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  if (!p.contentPillars?.length || !p.blogCalendar?.length) return;
+
+  const pillarCount = p.contentPillars.length;
+  const chartHeight = 40 + pillarCount * 18;
+  ensureSpace(doc, chartHeight + 40);
+
+  sectionHeader(doc, "12-Week Publishing Timeline");
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(9)
+    .text(
+      "Post counts per pillar across the 12-week calendar. Colored cells show weeks with active publishing.",
+      { lineGap: 2 },
+    );
+  doc.moveDown(0.4);
+
+  const startY = doc.y;
+  const endY = drawGanttTimeline(
+    doc,
+    p.blogCalendar,
+    p.contentPillars,
+    72,
+    startY,
+    doc.page.width - 144,
+  );
+  doc.y = endY;
+  doc.moveDown(0.4);
+}
+
+function renderCadenceChart(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  if (!p.blogCalendar?.length) return;
+
+  ensureSpace(doc, 150);
+  sectionHeader(doc, "Weekly Cadence");
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(9)
+    .text("Number of posts published each week.", { lineGap: 2 });
+  doc.moveDown(0.3);
+
+  const startY = doc.y;
+  const endY = drawCadenceBar(doc, p.blogCalendar, 72, startY, doc.page.width - 144);
+  doc.y = endY;
+  doc.moveDown(0.4);
+}
+
+function renderInvestmentBenchmarks(
+  doc: PDFKit.PDFDocument,
+  opts: { compact?: boolean } = {},
+) {
+  ensureSpace(doc, 100);
+  sectionHeader(doc, "Investment Benchmarks");
+
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sans)
+    .fontSize(10)
+    .text(
+      "Industry pricing benchmarks for the services Brex Consulting delivers. " +
+        "Ranges are drawn from 2026 agency pricing surveys (Clutch, Ahrefs, Digital Applied, " +
+        "and independent industry aggregators). Full source list appears in the appendix.",
+      { lineGap: 3 },
+    );
+  doc.moveDown(0.6);
+
+  const benchmarks = opts.compact
+    ? PRICING_BENCHMARKS.filter(
+        (b) =>
+          b.service.includes("Blog content") ||
+          b.service.includes("Fractional CMO") ||
+          b.service.includes("SEO/AEO") ||
+          b.service.includes("LinkedIn Ads management"),
+      ).slice(0, 4)
+    : PRICING_BENCHMARKS;
+
+  for (const benchmark of benchmarks) {
+    ensureSpace(doc, 56);
+    const nextY = drawBenchmarkRow(
+      doc,
+      benchmark,
+      72,
+      doc.y,
+      doc.page.width - 144,
+    );
+    doc.y = nextY + 6;
+  }
+
+  doc.moveDown(0.2);
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sansOblique)
+    .fontSize(8)
+    .text(
+      'Ranges shown are typical retainer/project fees for mid-market agencies. ' +
+        'The amber band indicates the market mean ± 15%. "BREX" tag indicates ' +
+        'where Brex Consulting positions relative to the market band.',
+      { lineGap: 2 },
+    );
+  doc.moveDown(0.5);
+}
+
+function renderSourcesAppendix(doc: PDFKit.PDFDocument) {
+  doc.addPage();
+
+  sectionHeader(doc, "Sources & Citations");
+
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sans)
+    .fontSize(10)
+    .text(
+      "Pricing benchmarks in this report are sourced from the following industry " +
+        "surveys and pricing databases (all 2026 data unless noted).",
+      { lineGap: 3 },
+    );
+  doc.moveDown(0.5);
+
+  for (const source of BENCHMARK_SOURCES) {
+    ensureSpace(doc, 44);
+
+    // Publisher
+    doc
+      .fillColor(BRAND.accent)
+      .font(FONTS.sansBold)
+      .fontSize(9)
+      .text(source.publisher.toUpperCase(), { characterSpacing: 1 });
+
+    // Title
+    doc
+      .fillColor(BRAND.navy)
+      .font(FONTS.sansBold)
+      .fontSize(10)
+      .text(source.title, { lineGap: 1 });
+
+    // URL
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sans)
+      .fontSize(8)
+      .text(source.url, {
+        link: source.url,
+        underline: false,
+        lineGap: 1,
+      });
+
+    doc.moveDown(0.5);
+  }
+
+  doc.moveDown(0.5);
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sansOblique)
+    .fontSize(8)
+    .text(
+      "Benchmark data is refreshed quarterly. Contact Brex Consulting for the " +
+        "latest figures on any specific service category.",
+      { lineGap: 2 },
+    );
+}
+
+// Note: getSource and positioningLabel are imported for future use in expanded reports.
+void getSource;
+void positioningLabel;
 
 // =============================================================
 // Section primitives
