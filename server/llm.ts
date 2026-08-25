@@ -172,24 +172,54 @@ export async function llmJson(
 // Common schemas — permissive on nested details, strict on the top-level shape.
 // This ensures Claude can't return {} and satisfy the tool call.
 
+// Strategy shape consumed by the analysis page ("The recommended play"),
+// PDF, and PPTX. Nested object shape (icp, contentPillars items, channelMix
+// items, ninetyDayPlan items) is enforced via the SYSTEM prompt — nested
+// `required` arrays trigger the Anthropic proxy 400 (see SCHEMA_SHELL note).
 export const SCHEMA_STRATEGY = {
   type: "object",
   additionalProperties: true,
-  required: ["positioning", "priorities", "plan"],
+  required: [
+    "icp",
+    "positioningGaps",
+    "messagingRecommendations",
+    "aeoRecommendations",
+    "contentPillars",
+    "channelMix",
+    "quickWins",
+    "ninetyDayPlan",
+  ],
   properties: {
-    positioning: { type: "string" },
-    priorities: { type: "array" },
-    plan: { type: "array" },
+    icp: { type: "object", additionalProperties: true },
+    positioningGaps: { type: "array", items: { type: "string" } },
+    messagingRecommendations: { type: "array", items: { type: "string" } },
+    aeoRecommendations: { type: "array", items: { type: "string" } },
+    contentPillars: { type: "array", minItems: 1 },
+    channelMix: { type: "array", minItems: 1 },
+    quickWins: { type: "array", items: { type: "string" } },
+    ninetyDayPlan: { type: "array", minItems: 1 },
   },
 };
 
+// SOW shape consumed by "Priced engagement — ready to send" section, PDF,
+// and PPTX. Nested object shape (phases items, priceTiers items) enforced
+// via the SYSTEM prompt.
 export const SCHEMA_SOW = {
   type: "object",
   additionalProperties: true,
-  required: ["title", "sections"],
+  required: [
+    "engagementSummary",
+    "phases",
+    "team",
+    "priceTiers",
+    "termsNotes",
+  ],
   properties: {
-    title: { type: "string" },
-    sections: { type: "array" },
+    engagementSummary: { type: "string" },
+    phases: { type: "array", minItems: 1 },
+    team: { type: "array", items: { type: "string" } },
+    priceTiers: { type: "array", minItems: 1 },
+    termsNotes: { type: "array", items: { type: "string" } },
   },
 };
 
