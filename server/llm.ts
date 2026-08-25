@@ -223,12 +223,16 @@ export const SCHEMA_SOW = {
   },
 };
 
+// Competitor list rendered in the analysis page's competitor teardown
+// section, the PDF, and the PPTX. Each item has {name, url, positioning,
+// strengths[], weaknesses[], hookIdeas[]}. Item shape enforced via the
+// SYSTEM prompt (nested requireds trip the Anthropic proxy 400).
 export const SCHEMA_COMPETITORS = {
   type: "object",
   additionalProperties: true,
   required: ["competitors"],
   properties: {
-    competitors: { type: "array" },
+    competitors: { type: "array", minItems: 3 },
   },
 };
 
@@ -297,6 +301,10 @@ export const SCHEMA_SHELL = {
   },
 };
 
+// Blog calendar batch returned by the 12-week generator. Each item is a
+// week: {weekNumber, weekOf, posts[{title, pillar, targetQuery, angle,
+// keywords[], scheduledDate, editorialBrief}]}. Item shape enforced via
+// the SYSTEM prompt.
 export const SCHEMA_BLOG_BATCH = {
   type: "object",
   additionalProperties: true,
