@@ -9,7 +9,7 @@ import { requireAuth } from "./auth";
 import { streamContentPlanPdf, type PdfScope } from "./pdf-export";
 import { buildContentPlanPptx } from "./pptx-export";
 import { llmJson, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
-import { calculateRoiProjections, FALLBACK_ASSUMPTIONS } from "./roi-calc";
+import { calculateRoiProjections, FALLBACK_ASSUMPTIONS, ROI_INFERENCE_SYSTEM_PROMPT } from "./roi-calc";
 import type { RoiAssumptions } from "@shared/schema";
 import type { ContentPlanPayload } from "@shared/schema";
 
@@ -108,36 +108,22 @@ export async function registerRoutes(
     }
 
     try {
-      const roiSys = `You are a B2B revenue analyst inferring conservative, defensible ROI assumptions for a 12-week content marketing engagement. Be DELIBERATELY CONSERVATIVE — use the lower end of plausible ranges. This is used to project ROI to a skeptical CFO.
-
-For each field:
-- avgDealSize: One deal value in USD. Use ACV if subscription. Infer from industry, ICP company size, and pricing signals.
-- dealType: "one-time" for services/implementation/hardware; "acv" for SaaS/subscriptions.
-- grossMargin: 0.55–0.70 for services; 0.70–0.85 for SaaS; 0.30–0.45 for hardware/distribution.
-- salesCycleDays: 30–60 SMB, 60–120 mid-market, 120–270 enterprise.
-- visitorToLeadRate: 0.008–0.020.
-- leadToMqlRate: 0.25–0.40. mqlToSqlRate: 0.30–0.45. sqlToWonRate: 0.15–0.25.
-- monthlyVisitorsPerPost: 20–80 at maturity.
-- monthsToRank: 3–5. contentDecayFactor: 0.85–0.92.
-- programCost12Mo: 12-month Brex mid-market retainer + content ops, $75k–$120k typical.
-- paidCacBaseline: B2B paid CPL, typically $200–$800.
-
-Every rationale must reference the SPECIFIC client analysis, one tight sentence each.`;
-
+      // Include SOW so the LLM can anchor avgDealSize on priceTiers.
       const analysisContext = JSON.stringify({
         clientName: analysis.clientName,
         clientUrl: analysis.clientUrl,
-        strategy: analysis.strategy,
         extraction: analysis.extraction,
+        strategy: analysis.strategy,
+        sow: analysis.sow, // CRITICAL: priceTiers drive ACV anchoring.
         competitors: analysis.competitors,
-      }).slice(0, 8000);
+      }).slice(0, 12000);
 
-      const roiUser = `# Client Analysis\n${analysisContext}\n\n# Content Plan Summary\n${(payload.summary ?? "").slice(0, 800)}\n\nInfer conservative ROI assumptions for a 12-week content marketing engagement.`;
+      const roiUser = `# Client Analysis\n${analysisContext}\n\n# Content Plan Summary\n${(payload.summary ?? "").slice(0, 800)}\n\nInfer realistic ROI assumptions for a 12-month content marketing engagement. Follow the priceTiers anchoring rule if a SOW is present.`;
 
       let assumptions: RoiAssumptions;
       try {
         assumptions = (await llmJson(
-          roiSys,
+          ROI_INFERENCE_SYSTEM_PROMPT,
           roiUser,
           2000,
           SCHEMA_ROI_ASSUMPTIONS,
@@ -155,6 +141,73 @@ Every rationale must reference the SPECIFIC client analysis, one tight sentence 
     } catch (err: any) {
       console.error("[roi] failed", err);
       return res.status(500).json({ error: err?.message ?? "ROI calculation failed" });
+    }
+  });
+
+  // Manual-override recompute: skip the LLM entirely, take user-tuned
+  // assumptions from the request body, run the deterministic calculator.
+  // Body: { assumptions: Partial<RoiAssumptions> }
+  // Missing fields fall back to the cached assumptions on the plan (or the
+  // FALLBACK_ASSUMPTIONS if none exist). Rationale is auto-updated to note
+  // manual override so the PDF/PPTX exports show it was user-tuned.
+  app.post("/api/content-plans/:id/roi/recompute", async (req, res) => {
+    const plan = await storage.getContentPlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: "Plan not found" });
+    if (plan.status !== "ready" || !plan.planJson) {
+      return res.status(400).json({ error: "Plan is not ready" });
+    }
+
+    let payload: ContentPlanPayload;
+    try {
+      payload = typeof plan.planJson === "string"
+        ? (JSON.parse(plan.planJson) as ContentPlanPayload)
+        : (plan.planJson as unknown as ContentPlanPayload);
+    } catch {
+      return res.status(500).json({ error: "Plan data is malformed" });
+    }
+
+    const overrides = (req.body?.assumptions ?? {}) as Partial<RoiAssumptions>;
+    const baseline = payload.roiProjections?.assumptions ?? FALLBACK_ASSUMPTIONS;
+
+    // Clamp helper — keep every field inside the schema's declared range so
+    // a user can't accidentally break the calculator with wild values.
+    const clamp = (n: unknown, min: number, max: number, fallback: number): number => {
+      const num = typeof n === "number" && Number.isFinite(n) ? n : fallback;
+      return Math.min(max, Math.max(min, num));
+    };
+
+    const merged: RoiAssumptions = {
+      avgDealSize: clamp(overrides.avgDealSize, 500, 10_000_000, baseline.avgDealSize),
+      dealType: overrides.dealType === "acv" || overrides.dealType === "one-time"
+        ? overrides.dealType
+        : baseline.dealType,
+      grossMargin: clamp(overrides.grossMargin, 0.1, 0.95, baseline.grossMargin),
+      salesCycleDays: clamp(overrides.salesCycleDays, 7, 365, baseline.salesCycleDays),
+      visitorToLeadRate: clamp(overrides.visitorToLeadRate, 0.001, 0.1, baseline.visitorToLeadRate),
+      leadToMqlRate: clamp(overrides.leadToMqlRate, 0.05, 0.9, baseline.leadToMqlRate),
+      mqlToSqlRate: clamp(overrides.mqlToSqlRate, 0.05, 0.9, baseline.mqlToSqlRate),
+      sqlToWonRate: clamp(overrides.sqlToWonRate, 0.05, 0.6, baseline.sqlToWonRate),
+      monthlyVisitorsPerPost: clamp(overrides.monthlyVisitorsPerPost, 5, 500, baseline.monthlyVisitorsPerPost),
+      monthsToRank: clamp(overrides.monthsToRank, 2, 9, baseline.monthsToRank),
+      contentDecayFactor: clamp(overrides.contentDecayFactor, 0.7, 0.98, baseline.contentDecayFactor),
+      programCost12Mo: clamp(overrides.programCost12Mo, 20_000, 500_000, baseline.programCost12Mo),
+      paidCacBaseline: clamp(overrides.paidCacBaseline, 50, 5000, baseline.paidCacBaseline),
+      rationale: {
+        dealSize: `Manually tuned: $${Math.round(overrides.avgDealSize ?? baseline.avgDealSize).toLocaleString()} ${overrides.dealType ?? baseline.dealType}. Original: ${baseline.rationale.dealSize}`,
+        conversionRates: `Manually tuned. Original: ${baseline.rationale.conversionRates}`,
+        trafficRamp: `Manually tuned. Original: ${baseline.rationale.trafficRamp}`,
+        programCost: `Manually tuned: $${Math.round(overrides.programCost12Mo ?? baseline.programCost12Mo).toLocaleString()}/12mo. Original: ${baseline.rationale.programCost}`,
+      },
+    };
+
+    try {
+      const projections = calculateRoiProjections(merged, payload);
+      payload.roiProjections = projections;
+      await storage.updateContentPlan(plan.id, { planJson: JSON.stringify(payload) });
+      return res.json({ roi: projections, cached: false, tuned: true });
+    } catch (err: any) {
+      console.error("[roi/recompute] failed", err);
+      return res.status(500).json({ error: err?.message ?? "ROI recompute failed" });
     }
   });
 

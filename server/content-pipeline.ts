@@ -6,7 +6,7 @@
 
 import { storage } from "./storage";
 import { llmJson, SCHEMA_SHELL, SCHEMA_BLOG_BATCH, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
-import { calculateRoiProjections, FALLBACK_ASSUMPTIONS } from "./roi-calc";
+import { ROI_INFERENCE_SYSTEM_PROMPT, calculateRoiProjections, FALLBACK_ASSUMPTIONS } from "./roi-calc";
 import type { RoiAssumptions } from "@shared/schema";
 import { BREX_VOICE } from "./voice/brex";
 import { CONCENTRUS_VOICE } from "./voice/concentrus";
@@ -395,40 +395,22 @@ export async function runContentPlanGeneration(planId: string) {
     });
 
     try {
-      const roiSys = `You are a B2B revenue analyst inferring conservative, defensible ROI assumptions for a 12-week content marketing engagement.
-
-Input: a client business analysis (industry, ICP, competitive positioning, deal signals).
-Output: numerical assumptions grounded in that client's specific business context.
-
-Be DELIBERATELY CONSERVATIVE — use the lower end of plausible ranges. This is used to project ROI to a skeptical CFO. If in doubt, discount.
-
-For each field:
-- avgDealSize: One deal value in USD. Use ACV if subscription. Infer from industry, ICP company size, and any pricing signals in the analysis. If unclear, use B2B mid-market defaults ($15–35k).
-- dealType: "one-time" for services/implementation/hardware; "acv" for SaaS/subscriptions.
-- grossMargin: 0.55–0.70 for services; 0.70–0.85 for SaaS; 0.30–0.45 for hardware/distribution.
-- salesCycleDays: 30–60 for SMB tools; 60–120 for mid-market; 120–270 for enterprise.
-- visitorToLeadRate: 0.008–0.020 for B2B (bottom-half of B2B SaaS benchmarks).
-- leadToMqlRate: 0.25–0.40. mqlToSqlRate: 0.30–0.45. sqlToWonRate: 0.15–0.25.
-- monthlyVisitorsPerPost: 20–80 for well-optimized SEO/AEO posts at maturity. Higher for lower competition niches.
-- monthsToRank: 3–5 months.
-- contentDecayFactor: 0.85–0.92.
-- programCost12Mo: A 12-month equivalent of Brex mid-market retainer + content ops. Typically $75k–$120k.
-- paidCacBaseline: Cost per lead via paid media in this vertical. B2B typical: $200–$800.
-
-Every field's rationale must reference the SPECIFIC client analysis, not generic benchmarks. One tight sentence each.`;
-
+      // roiSys and analysisContext must include the SOW so the LLM can
+      // anchor avgDealSize on the client's own priceTiers. See
+      // ROI_INFERENCE_SYSTEM_PROMPT for the derivation rules.
       const analysisContext = JSON.stringify({
         clientName: analysis.clientName,
         clientUrl: analysis.clientUrl,
-        strategy: analysis.strategy,
         extraction: analysis.extraction,
+        strategy: analysis.strategy,
+        sow: analysis.sow, // CRITICAL: priceTiers drive ACV anchoring.
         competitors: analysis.competitors,
-      }).slice(0, 8000); // Cap context size
+      }).slice(0, 12000); // Larger cap now that SOW is included.
 
-      const roiUser = `# Client Analysis\n${analysisContext}\n\n# Content Plan Summary\n${(payload.summary ?? "").slice(0, 800)}\n\nInfer conservative ROI assumptions for a 12-week content marketing engagement.`;
+      const roiUser = `# Client Analysis\n${analysisContext}\n\n# Content Plan Summary\n${(payload.summary ?? "").slice(0, 800)}\n\nInfer realistic ROI assumptions for a 12-month content marketing engagement. Follow the priceTiers anchoring rule if a SOW is present.`;
 
       const assumptions = (await llmJson(
-        roiSys,
+        ROI_INFERENCE_SYSTEM_PROMPT,
         roiUser,
         2000,
         SCHEMA_ROI_ASSUMPTIONS,

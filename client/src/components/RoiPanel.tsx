@@ -4,8 +4,11 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, TrendingUp, DollarSign, Target, Clock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, RefreshCw, TrendingUp, DollarSign, Target, Clock, SlidersHorizontal, X, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { RoiAssumptions } from "@shared/schema";
 import {
   LineChart,
   Line,
@@ -56,6 +59,8 @@ export function RoiPanel({ planId, initialRoi }: RoiPanelProps) {
   const [roi, setRoi] = useState<RoiProjections | undefined>(initialRoi);
   const [loading, setLoading] = useState(!initialRoi);
   const [regenerating, setRegenerating] = useState(false);
+  const [tuning, setTuning] = useState(false);
+  const [tunePanelOpen, setTunePanelOpen] = useState(false);
 
   useEffect(() => {
     if (initialRoi) {
@@ -85,7 +90,7 @@ export function RoiPanel({ planId, initialRoi }: RoiPanelProps) {
       if (force) {
         toast({
           title: "ROI regenerated",
-          description: "Fresh conservative projections inferred from your analysis.",
+          description: "Fresh projections inferred from your analysis (now anchored on SOW pricing).",
         });
       }
     } catch (e: any) {
@@ -97,6 +102,38 @@ export function RoiPanel({ planId, initialRoi }: RoiPanelProps) {
     } finally {
       setLoading(false);
       setRegenerating(false);
+    }
+  }
+
+  // Manual override — skip the LLM, just recompute with user-tuned values.
+  async function recomputeWithOverrides(overrides: Partial<RoiAssumptions>) {
+    setTuning(true);
+    try {
+      const res = await fetch(`/api/content-plans/${planId}/roi/recompute`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assumptions: overrides }),
+      });
+      if (!res.ok) {
+        const msg = await res.json().catch(() => ({ error: "Failed" }));
+        throw new Error(msg?.error ?? "Failed to recompute ROI");
+      }
+      const data = await res.json();
+      setRoi(data.roi);
+      setTunePanelOpen(false);
+      toast({
+        title: "ROI recomputed",
+        description: "Projections updated with your tuned assumptions.",
+      });
+    } catch (e: any) {
+      toast({
+        title: "Recompute failed",
+        description: e?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setTuning(false);
     }
   }
 
@@ -160,25 +197,45 @@ export function RoiPanel({ planId, initialRoi }: RoiPanelProps) {
             12-Month ROI Projections
           </h2>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Conservative estimates inferred from your client analysis. Adjust or regenerate if
-            deal economics look off.
+            Estimates inferred from your client analysis and SOW pricing. Tune assumptions if the deal economics look off, or regenerate to re-infer from the analysis.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => computeRoi(true)}
-          disabled={regenerating}
-          data-testid="button-regenerate-roi"
-        >
-          {regenerating ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4 mr-2" />
-          )}
-          Regenerate
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={tunePanelOpen ? "default" : "outline"}
+            size="sm"
+            onClick={() => setTunePanelOpen((v) => !v)}
+            data-testid="button-tune-roi"
+          >
+            <SlidersHorizontal className="h-4 w-4 mr-2" />
+            {tunePanelOpen ? "Close tuner" : "Tune assumptions"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => computeRoi(true)}
+            disabled={regenerating}
+            data-testid="button-regenerate-roi"
+          >
+            {regenerating ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-2" />
+            )}
+            Regenerate
+          </Button>
+        </div>
       </div>
+
+      {tunePanelOpen && (
+        <TunePanel
+          current={assumptions}
+          onApply={recomputeWithOverrides}
+          onCancel={() => setTunePanelOpen(false)}
+          onReset={() => computeRoi(true)}
+          busy={tuning}
+        />
+      )}
 
       {/* Headline stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -517,6 +574,269 @@ function RationaleRow({ label, text }: { label: string; text: string }) {
     <div className="flex items-start gap-2">
       <span className="text-foreground font-medium min-w-[100px]">{label}:</span>
       <span>{text}</span>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// TunePanel — lets the user manually override the 8 highest-impact assumptions
+// (ACV, deal type, gross margin, program cost, close rate, ramp, etc.) and
+// re-run the deterministic calculator without another LLM inference call.
+//
+// Presets sit above the form for common scenarios (retainer-heavy, diagnostic-
+// heavy, conservative sandbagging).
+// -----------------------------------------------------------------------------
+function TunePanel({
+  current,
+  onApply,
+  onCancel,
+  onReset,
+  busy,
+}: {
+  current: RoiAssumptions;
+  onApply: (overrides: Partial<RoiAssumptions>) => void;
+  onCancel: () => void;
+  onReset: () => void;
+  busy: boolean;
+}) {
+  const [form, setForm] = useState({
+    avgDealSize: current.avgDealSize,
+    dealType: current.dealType,
+    grossMargin: current.grossMargin,
+    programCost12Mo: current.programCost12Mo,
+    sqlToWonRate: current.sqlToWonRate,
+    monthlyVisitorsPerPost: current.monthlyVisitorsPerPost,
+    monthsToRank: current.monthsToRank,
+    paidCacBaseline: current.paidCacBaseline,
+  });
+
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+    setForm((f) => ({ ...f, [key]: value }));
+
+  // Preset: retainer-heavy — assume every won deal is a full retainer, not a
+  // one-off diagnostic. Used when the SOW's middle tier is the realistic ACV.
+  const applyRetainerHeavy = () => {
+    setForm((f) => ({
+      ...f,
+      dealType: "acv",
+      avgDealSize: Math.max(f.avgDealSize, 60_000),
+      grossMargin: 0.65,
+      sqlToWonRate: 0.25,
+    }));
+  };
+
+  const applyDiagnosticFunnel = () => {
+    setForm((f) => ({
+      ...f,
+      sqlToWonRate: 0.28,
+      monthsToRank: 3,
+      monthlyVisitorsPerPost: Math.max(f.monthlyVisitorsPerPost, 50),
+    }));
+  };
+
+  const applyConservative = () => {
+    setForm((f) => ({
+      ...f,
+      sqlToWonRate: 0.15,
+      monthsToRank: 5,
+      monthlyVisitorsPerPost: 25,
+    }));
+  };
+
+  const apply = () => onApply(form);
+
+  return (
+    <Card className="p-5 border-2 border-amber-500 bg-amber-50/40">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 className="font-medium text-foreground flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4" />
+            Tune assumptions
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Override the AI-inferred values. Deterministic recompute — no LLM call.
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onCancel} className="h-8 w-8 p-0">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Presets */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        <span className="text-xs text-muted-foreground self-center mr-1">Presets:</span>
+        <Button variant="outline" size="sm" onClick={applyRetainerHeavy}>
+          Retainer-heavy
+        </Button>
+        <Button variant="outline" size="sm" onClick={applyDiagnosticFunnel}>
+          Diagnostic funnel
+        </Button>
+        <Button variant="outline" size="sm" onClick={applyConservative}>
+          Very conservative
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Field
+          label="Avg deal size (USD)"
+          hint={form.dealType === "acv" ? "Annual contract value" : "One-time deal value"}
+          type="number"
+          value={form.avgDealSize}
+          onChange={(v) => set("avgDealSize", v)}
+          min={500}
+          max={10_000_000}
+          step={1000}
+        />
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+            Deal type
+          </Label>
+          <div className="flex gap-1">
+            <Button
+              variant={form.dealType === "acv" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => set("dealType", "acv")}
+            >
+              ACV
+            </Button>
+            <Button
+              variant={form.dealType === "one-time" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => set("dealType", "one-time")}
+            >
+              One-time
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Retainer/subscription vs. one-off.
+          </p>
+        </div>
+        <Field
+          label="Gross margin"
+          hint="0.60 = 60%"
+          type="number"
+          value={form.grossMargin}
+          onChange={(v) => set("grossMargin", v)}
+          min={0.1}
+          max={0.95}
+          step={0.05}
+        />
+        <Field
+          label="Program cost (12mo)"
+          hint="What the engagement actually costs"
+          type="number"
+          value={form.programCost12Mo}
+          onChange={(v) => set("programCost12Mo", v)}
+          min={20_000}
+          max={500_000}
+          step={5000}
+        />
+        <Field
+          label="SQL → Won rate"
+          hint="0.25 = 25% of SQLs close"
+          type="number"
+          value={form.sqlToWonRate}
+          onChange={(v) => set("sqlToWonRate", v)}
+          min={0.05}
+          max={0.6}
+          step={0.01}
+        />
+        <Field
+          label="Visitors / post / mo"
+          hint="At maturity"
+          type="number"
+          value={form.monthlyVisitorsPerPost}
+          onChange={(v) => set("monthlyVisitorsPerPost", v)}
+          min={5}
+          max={500}
+          step={5}
+        />
+        <Field
+          label="Months to rank"
+          hint="SEO/AEO ramp"
+          type="number"
+          value={form.monthsToRank}
+          onChange={(v) => set("monthsToRank", v)}
+          min={2}
+          max={9}
+          step={1}
+        />
+        <Field
+          label="Paid CPL benchmark"
+          hint="For savings-vs-paid math"
+          type="number"
+          value={form.paidCacBaseline}
+          onChange={(v) => set("paidCacBaseline", v)}
+          min={50}
+          max={5000}
+          step={25}
+        />
+      </div>
+
+      <div className="flex items-center justify-between mt-5 pt-4 border-t border-amber-200">
+        <button
+          onClick={onReset}
+          className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+        >
+          Reset to AI inference
+        </button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={apply} disabled={busy}>
+            {busy ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Recomputing…
+              </>
+            ) : (
+              <>Apply & recompute</>
+            )}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  type,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+}: {
+  label: string;
+  hint?: string;
+  type: "number" | "text";
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground uppercase tracking-wide">{label}</Label>
+      <Input
+        type={type}
+        value={value}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isFinite(n)) onChange(n);
+        }}
+        min={min}
+        max={max}
+        step={step}
+        className="h-9"
+      />
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
