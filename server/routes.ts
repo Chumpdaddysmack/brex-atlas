@@ -7,6 +7,7 @@ import { runPipeline } from "./pipeline";
 import { runContentPlanGeneration } from "./content-pipeline";
 import { requireAuth } from "./auth";
 import { streamContentPlanPdf, type PdfScope } from "./pdf-export";
+import { buildContentPlanPptx } from "./pptx-export";
 import type { ContentPlanPayload } from "@shared/schema";
 
 export async function registerRoutes(
@@ -78,6 +79,52 @@ export async function registerRoutes(
 
   // Export the plan as a branded PDF (streams the file back)
   // ?scope=full (default) | strategy | summary
+  app.get("/api/content-plans/:id/pptx", async (req, res) => {
+    const plan = await storage.getContentPlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: "Plan not found" });
+    if (plan.status !== "ready" || !plan.planJson) {
+      return res.status(400).json({ error: "Plan is not ready to export" });
+    }
+    const analysis = await storage.getAnalysis(plan.analysisId);
+    if (!analysis) return res.status(404).json({ error: "Analysis not found" });
+
+    let payload: ContentPlanPayload;
+    try {
+      payload = typeof plan.planJson === "string"
+        ? (JSON.parse(plan.planJson) as ContentPlanPayload)
+        : (plan.planJson as unknown as ContentPlanPayload);
+    } catch {
+      return res.status(500).json({ error: "Plan data is malformed" });
+    }
+
+    try {
+      const buffer = await buildContentPlanPptx({
+        payload,
+        clientName: analysis.clientName,
+        clientUrl: analysis.clientUrl,
+      });
+
+      const safeName = (analysis.clientName || "client").replace(/[^a-z0-9-_]/gi, "_");
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${safeName}-content-strategy-deck.pptx"`,
+      );
+      res.setHeader("Content-Length", String(buffer.length));
+      res.end(buffer);
+    } catch (err) {
+      console.error("[pptx-export] failed", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "PPTX generation failed" });
+      } else {
+        res.end();
+      }
+    }
+  });
+
   app.get("/api/content-plans/:id/pdf", async (req, res) => {
     const plan = await storage.getContentPlan(req.params.id);
     if (!plan) return res.status(404).json({ error: "Plan not found" });

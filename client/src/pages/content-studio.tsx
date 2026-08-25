@@ -30,6 +30,7 @@ import {
   Copy,
   Download,
   FileDown,
+  Presentation,
   ChevronDown,
 } from "lucide-react";
 import {
@@ -159,6 +160,41 @@ export default function ContentStudio() {
     }
   };
 
+  // Download the branded PowerPoint deck (main findings & recommendations)
+  const exportPptx = async () => {
+    if (!plan?.id) return;
+    try {
+      toast({
+        title: "Preparing deck…",
+        description: "Building your branded PowerPoint. This takes ~10 seconds.",
+      });
+      const res = await fetch(`/api/content-plans/${plan.id}/pptx`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const msg = await res.json().catch(() => ({ error: "Download failed" }));
+        throw new Error(msg?.error ?? "Download failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const clientSafe = (analysisQ.data?.clientName ?? "client").replace(/[^a-z0-9-_]/gi, "_");
+      a.href = url;
+      a.download = `${clientSafe}-content-strategy-deck.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Deck downloaded", description: "Branded PowerPoint saved." });
+    } catch (e: any) {
+      toast({
+        title: "Deck export failed",
+        description: e?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (!analysisQ.data) {
     return (
       <AppShell>
@@ -199,6 +235,9 @@ export default function ContentStudio() {
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={copyFullPlan} data-testid="button-copy-full-plan">
                   <Copy className="h-4 w-4 mr-2" /> Copy full plan
+                </Button>
+                <Button variant="outline" onClick={exportPptx} data-testid="button-export-deck">
+                  <Presentation className="h-4 w-4 mr-2" /> Export Deck
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
