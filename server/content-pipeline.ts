@@ -5,7 +5,9 @@
 // No per-piece drafting — reviewers work from titles, angles, target queries.
 
 import { storage } from "./storage";
-import { llmJson, SCHEMA_SHELL, SCHEMA_BLOG_BATCH } from "./llm";
+import { llmJson, SCHEMA_SHELL, SCHEMA_BLOG_BATCH, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
+import { calculateRoiProjections, FALLBACK_ASSUMPTIONS } from "./roi-calc";
+import type { RoiAssumptions } from "@shared/schema";
 import { BREX_VOICE } from "./voice/brex";
 import { CONCENTRUS_VOICE } from "./voice/concentrus";
 import type {
@@ -39,7 +41,7 @@ function voiceFor(analysis: Analysis): string {
 // the model's max_tokens budget and avoid unbalanced-JSON truncation.
 //
 //   1) SHELL — thesis, pillars, ad brief, social cadence, landing pages.
-//   2) BLOG BATCH — 3 weeks of blog calendar at a time (called 4× → 12 weeks).
+//   2) BLOG BATCH — 4 weeks of blog calendar at a time (called 3× → 12 weeks).
 //
 // The shell pass runs first so downstream blog batches can reference the pillar
 // names, ICP, and competitor set the model just committed to.
@@ -135,7 +137,7 @@ Compactness rules (this JSON must fit in ~6000 output tokens):
 - Social starter \"hook\": one sentence, max 20 words.
 - No markdown, no commentary, no trailing text outside the JSON object.`;
 
-const SYS_BLOG_BATCH = `You are a senior B2B content strategist. The Voice & Style Card supplied in the user message is the ONLY source of truth for tone, positioning, and protected phrases — do not import personas from any other brand. You are writing a BATCH of the 12-week blog editorial calendar. You will be told which weeks to write (e.g. weeks 1-3), the content pillars the shell pass locked in, the starting Monday date, and any weeks already covered so you can vary titles.
+const SYS_BLOG_BATCH = `You are a senior B2B content strategist. The Voice & Style Card supplied in the user message is the ONLY source of truth for tone, positioning, and protected phrases — do not import personas from any other brand. You are writing a BATCH of the 12-week blog editorial calendar. You will be told which weeks to write (e.g. weeks 1-4), the content pillars the shell pass locked in, the starting Monday date, and any weeks already covered so you can vary titles.
 
 Return ONE JSON object with this exact shape (no prose, no code fences):
 {
@@ -169,7 +171,7 @@ Hard rules:
 - Every blog post targetQuery should be the exact buyer question a founder/CEO would type into ChatGPT or Google.
 - Assign each blog post to one of the provided pillar names — do not invent new pillars.
 - Diversify: no more than 2 posts per week can target the same targetQuery, and titles across the batch must not repeat.
-- Include at least one competitor-comparison post per batch when relevant competitors exist.
+- Include at least one competitor-comparison post per 4-week batch when relevant competitors exist.
 - Distribute the 10 weekly blog posts across weekdays (2 per day Mon-Fri).
 - weekOf is the Monday of that week. scheduledDate must land Mon-Fri of that week.
 
@@ -180,7 +182,7 @@ Editorial-brief rules:
 - primaryKeyword is one string, not an array.
 - aeoQuery is the answer-engine-shaped version of readerQuestion (an AI would cite this post if it answered exactly this question).
 
-Keep angles short (1-2 sentences) and keywords ≤ 3 per post. The batch JSON must stay compact.`;
+Keep angles short (1-2 sentences) and keywords ≤ 3 per post. The 40-post batch JSON must stay compact.`;
 
 export async function runContentPlanGeneration(planId: string) {
   const plan = await storage.getContentPlan(planId);
@@ -383,6 +385,60 @@ export async function runContentPlanGeneration(planId: string) {
     }
 
     await storage.createContentPiecesBulk(rows);
+
+    // -------- ROI Projections --------
+    // Infer client-specific assumptions via a small LLM call, then run the
+    // deterministic 12-month projection calculator.
+    await storage.updateContentPlan(planId, {
+      progress: 95,
+      currentStep: "Projecting 12-month ROI",
+    });
+
+    try {
+      const roiSys = `You are a B2B revenue analyst inferring conservative, defensible ROI assumptions for a 12-week content marketing engagement.
+
+Input: a client business analysis (industry, ICP, competitive positioning, deal signals).
+Output: numerical assumptions grounded in that client's specific business context.
+
+Be DELIBERATELY CONSERVATIVE — use the lower end of plausible ranges. This is used to project ROI to a skeptical CFO. If in doubt, discount.
+
+For each field:
+- avgDealSize: One deal value in USD. Use ACV if subscription. Infer from industry, ICP company size, and any pricing signals in the analysis. If unclear, use B2B mid-market defaults ($15–35k).
+- dealType: "one-time" for services/implementation/hardware; "acv" for SaaS/subscriptions.
+- grossMargin: 0.55–0.70 for services; 0.70–0.85 for SaaS; 0.30–0.45 for hardware/distribution.
+- salesCycleDays: 30–60 for SMB tools; 60–120 for mid-market; 120–270 for enterprise.
+- visitorToLeadRate: 0.008–0.020 for B2B (bottom-half of B2B SaaS benchmarks).
+- leadToMqlRate: 0.25–0.40. mqlToSqlRate: 0.30–0.45. sqlToWonRate: 0.15–0.25.
+- monthlyVisitorsPerPost: 20–80 for well-optimized SEO/AEO posts at maturity. Higher for lower competition niches.
+- monthsToRank: 3–5 months.
+- contentDecayFactor: 0.85–0.92.
+- programCost12Mo: A 12-month equivalent of Brex mid-market retainer + content ops. Typically $75k–$120k.
+- paidCacBaseline: Cost per lead via paid media in this vertical. B2B typical: $200–$800.
+
+Every field's rationale must reference the SPECIFIC client analysis, not generic benchmarks. One tight sentence each.`;
+
+      const analysisContext = JSON.stringify({
+        clientName: analysis.clientName,
+        clientUrl: analysis.clientUrl,
+        strategy: analysis.strategy,
+        extraction: analysis.extraction,
+        competitors: analysis.competitors,
+      }).slice(0, 8000); // Cap context size
+
+      const roiUser = `# Client Analysis\n${analysisContext}\n\n# Content Plan Summary\n${(payload.summary ?? "").slice(0, 800)}\n\nInfer conservative ROI assumptions for a 12-week content marketing engagement.`;
+
+      const assumptions = (await llmJson(
+        roiSys,
+        roiUser,
+        2000,
+        SCHEMA_ROI_ASSUMPTIONS,
+      )) as RoiAssumptions;
+
+      payload.roiProjections = calculateRoiProjections(assumptions, payload);
+    } catch (roiErr) {
+      console.error("[roi-inference] failed, using fallback", roiErr);
+      payload.roiProjections = calculateRoiProjections(FALLBACK_ASSUMPTIONS, payload);
+    }
 
     await storage.updateContentPlan(planId, {
       status: "ready",

@@ -31,6 +31,7 @@ import {
   Download,
   FileDown,
   Presentation,
+  TrendingUp,
   ChevronDown,
 } from "lucide-react";
 import {
@@ -43,6 +44,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Analysis, ContentPlan, ContentPiece, ContentPlanPayload } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { RoiPanel } from "@/components/RoiPanel";
 
 const CHANNELS: { key: string; label: string; icon: any }[] = [
   { key: "blog", label: "Blog calendar", icon: FileText },
@@ -368,10 +370,14 @@ export default function ContentStudio() {
               </div>
             </Card>
 
-            {/* Channel tabs */}
+            {/* Channel tabs — ROI tab prepended */}
             <Tabs value={activeChannel} onValueChange={setActiveChannel}>
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <TabsList className="flex-wrap h-auto">
+                  <TabsTrigger value="roi" className="gap-2" data-testid="tab-roi">
+                    <TrendingUp className="h-4 w-4" />
+                    ROI Projections
+                  </TabsTrigger>
                   {CHANNELS.map((c) => {
                     const Icon = c.icon;
                     return (
@@ -382,10 +388,16 @@ export default function ContentStudio() {
                     );
                   })}
                 </TabsList>
-                <Button variant="ghost" size="sm" onClick={copyChannelMarkdown}>
-                  <Copy className="h-4 w-4 mr-2" /> Copy this channel
-                </Button>
+                {activeChannel !== "roi" && (
+                  <Button variant="ghost" size="sm" onClick={copyChannelMarkdown}>
+                    <Copy className="h-4 w-4 mr-2" /> Copy this channel
+                  </Button>
+                )}
               </div>
+
+              <TabsContent value="roi" className="mt-6">
+                <RoiPanel planId={plan!.id} initialRoi={planPayload?.roiProjections} />
+              </TabsContent>
 
               {CHANNELS.map((c) => (
                 <TabsContent key={c.key} value={c.key} className="mt-6">

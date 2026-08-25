@@ -6,6 +6,13 @@ import PptxGenJS from "pptxgenjs";
 import type { ContentPlanPayload } from "@shared/schema";
 import { PRICING_BENCHMARKS, BENCHMARK_SOURCES, formatMoney } from "./pricing-benchmarks";
 import { fetchProspectLogo } from "./logo-fetch";
+import {
+  buildRoiHeadlineSlide,
+  buildRoiTrafficSlide,
+  buildRoiFunnelSlide,
+  buildRoiCostSlide,
+  buildRoiPaybackSlide,
+} from "./pptx-roi-slides";
 
 // Brex brand palette
 const BRAND = {
@@ -906,7 +913,16 @@ export async function buildContentPlanPptx(args: PptxExportArgs): Promise<Buffer
   // 10. Investment benchmarks
   buildBenchmarksSlide(pptx);
 
-  // 11. Next steps
+  // 11-15. ROI projections (5 slides — headline + 4 charts)
+  if (payload.roiProjections) {
+    buildRoiHeadlineSlide(pptx, payload);
+    buildRoiTrafficSlide(pptx, payload);
+    buildRoiFunnelSlide(pptx, payload);
+    buildRoiCostSlide(pptx, payload);
+    buildRoiPaybackSlide(pptx, payload);
+  }
+
+  // 16. Next steps
   buildNextStepsSlide(pptx);
 
   // 12. Sources

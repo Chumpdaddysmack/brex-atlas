@@ -13,6 +13,9 @@ import {
   drawGanttTimeline,
   drawStatBlock,
   drawCadenceBar,
+  drawTwoSeriesLine,
+  drawFunnelBars,
+  drawCostCompareBars,
 } from "./pdf-charts";
 
 export type PdfScope = "full" | "strategy" | "summary";
@@ -291,6 +294,13 @@ function renderExecutiveSummary(doc: PDFKit.PDFDocument, p: ContentPlanPayload) 
     renderWeek(doc, p.blogCalendar[0], { compact: true });
   }
 
+  // ---- ROI Projections (executive summary version) ----
+  try {
+    renderRoiSection(doc, p, { compact: true });
+  } catch (err) {
+    console.error("[pdf-export] ROI section (summary) failed", err);
+  }
+
   sectionHeader(doc, "Next Steps");
   bulletList(doc, [
     "Approve the strategy direction and pillar framing.",
@@ -378,6 +388,13 @@ function renderStrategyOnly(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
 // =============================================================
 function renderFullPlan(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
   renderStrategyOnly(doc, p);
+
+  // ---- ROI Projections (full version with all four charts) ----
+  try {
+    renderRoiSection(doc, p, { compact: false });
+  } catch (err) {
+    console.error("[pdf-export] ROI section (full) failed", err);
+  }
 
   // ---- Investment benchmarks (full) ----
   try {
@@ -986,4 +1003,393 @@ function ensureSpace(doc: PDFKit.PDFDocument, needed: number) {
   if (remaining < needed) {
     doc.addPage();
   }
+}
+
+// =============================================================
+// ROI Projections section
+// =============================================================
+function renderRoiSection(
+  doc: PDFKit.PDFDocument,
+  p: ContentPlanPayload,
+  opts: { compact: boolean },
+) {
+  const roi = p.roiProjections;
+  if (!roi) return;
+
+  const { assumptions, outcomes, monthlyProjection } = roi;
+
+  // Always start ROI on a fresh page for a clean spread
+  doc.addPage();
+
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const leftMargin = doc.page.margins.left;
+
+  // Section header with amber slash
+  const headerY = doc.y;
+  doc.rect(leftMargin, headerY, 4, 22).fill(BRAND.accent);
+  doc
+    .fillColor(BRAND.navy)
+    .font(FONTS.sansBold)
+    .fontSize(18)
+    .text("12-Month ROI Projections", leftMargin + 14, headerY, { characterSpacing: 0.5, lineBreak: false });
+  doc.y = headerY + 28;
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sansOblique)
+    .fontSize(9)
+    .text(
+      "Conservative projections modeled from client-specific assumptions inferred by our analysis.",
+      leftMargin,
+      doc.y,
+      { width: pageWidth },
+    );
+  doc.moveDown(1.0);
+
+  // ---- Headline stat cards (2x2 grid) ----
+  const cardW = (pageWidth - 12) / 2;
+  const cardH = 62;
+  const rowTopY = doc.y;
+
+  const cards = [
+    {
+      label: "Total Revenue (12mo)",
+      value: formatUsdForPdf(outcomes.totalRevenue),
+      sub: `${outcomes.totalClosedWon} closed-won deals`,
+      color: BRAND.navy,
+    },
+    {
+      label: "ROI Multiple",
+      value: `${outcomes.roiMultiple}x`,
+      sub: "Gross profit / program cost",
+      color: BRAND.accent,
+      highlight: true,
+    },
+    {
+      label: "Cost per Lead",
+      value: formatUsdForPdf(outcomes.brexCostPerLead),
+      sub: `vs ${formatUsdForPdf(assumptions.paidCacBaseline)} paid`,
+      color: BRAND.navy,
+    },
+    {
+      label: "Payback",
+      value: outcomes.paybackMonth ? `Month ${outcomes.paybackMonth}` : ">12 months",
+      sub: "Cumulative profit meets cost",
+      color: "#065F46",
+    },
+  ];
+
+  cards.forEach((card, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const cx = leftMargin + col * (cardW + 12);
+    const cy = rowTopY + row * (cardH + 8);
+
+    // Card background
+    doc
+      .rect(cx, cy, cardW, cardH)
+      .fillColor(card.highlight ? "#FFFBEB" : "#FAFAFA")
+      .fill();
+    doc
+      .rect(cx, cy, cardW, cardH)
+      .strokeColor(card.highlight ? BRAND.accent : BRAND.border)
+      .lineWidth(card.highlight ? 1.5 : 0.5)
+      .stroke();
+
+    // Label
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sansBold)
+      .fontSize(8)
+      .text(card.label.toUpperCase(), cx + 12, cy + 10, {
+        width: cardW - 24,
+        characterSpacing: 0.8,
+        lineBreak: false,
+      });
+
+    // Value
+    doc
+      .fillColor(card.color)
+      .font(FONTS.serif)
+      .fontSize(22)
+      .text(card.value, cx + 12, cy + 22, {
+        width: cardW - 24,
+        lineBreak: false,
+      });
+
+    // Sub
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sans)
+      .fontSize(8)
+      .text(card.sub, cx + 12, cy + 48, { width: cardW - 24, lineBreak: false });
+  });
+
+  doc.y = rowTopY + 2 * cardH + 8 + 20;
+
+  // ---- Chart 1: Traffic curve ----
+  ensureSpace(doc, 190);
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sansBold)
+    .fontSize(11)
+    .text("Organic Traffic & Lead Growth", leftMargin, doc.y);
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(8)
+    .text("Monthly visitors and leads as SEO/AEO posts mature", leftMargin, doc.y + 2);
+  doc.moveDown(1.0);
+
+  const xLabels = monthlyProjection.map((m) => `M${m.month}`);
+  const visitorsSeries = {
+    label: "Monthly visitors",
+    color: BRAND.navy,
+    values: monthlyProjection.map((m) => m.monthlyVisitors),
+  };
+  const leadsSeries = {
+    label: "Monthly leads",
+    color: BRAND.accent,
+    values: monthlyProjection.map((m) => m.monthlyLeads),
+  };
+  drawTwoSeriesLine(
+    doc,
+    leftMargin,
+    doc.y,
+    pageWidth,
+    140,
+    visitorsSeries,
+    leadsSeries,
+    "num",
+    xLabels,
+  );
+  doc.y += 155;
+
+  // ---- Chart 2: Payback timeline ----
+  ensureSpace(doc, 190);
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sansBold)
+    .fontSize(11)
+    .text("Payback Timeline", leftMargin, doc.y);
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(8)
+    .text("Cumulative gross profit vs cumulative program cost", leftMargin, doc.y + 2);
+  doc.moveDown(1.0);
+
+  const monthlyProgramCost = assumptions.programCost12Mo / 12;
+  const profitSeries = {
+    label: "Cumulative gross profit",
+    color: BRAND.accent,
+    values: monthlyProjection.map((m) => m.cumulativeGrossProfit),
+  };
+  const costSeries = {
+    label: "Cumulative program cost",
+    color: BRAND.navy,
+    values: monthlyProjection.map((m) => monthlyProgramCost * m.month),
+    dashed: true,
+  };
+  drawTwoSeriesLine(
+    doc,
+    leftMargin,
+    doc.y,
+    pageWidth,
+    140,
+    profitSeries,
+    costSeries,
+    "usd",
+    xLabels,
+    outcomes.paybackMonth ?? undefined,
+  );
+  doc.y += 155;
+
+  // For compact (executive summary), stop here after headline + two charts
+  if (opts.compact) {
+    doc.moveDown(0.5);
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sansOblique)
+      .fontSize(7.5)
+      .text(roi.disclaimer, leftMargin, doc.y, { width: pageWidth, align: "left" });
+    return;
+  }
+
+  // ---- Chart 3: Funnel ----
+  doc.addPage();
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sansBold)
+    .fontSize(11)
+    .text("12-Month Conversion Funnel", leftMargin, doc.y);
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(8)
+    .text("Visitors to Leads to MQLs to SQLs to Closed Won", leftMargin, doc.y + 2);
+  doc.moveDown(1.5);
+
+  const funnelStages = [
+    { label: "Visitors", value: outcomes.month12CumulativeVisitors, color: BRAND.navy },
+    { label: "Leads", value: outcomes.totalLeads, color: "#1E3A5F" },
+    { label: "MQLs", value: outcomes.totalMqls, color: "#2C5C8A" },
+    { label: "SQLs", value: outcomes.totalSqls, color: BRAND.accent },
+    { label: "Closed Won", value: outcomes.totalClosedWon, color: "#065F46" },
+  ];
+  const funnelEndY = drawFunnelBars(doc, leftMargin, doc.y, pageWidth, funnelStages);
+  doc.y = funnelEndY + 12;
+
+  // ---- Chart 4: Cost comparison ----
+  ensureSpace(doc, 180);
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sansBold)
+    .fontSize(11)
+    .text("Program Cost vs Paid Media Equivalent", leftMargin, doc.y);
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(8)
+    .text(
+      `What paid media would cost to generate ${outcomes.totalLeads.toLocaleString()} leads over 12 months`,
+      leftMargin,
+      doc.y + 2,
+    );
+  doc.moveDown(1.2);
+
+  drawCostCompareBars(
+    doc,
+    leftMargin,
+    doc.y,
+    pageWidth,
+    120,
+    [
+      { label: "Brex program", value: assumptions.programCost12Mo, color: BRAND.accent },
+      { label: "Equivalent paid CPL", value: outcomes.paidEquivalentCost, color: BRAND.navy },
+    ],
+  );
+  doc.y += 130;
+
+  // Savings callout box
+  doc
+    .rect(leftMargin, doc.y, pageWidth, 30)
+    .fillColor("#ECFDF5")
+    .fill();
+  doc
+    .rect(leftMargin, doc.y, 4, 30)
+    .fillColor("#065F46")
+    .fill();
+  doc
+    .fillColor("#065F46")
+    .font(FONTS.sansBold)
+    .fontSize(10)
+    .text(
+      `Savings vs Paid: ${formatUsdForPdf(outcomes.savingsVsPaid)} over 12 months`,
+      leftMargin + 12,
+      doc.y + 6,
+      { lineBreak: false },
+    );
+  doc
+    .fillColor("#047857")
+    .font(FONTS.sans)
+    .fontSize(8)
+    .text(
+      "Content-generated leads compound; paid stops when spend stops.",
+      leftMargin + 12,
+      doc.y + 20,
+      { lineBreak: false },
+    );
+  doc.y += 42;
+
+  // ---- Assumptions & rationale block ----
+  doc.addPage();
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sansBold)
+    .fontSize(11)
+    .text("Underlying Assumptions", leftMargin, doc.y);
+  doc.moveDown(0.6);
+
+  const assumptionRows = [
+    ["Avg deal size", `${formatUsdForPdf(assumptions.avgDealSize)} (${assumptions.dealType})`],
+    ["Gross margin", `${(assumptions.grossMargin * 100).toFixed(0)}%`],
+    ["Sales cycle", `${assumptions.salesCycleDays} days`],
+    ["Visitor to Lead", `${(assumptions.visitorToLeadRate * 100).toFixed(2)}%`],
+    ["Lead to MQL", `${(assumptions.leadToMqlRate * 100).toFixed(0)}%`],
+    ["MQL to SQL", `${(assumptions.mqlToSqlRate * 100).toFixed(0)}%`],
+    ["SQL to Won", `${(assumptions.sqlToWonRate * 100).toFixed(0)}%`],
+    ["Visitors / post / mo", `${assumptions.monthlyVisitorsPerPost}`],
+    ["Months to rank", `${assumptions.monthsToRank}`],
+    ["Program cost (12mo)", `${formatUsdForPdf(assumptions.programCost12Mo)}`],
+    ["Paid CPL benchmark", `${formatUsdForPdf(assumptions.paidCacBaseline)}`],
+  ];
+
+  const rowH = 18;
+  const col1W = (pageWidth - 12) / 2;
+  const gridBaseY = doc.y;
+  assumptionRows.forEach((r, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const cx = leftMargin + col * (col1W + 12);
+    const cy = gridBaseY + row * rowH;
+    // Row divider (thin)
+    doc
+      .strokeColor(BRAND.border)
+      .lineWidth(0.4)
+      .moveTo(cx, cy + rowH - 2)
+      .lineTo(cx + col1W, cy + rowH - 2)
+      .stroke();
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sans)
+      .fontSize(9)
+      .text(r[0], cx, cy + 4, { width: col1W * 0.6, lineBreak: false });
+    doc
+      .fillColor(BRAND.text)
+      .font(FONTS.sansBold)
+      .fontSize(9)
+      .text(r[1], cx + col1W * 0.6, cy + 4, { width: col1W * 0.4, align: "right", lineBreak: false });
+  });
+  const rowsNeeded = Math.ceil(assumptionRows.length / 2);
+  doc.y = gridBaseY + rowsNeeded * rowH + 14;
+
+  // Rationale text
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sansBold)
+    .fontSize(10)
+    .text("Why these numbers", leftMargin, doc.y);
+  doc.moveDown(0.4);
+  const rationale = [
+    ["Deal size", assumptions.rationale.dealSize],
+    ["Conversion rates", assumptions.rationale.conversionRates],
+    ["Traffic ramp", assumptions.rationale.trafficRamp],
+    ["Program cost", assumptions.rationale.programCost],
+  ];
+  rationale.forEach(([label, text]) => {
+    doc
+      .fillColor(BRAND.text)
+      .font(FONTS.sansBold)
+      .fontSize(8.5)
+      .text(`${label}: `, leftMargin, doc.y, { continued: true });
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sans)
+      .fontSize(8.5)
+      .text(text, { width: pageWidth });
+    doc.moveDown(0.25);
+  });
+
+  doc.moveDown(0.8);
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sansOblique)
+    .fontSize(7.5)
+    .text(roi.disclaimer, leftMargin, doc.y, { width: pageWidth, align: "left" });
+}
+
+function formatUsdForPdf(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1000) return `$${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`;
+  return `$${Math.round(n).toLocaleString()}`;
 }

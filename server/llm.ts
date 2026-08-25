@@ -88,45 +88,64 @@ export async function llmJson(
       input_schema: schema,
     };
 
-    const resp = await client.messages.create({
-      model: MODEL,
-      max_tokens: maxTokens,
-      system,
-      tools: [tool],
-      tool_choice: { type: "tool", name: "return_result" } as any,
-      messages: [{ role: "user", content: user }],
-    });
+    // tool_choice: {type: "any"} instead of {type: "tool", name: ...} — the
+    // strict-name form has triggered a 400 "assistant message prefill" from
+    // the Perplexity Anthropic proxy on newer Claude models. "any" still
+    // forces a tool call, and there's only one tool defined, so behavior is
+    // effectively identical without the proxy's prefill injection.
+    try {
+      const resp = await client.messages.create({
+        model: MODEL,
+        max_tokens: maxTokens,
+        system,
+        tools: [tool],
+        tool_choice: { type: "any" } as any,
+        messages: [{ role: "user", content: user }],
+      });
 
-    const stopReason = (resp as any).stop_reason;
-    const usage = (resp as any).usage;
+      const stopReason = (resp as any).stop_reason;
+      const usage = (resp as any).usage;
 
-    for (const block of resp.content as any[]) {
-      if (block.type === "tool_use" && block.name === "return_result") {
-        const inp = block.input;
-        const shape =
-          inp && typeof inp === "object"
-            ? Array.isArray(inp)
-              ? `array[${inp.length}]`
-              : `object{${Object.keys(inp).join(",")}}`
-            : typeof inp;
-        console.log(
-          `[llmJson] tool_use hit. shape=${shape} stop=${stopReason} usage=${JSON.stringify(usage)}`,
-        );
-        return inp;
+      for (const block of resp.content as any[]) {
+        if (block.type === "tool_use" && block.name === "return_result") {
+          const inp = block.input;
+          const shape =
+            inp && typeof inp === "object"
+              ? Array.isArray(inp)
+                ? `array[${inp.length}]`
+                : `object{${Object.keys(inp).join(",")}}`
+              : typeof inp;
+          console.log(
+            `[llmJson] tool_use hit. shape=${shape} stop=${stopReason} usage=${JSON.stringify(usage)}`,
+          );
+          return inp;
+        }
       }
-    }
 
-    console.error(
-      `[llmJson] NO tool_use block. stop=${stopReason} content=${(resp.content as any[]).map((b: any) => b.type).join(",")}`,
-    );
-    throw new Error(`Model did not call return_result tool (stop_reason=${stopReason})`);
+      console.error(
+        `[llmJson] NO tool_use block. stop=${stopReason} content=${(resp.content as any[]).map((b: any) => b.type).join(",")}`,
+      );
+      // Fall through to text path below.
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+      const isPrefillReject = /prefill|assistant message prefill|must end with a user message/i.test(msg);
+      if (!isPrefillReject) throw err;
+      console.error(
+        `[llmJson] tool_use rejected by proxy (prefill). Falling back to text path. err=${msg.slice(0, 200)}`,
+      );
+      // Fall through to text path below.
+    }
   }
 
-  // Text path with jsonrepair (used when no schema is provided)
+  // Text path with jsonrepair — used when no schema is provided OR as fallback
+  // when the proxy rejects tool_use with a prefill error.
+  const schemaHint = schema
+    ? `\n\nThe JSON must match this JSON Schema (top-level keys are required):\n${JSON.stringify(schema)}`
+    : "";
   const resp = await client.messages.create({
     model: MODEL,
     max_tokens: maxTokens,
-    system: `${system}\n\nRespond with ONLY a JSON object or array. No preface, no code fences, no commentary.`,
+    system: `${system}\n\nRespond with ONLY a JSON object or array. No preface, no code fences, no commentary.${schemaHint}`,
     messages: [{ role: "user", content: user }],
   });
 
@@ -194,6 +213,10 @@ export const SCHEMA_EXTRACT = {
   },
 };
 
+// NOTE: Keep this schema FLAT at the top level. Nested `required` arrays on
+// object properties have caused the Perplexity Anthropic proxy to reject the
+// request with a 400 "assistant message prefill" error. Enforce nested shape
+// via the SYSTEM PROMPT, not via nested tool schema requireds.
 export const SCHEMA_SHELL = {
   type: "object",
   additionalProperties: true,
@@ -213,21 +236,9 @@ export const SCHEMA_SHELL = {
     socialCadence: { type: "array" },
     adBrief: { type: "array" },
     landingPages: { type: "array" },
-    heroMetaAd: {
-      type: "object",
-      additionalProperties: true,
-      required: ["headline", "primaryText", "description", "cta", "visualConcept"],
-    },
-    heroLinkedInAd: {
-      type: "object",
-      additionalProperties: true,
-      required: ["introText", "headline", "description", "cta", "visualConcept"],
-    },
-    heroColdEmail: {
-      type: "object",
-      additionalProperties: true,
-      required: ["subjectLineA", "subjectLineB", "touch1", "touch2", "touch3", "icpTarget"],
-    },
+    heroMetaAd: { type: "object", additionalProperties: true },
+    heroLinkedInAd: { type: "object", additionalProperties: true },
+    heroColdEmail: { type: "object", additionalProperties: true },
   },
 };
 
@@ -237,5 +248,52 @@ export const SCHEMA_BLOG_BATCH = {
   required: ["blogCalendar"],
   properties: {
     blogCalendar: { type: "array", minItems: 1 },
+  },
+};
+
+export const SCHEMA_ROI_ASSUMPTIONS = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "avgDealSize",
+    "dealType",
+    "grossMargin",
+    "salesCycleDays",
+    "visitorToLeadRate",
+    "leadToMqlRate",
+    "mqlToSqlRate",
+    "sqlToWonRate",
+    "monthlyVisitorsPerPost",
+    "monthsToRank",
+    "contentDecayFactor",
+    "programCost12Mo",
+    "paidCacBaseline",
+    "rationale",
+  ],
+  properties: {
+    avgDealSize: { type: "number", minimum: 500, maximum: 10000000 },
+    dealType: { type: "string", enum: ["one-time", "acv"] },
+    grossMargin: { type: "number", minimum: 0.1, maximum: 0.95 },
+    salesCycleDays: { type: "number", minimum: 7, maximum: 365 },
+    visitorToLeadRate: { type: "number", minimum: 0.001, maximum: 0.1 },
+    leadToMqlRate: { type: "number", minimum: 0.05, maximum: 0.9 },
+    mqlToSqlRate: { type: "number", minimum: 0.05, maximum: 0.9 },
+    sqlToWonRate: { type: "number", minimum: 0.05, maximum: 0.6 },
+    monthlyVisitorsPerPost: { type: "number", minimum: 5, maximum: 500 },
+    monthsToRank: { type: "number", minimum: 2, maximum: 9 },
+    contentDecayFactor: { type: "number", minimum: 0.7, maximum: 0.98 },
+    programCost12Mo: { type: "number", minimum: 20000, maximum: 500000 },
+    paidCacBaseline: { type: "number", minimum: 50, maximum: 5000 },
+    rationale: {
+      type: "object",
+      additionalProperties: false,
+      required: ["dealSize", "conversionRates", "trafficRamp", "programCost"],
+      properties: {
+        dealSize: { type: "string" },
+        conversionRates: { type: "string" },
+        trafficRamp: { type: "string" },
+        programCost: { type: "string" },
+      },
+    },
   },
 };
