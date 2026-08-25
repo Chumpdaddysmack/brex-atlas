@@ -202,14 +202,39 @@ export const SCHEMA_COMPETITORS = {
   },
 };
 
+// Rich extraction shape consumed by the analysis page, PDF, and PPTX.
+// The UI reads: positioningStatement, valueProps, offerings, targetAudience,
+// evidenceElements, ctaAudit, aeoReadinessScore, aeoReadinessNotes.
+// If any of these are missing the "What the site says today" section collapses
+// silently, so the schema enforces them at the tool-use layer (Anthropic).
 export const SCHEMA_EXTRACT = {
   type: "object",
   additionalProperties: true,
-  required: ["businessName", "services", "positioning"],
+  required: [
+    "title",
+    "description",
+    "positioningStatement",
+    "valueProps",
+    "offerings",
+    "targetAudience",
+    "evidenceElements",
+    "ctaAudit",
+    "seoNotes",
+    "aeoReadinessScore",
+    "aeoReadinessNotes",
+  ],
   properties: {
-    businessName: { type: "string" },
-    services: { type: "array" },
-    positioning: { type: "string" },
+    title: { type: "string" },
+    description: { type: "string" },
+    positioningStatement: { type: "string" },
+    valueProps: { type: "array", items: { type: "string" } },
+    offerings: { type: "array", items: { type: "string" } },
+    targetAudience: { type: "string" },
+    evidenceElements: { type: "array", items: { type: "string" } },
+    ctaAudit: { type: "string" },
+    seoNotes: { type: "string" },
+    aeoReadinessScore: { type: "number", minimum: 0, maximum: 100 },
+    aeoReadinessNotes: { type: "string" },
   },
 };
 
