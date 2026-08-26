@@ -5,6 +5,14 @@
 import PptxGenJS from "pptxgenjs";
 import type { ContentPlanPayload } from "@shared/schema";
 import { PRICING_BENCHMARKS, BENCHMARK_SOURCES, formatMoney } from "./pricing-benchmarks";
+import {
+  BREX_LINE_ITEMS,
+  BREX_TIERS,
+  BREX_BLENDED_HOURLY,
+  formatBrexPrice,
+  computeSavings,
+  positioningColor,
+} from "@shared/brex-pricing";
 import { fetchProspectLogo } from "./logo-fetch";
 import {
   buildRoiHeadlineSlide,
@@ -619,6 +627,327 @@ function buildTimelineSlide(pptx: PptxGenJS, payload: ContentPlanPayload) {
   });
 }
 
+// =============================================================
+// Brex vs. Market — Tier comparison slide
+// =============================================================
+function buildBrexTierMatrixSlide(pptx: PptxGenJS) {
+  const slide = pptx.addSlide();
+  addSectionHeader(
+    slide,
+    "Brex vs. Market Rate",
+    "Bundled retainer tiers priced below the mid-market floor",
+  );
+
+  const startY = 1.4;
+  const colTierX = 0.4;
+  const colTierW = 2.2;
+  const colBrexX = 2.7;
+  const colBrexW = 1.4;
+  const colIndX = 4.2;
+  const colIndW = 2.2;
+  const colSavX = 6.5;
+  const colSavW = 1.4;
+  const colBundX = 8.0;
+  const colBundW = 1.6;
+
+  // Header bar
+  slide.addShape("rect", {
+    x: colTierX,
+    y: startY,
+    w: SLIDE_W - 0.8,
+    h: 0.35,
+    fill: { color: BRAND.navy },
+    line: { color: BRAND.navy, width: 0 },
+  });
+  const headerY = startY + 0.05;
+  slide.addText("Brex Tier", { x: colTierX + 0.1, y: headerY, w: colTierW, h: 0.25, fontSize: 10, fontFace: "Arial", bold: true, color: BRAND.white, valign: "middle" });
+  slide.addText("Brex Price", { x: colBrexX, y: headerY, w: colBrexW, h: 0.25, fontSize: 10, fontFace: "Arial", bold: true, color: BRAND.white, valign: "middle" });
+  slide.addText("Industry Mid-Market", { x: colIndX, y: headerY, w: colIndW, h: 0.25, fontSize: 10, fontFace: "Arial", bold: true, color: BRAND.white, valign: "middle" });
+  slide.addText("vs Mid", { x: colSavX, y: headerY, w: colSavW, h: 0.25, fontSize: 10, fontFace: "Arial", bold: true, color: BRAND.white, valign: "middle" });
+  slide.addText("Bundle Savings", { x: colBundX, y: headerY, w: colBundW, h: 0.25, fontSize: 10, fontFace: "Arial", bold: true, color: BRAND.white, valign: "middle" });
+
+  // Data rows
+  const rowH = 0.95;
+  BREX_TIERS.forEach((tier, idx) => {
+    const y = startY + 0.4 + idx * rowH;
+    const industryMid = (tier.industryLow + tier.industryHigh) / 2;
+    const vsMid = computeSavings(tier.monthly, industryMid);
+
+    // Alternating row bg
+    slide.addShape("rect", {
+      x: colTierX,
+      y,
+      w: SLIDE_W - 0.8,
+      h: rowH - 0.05,
+      fill: { color: idx % 2 === 0 ? "FFFFFF" : "F9FAFB" },
+      line: { color: BRAND.border, width: 0.5 },
+    });
+
+    // Tier name + bestFor
+    slide.addText(tier.name, {
+      x: colTierX + 0.1,
+      y: y + 0.08,
+      w: colTierW - 0.2,
+      h: 0.3,
+      fontSize: 12,
+      fontFace: "Arial",
+      bold: true,
+      color: BRAND.navy,
+    });
+    slide.addText(safe(tier.bestFor.slice(0, 90) + (tier.bestFor.length > 90 ? "…" : "")), {
+      x: colTierX + 0.1,
+      y: y + 0.38,
+      w: colTierW - 0.2,
+      h: 0.5,
+      fontSize: 8,
+      fontFace: "Arial",
+      color: BRAND.muted,
+      valign: "top",
+    });
+
+    // Brex price
+    slide.addText(`$${tier.monthly.toLocaleString()}`, {
+      x: colBrexX,
+      y: y + 0.1,
+      w: colBrexW,
+      h: 0.35,
+      fontSize: 18,
+      fontFace: "Georgia",
+      bold: true,
+      color: BRAND.accent,
+    });
+    slide.addText("per month", {
+      x: colBrexX,
+      y: y + 0.5,
+      w: colBrexW,
+      h: 0.2,
+      fontSize: 8,
+      fontFace: "Arial",
+      color: BRAND.muted,
+    });
+
+    // Industry range
+    slide.addText(
+      `$${(tier.industryLow / 1000).toFixed(0)}k – $${(tier.industryHigh / 1000).toFixed(0)}k`,
+      {
+        x: colIndX,
+        y: y + 0.1,
+        w: colIndW,
+        h: 0.3,
+        fontSize: 14,
+        fontFace: "Arial",
+        bold: true,
+        color: BRAND.text,
+      },
+    );
+    slide.addText(`Mid: $${(industryMid / 1000).toFixed(0)}k/mo`, {
+      x: colIndX,
+      y: y + 0.45,
+      w: colIndW,
+      h: 0.2,
+      fontSize: 9,
+      fontFace: "Arial",
+      color: BRAND.muted,
+    });
+
+    // Savings vs mid (big green)
+    const savColor = vsMid.deltaPct >= 0 ? "059669" : "DC2626";
+    slide.addText(vsMid.label, {
+      x: colSavX,
+      y: y + 0.15,
+      w: colSavW,
+      h: 0.4,
+      fontSize: 22,
+      fontFace: "Georgia",
+      bold: true,
+      color: savColor,
+    });
+    slide.addText("vs industry mid", {
+      x: colSavX,
+      y: y + 0.6,
+      w: colSavW,
+      h: 0.2,
+      fontSize: 7,
+      fontFace: "Arial",
+      color: BRAND.muted,
+    });
+
+    // Bundle savings
+    slide.addText(`−${tier.discountPct}%`, {
+      x: colBundX,
+      y: y + 0.15,
+      w: colBundW,
+      h: 0.4,
+      fontSize: 18,
+      fontFace: "Arial",
+      bold: true,
+      color: "0F766E",
+    });
+    slide.addText(`vs $${tier.aLaCarteMonthly.toLocaleString()} à la carte`, {
+      x: colBundX,
+      y: y + 0.55,
+      w: colBundW,
+      h: 0.25,
+      fontSize: 7,
+      fontFace: "Arial",
+      color: BRAND.muted,
+    });
+  });
+
+  // Footnote
+  slide.addText(
+    `Bundle discounts (17% Advisor, 24% Strategist, 32% Fractional) reflect commitment and utilization efficiency. Industry ranges from Treetop 2026 Fractional Executive Pricing Report, MarkCMO 2026, and Pitchkitchen 2026.`,
+    {
+      x: 0.4,
+      y: SLIDE_H - 0.6,
+      w: SLIDE_W - 0.8,
+      h: 0.35,
+      fontSize: 8,
+      fontFace: "Arial",
+      italic: true,
+      color: BRAND.muted,
+    },
+  );
+}
+
+// =============================================================
+// Brex vs. Market — Per-service line-item slide
+// =============================================================
+function buildBrexLineItemMatrixSlide(pptx: PptxGenJS) {
+  const slide = pptx.addSlide();
+  addSectionHeader(
+    slide,
+    "Per-Service Comparison",
+    `Tactical CMO line items at $${BREX_BLENDED_HOURLY}/hr blended senior rate`,
+  );
+
+  const startY = 1.3;
+  const colSvcX = 0.4;
+  const colSvcW = 3.5;
+  const colBrexX = 4.0;
+  const colBrexW = 1.1;
+  const colIndX = 5.2;
+  const colIndW = 1.8;
+  const colSavX = 7.1;
+  const colSavW = 1.0;
+  const colPosX = 8.2;
+  const colPosW = 1.5;
+
+  // Header bar
+  slide.addShape("rect", {
+    x: colSvcX,
+    y: startY,
+    w: SLIDE_W - 0.8,
+    h: 0.3,
+    fill: { color: BRAND.navy },
+    line: { color: BRAND.navy, width: 0 },
+  });
+  const hy = startY + 0.05;
+  slide.addText("Service", { x: colSvcX + 0.1, y: hy, w: colSvcW, h: 0.2, fontSize: 9, fontFace: "Arial", bold: true, color: BRAND.white, valign: "middle" });
+  slide.addText("Brex", { x: colBrexX, y: hy, w: colBrexW, h: 0.2, fontSize: 9, fontFace: "Arial", bold: true, color: BRAND.white, valign: "middle" });
+  slide.addText("Industry Mid-Market", { x: colIndX, y: hy, w: colIndW, h: 0.2, fontSize: 9, fontFace: "Arial", bold: true, color: BRAND.white, valign: "middle" });
+  slide.addText("vs Mid", { x: colSavX, y: hy, w: colSavW, h: 0.2, fontSize: 9, fontFace: "Arial", bold: true, color: BRAND.white, valign: "middle" });
+  slide.addText("Position", { x: colPosX, y: hy, w: colPosW, h: 0.2, fontSize: 9, fontFace: "Arial", bold: true, color: BRAND.white, valign: "middle" });
+
+  // Data rows — pack 14 line items into ~3.7in of space
+  const rows = BREX_LINE_ITEMS;
+  const rowH = Math.min(0.24, (SLIDE_H - startY - 0.9) / Math.max(rows.length, 1));
+
+  rows.forEach((item, idx) => {
+    const y = startY + 0.32 + idx * rowH;
+    const vs = computeSavings(item.brexPrice, item.benchmarkMid);
+    const posColor = positioningColor(item.positioning);
+
+    // Row bg
+    slide.addShape("rect", {
+      x: colSvcX,
+      y,
+      w: SLIDE_W - 0.8,
+      h: rowH,
+      fill: { color: idx % 2 === 0 ? "FFFFFF" : "F9FAFB" },
+      line: { color: BRAND.border, width: 0.4 },
+    });
+
+    slide.addText(item.service, {
+      x: colSvcX + 0.1,
+      y: y + 0.02,
+      w: colSvcW,
+      h: rowH - 0.04,
+      fontSize: 8,
+      fontFace: "Arial",
+      bold: true,
+      color: BRAND.text,
+      valign: "middle",
+    });
+
+    slide.addText(formatBrexPrice(item.brexPrice, item.brexUnit), {
+      x: colBrexX,
+      y: y + 0.02,
+      w: colBrexW,
+      h: rowH - 0.04,
+      fontSize: 10,
+      fontFace: "Arial",
+      bold: true,
+      color: BRAND.accent,
+      valign: "middle",
+    });
+
+    slide.addText(
+      `${formatBrexPrice(item.benchmarkLow, item.benchmarkUnit)} – ${formatBrexPrice(item.benchmarkHigh, item.benchmarkUnit)}`,
+      {
+        x: colIndX,
+        y: y + 0.02,
+        w: colIndW,
+        h: rowH - 0.04,
+        fontSize: 9,
+        fontFace: "Arial",
+        color: BRAND.text,
+        valign: "middle",
+      },
+    );
+
+    const savColor = vs.deltaPct >= 0 ? "059669" : "DC2626";
+    slide.addText(vs.label, {
+      x: colSavX,
+      y: y + 0.02,
+      w: colSavW,
+      h: rowH - 0.04,
+      fontSize: 10,
+      fontFace: "Arial",
+      bold: true,
+      color: savColor,
+      valign: "middle",
+    });
+
+    slide.addText(posColor.label, {
+      x: colPosX,
+      y: y + 0.02,
+      w: colPosW,
+      h: rowH - 0.04,
+      fontSize: 7,
+      fontFace: "Arial",
+      bold: true,
+      color: posColor.hex.replace("#", ""),
+      valign: "middle",
+    });
+  });
+
+  // Footnote
+  slide.addText(
+    "Sources: 2026 pricing surveys — Treetop, MarkCMO, O-CMO, RankedCMO, Digital Applied, Windmill Growth, Remarkable Agency, Troo Inbound. Full citations in appendix.",
+    {
+      x: 0.4,
+      y: SLIDE_H - 0.5,
+      w: SLIDE_W - 0.8,
+      h: 0.25,
+      fontSize: 7,
+      fontFace: "Arial",
+      italic: true,
+      color: BRAND.muted,
+    },
+  );
+}
+
 function buildBenchmarksSlide(pptx: PptxGenJS) {
   const slide = pptx.addSlide();
   addSectionHeader(
@@ -910,7 +1239,13 @@ export async function buildContentPlanPptx(args: PptxExportArgs): Promise<Buffer
   // 9. Publishing timeline
   buildTimelineSlide(pptx, payload);
 
-  // 10. Investment benchmarks
+  // 10a. Brex vs. Market — Tier comparison
+  buildBrexTierMatrixSlide(pptx);
+
+  // 10b. Brex vs. Market — Per-service comparison
+  buildBrexLineItemMatrixSlide(pptx);
+
+  // 10c. Investment benchmarks (supporting industry detail)
   buildBenchmarksSlide(pptx);
 
   // 11-15. ROI projections (5 slides — headline + 4 charts)

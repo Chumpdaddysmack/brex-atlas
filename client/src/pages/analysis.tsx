@@ -21,6 +21,14 @@ import {
   FileText,
   AlertTriangle,
 } from "lucide-react";
+import {
+  BREX_LINE_ITEMS,
+  BREX_TIERS,
+  BREX_BLENDED_HOURLY,
+  formatBrexPrice,
+  computeSavings,
+  positioningColor,
+} from "@shared/brex-pricing";
 import type {
   Analysis,
   Extraction,
@@ -669,6 +677,9 @@ function SOWSection({ sow, clientName }: { sow: SOW; clientName: string }) {
         })}
       </div>
 
+      {/* Brex vs. Market comparative matrix */}
+      <BrexVsMarketMatrix />
+
       {/* Phases */}
       <div className="mb-6">
         <div className="text-xs font-mono text-muted-foreground mb-2">ENGAGEMENT PHASES</div>
@@ -816,4 +827,146 @@ function renderMarkdown(a: Analysis): string {
   }
 
   return parts.join("\n");
+}
+
+// =============================================================
+// Brex vs. Market comparative matrix
+// =============================================================
+function BrexVsMarketMatrix() {
+  return (
+    <div className="mb-6">
+      <div className="text-xs font-mono text-muted-foreground mb-2">
+        BREX VS. MARKET RATE
+      </div>
+
+      {/* Tier comparison table */}
+      <Card className="p-0 overflow-hidden mb-4">
+        <div className="bg-primary/95 text-primary-foreground grid grid-cols-12 gap-2 px-4 py-3 text-xs font-mono uppercase tracking-wider">
+          <div className="col-span-3">Brex Tier</div>
+          <div className="col-span-2">Brex Price</div>
+          <div className="col-span-3">Industry Mid-Market</div>
+          <div className="col-span-2">vs Industry Mid</div>
+          <div className="col-span-2">Bundle Savings</div>
+        </div>
+        {BREX_TIERS.map((tier, idx) => {
+          const industryMid = (tier.industryLow + tier.industryHigh) / 2;
+          const vsMid = computeSavings(tier.monthly, industryMid);
+          return (
+            <div
+              key={tier.key}
+              className={`grid grid-cols-12 gap-2 px-4 py-4 items-center border-t text-sm ${
+                idx % 2 === 1 ? "bg-muted/30" : ""
+              }`}
+              data-testid={`row-tier-${tier.key}`}
+            >
+              <div className="col-span-3">
+                <div className="font-semibold">{tier.name}</div>
+                <div className="text-xs text-muted-foreground mt-0.5 leading-tight">
+                  {tier.bestFor}
+                </div>
+              </div>
+              <div className="col-span-2">
+                <div className="font-serif text-2xl text-accent">
+                  ${tier.monthly.toLocaleString()}
+                </div>
+                <div className="text-xs text-muted-foreground">per month</div>
+              </div>
+              <div className="col-span-3">
+                <div className="font-semibold">
+                  ${(tier.industryLow / 1000).toFixed(0)}k – $
+                  {(tier.industryHigh / 1000).toFixed(0)}k
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Mid: ${(industryMid / 1000).toFixed(0)}k/mo
+                </div>
+              </div>
+              <div className="col-span-2">
+                <div
+                  className={`font-serif text-2xl ${
+                    vsMid.deltaPct >= 0 ? "text-emerald-600" : "text-red-600"
+                  }`}
+                >
+                  {vsMid.label}
+                </div>
+                <div className="text-xs text-muted-foreground">vs mid</div>
+              </div>
+              <div className="col-span-2">
+                <div className="font-semibold text-teal-700">
+                  −{tier.discountPct}%
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  vs ${tier.aLaCarteMonthly.toLocaleString()} à la carte
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+
+      {/* Per-service line items */}
+      <div className="text-xs font-mono text-muted-foreground mb-2">
+        TACTICAL CMO LINE ITEMS · ${BREX_BLENDED_HOURLY}/HR BLENDED SENIOR RATE
+      </div>
+      <Card className="p-0 overflow-hidden">
+        <div className="bg-primary/95 text-primary-foreground grid grid-cols-12 gap-2 px-4 py-2 text-xs font-mono uppercase tracking-wider">
+          <div className="col-span-4">Service</div>
+          <div className="col-span-2">Brex</div>
+          <div className="col-span-3">Industry Mid-Market</div>
+          <div className="col-span-1">vs Mid</div>
+          <div className="col-span-2">Positioning</div>
+        </div>
+        {BREX_LINE_ITEMS.map((item, idx) => {
+          const vs = computeSavings(item.brexPrice, item.benchmarkMid);
+          const pos = positioningColor(item.positioning);
+          return (
+            <div
+              key={item.key}
+              className={`grid grid-cols-12 gap-2 px-4 py-3 items-center border-t text-sm ${
+                idx % 2 === 1 ? "bg-muted/30" : ""
+              }`}
+              data-testid={`row-service-${item.key}`}
+            >
+              <div className="col-span-4">
+                <div className="font-semibold">{item.service}</div>
+                {item.notes && (
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {item.notes}
+                  </div>
+                )}
+              </div>
+              <div className="col-span-2 font-semibold text-accent">
+                {formatBrexPrice(item.brexPrice, item.brexUnit)}
+              </div>
+              <div className="col-span-3 text-muted-foreground">
+                {formatBrexPrice(item.benchmarkLow, item.benchmarkUnit)} –{" "}
+                {formatBrexPrice(item.benchmarkHigh, item.benchmarkUnit)}
+              </div>
+              <div
+                className={`col-span-1 font-semibold ${
+                  vs.deltaPct >= 0 ? "text-emerald-600" : "text-red-600"
+                }`}
+              >
+                {vs.label}
+              </div>
+              <div
+                className="col-span-2 text-xs font-semibold uppercase tracking-wider"
+                style={{ color: pos.hex }}
+              >
+                {pos.label}
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+
+      <p className="text-xs text-muted-foreground italic mt-3">
+        Bundle discounts (17% Advisor, 24% Strategist, 32% Fractional) reflect
+        commitment and utilization efficiency. Industry ranges compiled from 2026
+        pricing surveys: Treetop Fractional Executive Report, MarkCMO, Averi,
+        Pitchkitchen, O-CMO, RankedCMO, Digital Applied, Windmill Growth,
+        Remarkable Agency, and Troo Inbound. Full citations in the exported
+        report.
+      </p>
+    </div>
+  );
 }
