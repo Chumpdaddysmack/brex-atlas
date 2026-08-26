@@ -2,7 +2,7 @@
 //
 // - Dev sandbox: better-sqlite3 file at ./data.db (fast, ephemeral).
 // - Published sandbox: Supabase Postgres via @supabase/supabase-js when
-//   SUPABASE_URL and SUPABASE_ANON_KEY are set in env.
+//   SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set in env.
 //
 // Both paths implement the same IStorage interface so routes/pipelines don't
 // need to know which backend is active.
@@ -549,14 +549,34 @@ export class SupabaseStorage implements IStorage {
 }
 
 // --------------------------------------------------------------------------
-// Selector — SUPABASE_URL + SUPABASE_ANON_KEY present → Supabase, else SQLite
+// Selector — SUPABASE_URL + service-role key present → Supabase, else SQLite.
+//
+// SECURITY: this backend runs on Railway (private, server-only) and MUST use
+// the service role key so it bypasses RLS. The anon key would be blocked by
+// the RLS-enabled-with-no-policies posture set up in the 2026-08-25 migration
+// (`enable_rls_lockdown`). Do NOT ship the service role key to the browser.
+//
+// SUPABASE_SERVICE_ROLE_KEY is the canonical env var. We still accept the
+// legacy SUPABASE_ANON_KEY name as a fallback so old Railway configs don't
+// crash mid-deploy — but log a loud warning if that's the only thing set,
+// because the app will 'permission denied' on every table read.
 // --------------------------------------------------------------------------
 function selectStorage(): IStorage {
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const legacyKey = process.env.SUPABASE_ANON_KEY;
+  const key = serviceKey ?? legacyKey;
   if (url && key && url.startsWith("http")) {
+    if (!serviceKey && legacyKey) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[storage] WARNING: falling back to SUPABASE_ANON_KEY. RLS is enabled with no policies, so every query will fail with 'permission denied'. Set SUPABASE_SERVICE_ROLE_KEY in Railway.",
+      );
+    }
     // eslint-disable-next-line no-console
-    console.log(`[storage] using Supabase backend (${new URL(url).host})`);
+    console.log(
+      `[storage] using Supabase backend (${new URL(url).host}) [${serviceKey ? "service_role" : "anon-fallback"}]`,
+    );
     // Node 20 lacks a global WebSocket; provide the `ws` package explicitly
     // so the eagerly-initialized realtime client doesn't crash on startup.
     const supa = createClient(url, key, {

@@ -1,8 +1,10 @@
 // One-shot migrator: pulls every row from the local SQLite (./data.db) and
-// upserts it into Supabase (using SUPABASE_URL + SUPABASE_ANON_KEY from env).
+// upserts it into Supabase. Uses the SERVICE ROLE key so it bypasses RLS —
+// with RLS enabled and no policies, an anon key would get 'permission denied'
+// on every row.
 //
 // Usage:
-//   SUPABASE_URL=https://xxxx.supabase.co SUPABASE_ANON_KEY=eyJ... \
+//   SUPABASE_URL=https://xxxx.supabase.co SUPABASE_SERVICE_ROLE_KEY=eyJ... \
 //     npx tsx scripts/migrate-to-supabase.ts
 //
 // Idempotent — safe to re-run. Uses `upsert(..., { onConflict: "id" })` so
@@ -16,9 +18,9 @@ import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
 
 const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_ANON_KEY;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
 if (!url || !key) {
-  console.error("[migrate] set SUPABASE_URL and SUPABASE_ANON_KEY in env");
+  console.error("[migrate] set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in env");
   process.exit(1);
 }
 
