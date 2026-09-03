@@ -57,6 +57,8 @@ sqlite.exec(`
     goals TEXT,
     budget_band TEXT,
     notes TEXT,
+    include_pestel INTEGER DEFAULT 0,
+    include_porters INTEGER DEFAULT 0,
     status TEXT NOT NULL,
     progress INTEGER NOT NULL DEFAULT 0,
     current_step TEXT,
@@ -65,6 +67,9 @@ sqlite.exec(`
     competitors TEXT,
     strategy TEXT,
     sow TEXT,
+    swot TEXT,
+    pestel TEXT,
+    porters TEXT,
     created_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS content_plans (
@@ -101,6 +106,17 @@ sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_content_pieces_channel ON content_pieces(channel);
 `);
 
+// Idempotent SQLite alters for pre-existing dev DBs (Sep 2026 migration).
+for (const sql of [
+  "ALTER TABLE analyses ADD COLUMN include_pestel INTEGER DEFAULT 0",
+  "ALTER TABLE analyses ADD COLUMN include_porters INTEGER DEFAULT 0",
+  "ALTER TABLE analyses ADD COLUMN swot TEXT",
+  "ALTER TABLE analyses ADD COLUMN pestel TEXT",
+  "ALTER TABLE analyses ADD COLUMN porters TEXT",
+]) {
+  try { sqlite.exec(sql); } catch { /* column already exists */ }
+}
+
 export const db = drizzle(sqlite);
 
 export class SqliteStorage implements IStorage {
@@ -116,6 +132,8 @@ export class SqliteStorage implements IStorage {
       goals: input.goals ?? null,
       budgetBand: input.budgetBand ?? null,
       notes: input.notes ?? null,
+      includePestel: input.includePestel ? 1 : 0,
+      includePorters: input.includePorters ? 1 : 0,
       status: "queued",
       progress: 0,
       currentStep: "Queued",
@@ -124,6 +142,9 @@ export class SqliteStorage implements IStorage {
       competitors: null,
       strategy: null,
       sow: null,
+      swot: null,
+      pestel: null,
+      porters: null,
       createdAt: now,
     } as any;
     return db.insert(analyses).values(row).returning().get();
@@ -220,6 +241,8 @@ type AnalysisRow = {
   goals: string | null;
   budget_band: string | null;
   notes: string | null;
+  include_pestel: boolean | number | null;
+  include_porters: boolean | number | null;
   status: string;
   progress: number;
   current_step: string | null;
@@ -228,6 +251,9 @@ type AnalysisRow = {
   competitors: any;
   strategy: any;
   sow: any;
+  swot: any;
+  pestel: any;
+  porters: any;
   created_at: number;
 };
 
@@ -275,6 +301,8 @@ function analysisFromRow(r: AnalysisRow): Analysis {
     goals: r.goals,
     budgetBand: r.budget_band,
     notes: r.notes,
+    includePestel: r.include_pestel ? 1 : 0,
+    includePorters: r.include_porters ? 1 : 0,
     status: r.status,
     progress: r.progress,
     currentStep: r.current_step,
@@ -283,6 +311,9 @@ function analysisFromRow(r: AnalysisRow): Analysis {
     competitors: r.competitors == null ? null : (typeof r.competitors === "string" ? r.competitors : JSON.stringify(r.competitors)),
     strategy: r.strategy == null ? null : (typeof r.strategy === "string" ? r.strategy : JSON.stringify(r.strategy)),
     sow: r.sow == null ? null : (typeof r.sow === "string" ? r.sow : JSON.stringify(r.sow)),
+    swot: r.swot == null ? null : (typeof r.swot === "string" ? r.swot : JSON.stringify(r.swot)),
+    pestel: r.pestel == null ? null : (typeof r.pestel === "string" ? r.pestel : JSON.stringify(r.pestel)),
+    porters: r.porters == null ? null : (typeof r.porters === "string" ? r.porters : JSON.stringify(r.porters)),
     createdAt: r.created_at,
   } as Analysis;
 }
@@ -297,6 +328,8 @@ function analysisToRow(patch: Partial<Analysis>): Partial<AnalysisRow> {
   if (patch.goals !== undefined) out.goals = patch.goals;
   if (patch.budgetBand !== undefined) out.budget_band = patch.budgetBand;
   if (patch.notes !== undefined) out.notes = patch.notes;
+  if ((patch as any).includePestel !== undefined) out.include_pestel = !!(patch as any).includePestel;
+  if ((patch as any).includePorters !== undefined) out.include_porters = !!(patch as any).includePorters;
   if (patch.status !== undefined) out.status = patch.status;
   if (patch.progress !== undefined) out.progress = patch.progress;
   if (patch.currentStep !== undefined) out.current_step = patch.currentStep;
@@ -305,6 +338,9 @@ function analysisToRow(patch: Partial<Analysis>): Partial<AnalysisRow> {
   if (patch.competitors !== undefined) out.competitors = patch.competitors == null ? null : JSON.parse(patch.competitors);
   if (patch.strategy !== undefined) out.strategy = patch.strategy == null ? null : JSON.parse(patch.strategy);
   if (patch.sow !== undefined) out.sow = patch.sow == null ? null : JSON.parse(patch.sow);
+  if ((patch as any).swot !== undefined) out.swot = (patch as any).swot == null ? null : JSON.parse((patch as any).swot);
+  if ((patch as any).pestel !== undefined) out.pestel = (patch as any).pestel == null ? null : JSON.parse((patch as any).pestel);
+  if ((patch as any).porters !== undefined) out.porters = (patch as any).porters == null ? null : JSON.parse((patch as any).porters);
   if (patch.createdAt !== undefined) out.created_at = patch.createdAt;
   return out;
 }
@@ -390,6 +426,8 @@ export class SupabaseStorage implements IStorage {
       goals: input.goals ?? null,
       budget_band: input.budgetBand ?? null,
       notes: input.notes ?? null,
+      include_pestel: !!input.includePestel,
+      include_porters: !!input.includePorters,
       status: "queued",
       progress: 0,
       current_step: "Queued",
@@ -398,6 +436,9 @@ export class SupabaseStorage implements IStorage {
       competitors: null,
       strategy: null,
       sow: null,
+      swot: null,
+      pestel: null,
+      porters: null,
       created_at: Date.now(),
     };
     const { data, error } = await this.supa.from("analyses").insert(row).select().single();

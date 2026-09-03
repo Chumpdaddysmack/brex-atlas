@@ -15,7 +15,11 @@ create table if not exists public.analyses (
   budget_band   text,
   notes         text,
 
-  status        text not null,               -- queued | extracting | competitors | strategy | sow | done | error
+  -- Framework opt-ins (Sep 2026)
+  include_pestel  boolean not null default false,
+  include_porters boolean not null default false,
+
+  status        text not null,               -- queued | extracting | competitors | strategy | sow | frameworks | done | error
   progress      integer not null default 0,  -- 0-100
   current_step  text,
   error_message text,
@@ -25,8 +29,20 @@ create table if not exists public.analyses (
   strategy      jsonb,
   sow           jsonb,
 
+  -- Strategic frameworks (Sep 2026)
+  swot     jsonb,
+  pestel   jsonb,
+  porters  jsonb,
+
   created_at    bigint not null
 );
+
+-- Idempotent alter for pre-existing installs (Sep 2026 migration)
+alter table public.analyses add column if not exists include_pestel  boolean not null default false;
+alter table public.analyses add column if not exists include_porters boolean not null default false;
+alter table public.analyses add column if not exists swot    jsonb;
+alter table public.analyses add column if not exists pestel  jsonb;
+alter table public.analyses add column if not exists porters jsonb;
 
 create index if not exists analyses_created_at_idx on public.analyses (created_at desc);
 create index if not exists analyses_status_idx     on public.analyses (status);

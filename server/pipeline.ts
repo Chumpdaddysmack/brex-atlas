@@ -1,5 +1,10 @@
 import { storage } from "./storage";
 import { llmJson, SCHEMA_EXTRACT, SCHEMA_COMPETITORS, SCHEMA_STRATEGY, SCHEMA_SOW } from "./llm";
+import { generateSwot } from "./swot";
+import { generatePestel } from "./pestel";
+import { generatePorters } from "./porters";
+import { injectRationale } from "./rationale";
+import type { SwotAnalysis, PestelAnalysis, PortersFiveForces, Strategy, SOW, Extraction, Competitor } from "@shared/schema";
 
 // ------------ Utilities ------------
 
@@ -110,11 +115,89 @@ export async function runPipeline(id: string) {
     );
 
     await storage.updateAnalysis(id, {
-      progress: 100,
-      currentStep: "Complete",
-      status: "done",
+      progress: 90,
+      currentStep: "Running strategic frameworks",
+      status: "frameworks",
       sow: JSON.stringify(sow),
     });
+
+    // Stage 5: Strategic frameworks (SWOT always; PESTEL/Porter's opt-in)
+    let swotResult: SwotAnalysis | null = null;
+    let pestelResult: PestelAnalysis | null = null;
+    let portersResult: PortersFiveForces | null = null;
+
+    try {
+      // SWOT always runs — fast and free
+      swotResult = await generateSwot({
+        clientName: record.clientName,
+        industry: record.industry,
+        extraction: extraction as Extraction,
+        competitors: competitors as Competitor[],
+        notes: record.notes,
+      });
+
+      // Infer industry from SWOT (which infers from extraction) for PESTEL/Porter's
+      const industry = record.industry || swotResult.industry || "General B2B";
+
+      const wantsPestel = (record as any).includePestel === 1 || (record as any).includePestel === true;
+      const wantsPorters = (record as any).includePorters === 1 || (record as any).includePorters === true;
+
+      // Run PESTEL + Porter's in parallel if opted in
+      const [pestelR, portersR] = await Promise.all([
+        wantsPestel
+          ? generatePestel({ clientName: record.clientName, industry }).catch((err) => {
+              console.error("[pestel] failed:", err);
+              return null;
+            })
+          : Promise.resolve(null),
+        wantsPorters
+          ? generatePorters({
+              clientName: record.clientName,
+              industry,
+              competitors: competitors as Competitor[],
+            }).catch((err) => {
+              console.error("[porters] failed:", err);
+              return null;
+            })
+          : Promise.resolve(null),
+      ]);
+      pestelResult = pestelR;
+      portersResult = portersR;
+
+      // Inject strategic rationale into the strategy + SOW
+      const withRationale = await injectRationale({
+        strategy: strategy as Strategy,
+        sow: sow as SOW,
+        swot: swotResult,
+        pestel: pestelResult,
+        porters: portersResult,
+      }).catch((err) => {
+        console.error("[rationale] failed:", err);
+        return { strategy: strategy as Strategy, sow: sow as SOW };
+      });
+
+      await storage.updateAnalysis(id, {
+        progress: 100,
+        currentStep: "Complete",
+        status: "done",
+        strategy: JSON.stringify(withRationale.strategy),
+        sow: JSON.stringify(withRationale.sow),
+        swot: JSON.stringify(swotResult),
+        pestel: pestelResult ? JSON.stringify(pestelResult) : null,
+        porters: portersResult ? JSON.stringify(portersResult) : null,
+      } as any);
+    } catch (frameworksErr: any) {
+      // Framework failure is non-fatal — the core analysis is still complete
+      console.error("[frameworks] non-fatal error:", frameworksErr);
+      await storage.updateAnalysis(id, {
+        progress: 100,
+        currentStep: "Complete (frameworks partial)",
+        status: "done",
+        swot: swotResult ? JSON.stringify(swotResult) : null,
+        pestel: pestelResult ? JSON.stringify(pestelResult) : null,
+        porters: portersResult ? JSON.stringify(portersResult) : null,
+      } as any);
+    }
   } catch (err: any) {
     console.error("[pipeline] error", err);
     await storage.updateAnalysis(id, {

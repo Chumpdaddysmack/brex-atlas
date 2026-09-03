@@ -3,7 +3,12 @@
 // Uses pptxgenjs to build a 12-15 slide deck (16:9)
 // =============================================================
 import PptxGenJS from "pptxgenjs";
-import type { ContentPlanPayload } from "@shared/schema";
+import type {
+  ContentPlanPayload,
+  SwotAnalysis,
+  PestelAnalysis,
+  PortersFiveForces,
+} from "@shared/schema";
 import { PRICING_BENCHMARKS, BENCHMARK_SOURCES, formatMoney } from "./pricing-benchmarks";
 import {
   BREX_LINE_ITEMS,
@@ -45,6 +50,9 @@ export interface PptxExportArgs {
   clientName: string;
   clientUrl: string;
   generatedAt?: Date;
+  swot?: SwotAnalysis | null;
+  pestel?: PestelAnalysis | null;
+  porters?: PortersFiveForces | null;
 }
 
 // -------- Helpers --------
@@ -1207,7 +1215,7 @@ function buildSourcesSlide(pptx: PptxGenJS) {
 // Main export function
 // =============================================================
 export async function buildContentPlanPptx(args: PptxExportArgs): Promise<Buffer> {
-  const { payload, clientName, clientUrl, generatedAt = new Date() } = args;
+  const { payload, clientName, clientUrl, generatedAt = new Date(), swot, pestel, porters } = args;
 
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_16x9"; // 10 x 5.625 inches
@@ -1238,6 +1246,11 @@ export async function buildContentPlanPptx(args: PptxExportArgs): Promise<Buffer
 
   // 9. Publishing timeline
   buildTimelineSlide(pptx, payload);
+
+  // 9a-c. Strategic frameworks (before pricing matrix)
+  if (swot) buildSwotSlide(pptx, swot);
+  if (pestel) buildPestelSlide(pptx, pestel);
+  if (porters) buildPortersSlide(pptx, porters);
 
   // 10a. Brex vs. Market — Tier comparison
   buildBrexTierMatrixSlide(pptx);
@@ -1274,4 +1287,219 @@ export async function buildContentPlanPptx(args: PptxExportArgs): Promise<Buffer
   // Return as Buffer
   const data = await pptx.write({ outputType: "nodebuffer" });
   return data as Buffer;
+}
+
+// =============================================================
+// Strategic Frameworks slide builders
+// =============================================================
+function buildSwotSlide(pptx: PptxGenJS, swot: SwotAnalysis) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "SWOT Analysis", swot.summary || `Industry: ${swot.industry}`);
+
+  const startY = 1.4;
+  const cellW = 4.5;
+  const cellH = 1.85;
+  const col1X = 0.4;
+  const col2X = 5.1;
+
+  const cells = [
+    { x: col1X, y: startY, label: "STRENGTHS", color: "059669", items: swot.strengths },
+    { x: col2X, y: startY, label: "WEAKNESSES", color: "DC2626", items: swot.weaknesses },
+    { x: col1X, y: startY + cellH + 0.15, label: "OPPORTUNITIES", color: "0284C7", items: swot.opportunities },
+    { x: col2X, y: startY + cellH + 0.15, label: "THREATS", color: "B45309", items: swot.threats },
+  ];
+
+  cells.forEach((c) => {
+    // Cell border
+    slide.addShape("rect", {
+      x: c.x, y: c.y, w: cellW, h: cellH,
+      fill: { color: "FFFFFF" }, line: { color: BRAND.border, width: 0.75 },
+    });
+    // Label bar
+    slide.addShape("rect", {
+      x: c.x, y: c.y, w: cellW, h: 0.28,
+      fill: { color: c.color }, line: { color: c.color, width: 0 },
+    });
+    slide.addText(c.label, {
+      x: c.x + 0.1, y: c.y + 0.03, w: cellW - 0.2, h: 0.22,
+      fontSize: 9, fontFace: "Arial", bold: true, color: "FFFFFF", charSpacing: 2, valign: "middle",
+    });
+
+    // Items (top 4 max, truncate long titles)
+    const items = (c.items ?? []).slice(0, 4);
+    let ty = c.y + 0.35;
+    items.forEach((it) => {
+      slide.addText(`${it.id}  ${it.title}`, {
+        x: c.x + 0.1, y: ty, w: cellW - 0.2, h: 0.22,
+        fontSize: 8.5, fontFace: "Arial", bold: true, color: BRAND.navy, valign: "middle",
+      });
+      ty += 0.22;
+      slide.addText(safe(it.evidence).slice(0, 130), {
+        x: c.x + 0.25, y: ty, w: cellW - 0.35, h: 0.22,
+        fontSize: 7.5, fontFace: "Arial", color: BRAND.muted, valign: "middle",
+      });
+      ty += 0.16;
+    });
+  });
+}
+
+function buildPestelSlide(pptx: PptxGenJS, pestel: PestelAnalysis) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "PESTEL Analysis", `Industry: ${pestel.industry} · 2025–2026 sources`);
+
+  const factors: Array<{ key: string; label: string }> = [
+    { key: "political", label: "Political & Regulatory" },
+    { key: "economic", label: "Economic" },
+    { key: "social", label: "Social & Demographic" },
+    { key: "technological", label: "Technological" },
+    { key: "environmental", label: "Environmental & ESG" },
+    { key: "legal", label: "Legal & Compliance" },
+  ];
+
+  const startY = 1.35;
+  const cellW = 3.05;
+  const cellH = 1.9;
+  const gap = 0.12;
+  const cols = 3;
+
+  factors.forEach((f, idx) => {
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const x = 0.4 + col * (cellW + gap);
+    const y = startY + row * (cellH + gap);
+
+    const finding = (pestel.findings ?? []).find((fx) => fx.factor === (f.key as any));
+
+    // Cell background
+    slide.addShape("rect", {
+      x, y, w: cellW, h: cellH,
+      fill: { color: "F9FAFB" }, line: { color: BRAND.border, width: 0.75 },
+    });
+
+    // Label
+    slide.addText(f.label, {
+      x: x + 0.15, y: y + 0.1, w: cellW - 0.3, h: 0.25,
+      fontSize: 9, fontFace: "Arial", bold: true, color: BRAND.accent, charSpacing: 1,
+    });
+
+    if (!finding) {
+      slide.addText("No signal in current window.", {
+        x: x + 0.15, y: y + 0.5, w: cellW - 0.3, h: 0.3,
+        fontSize: 8, fontFace: "Arial", italic: true, color: BRAND.muted,
+      });
+      return;
+    }
+
+    // Impact + horizon strip
+    const impactColor =
+      finding.impact === "positive" ? "059669" : finding.impact === "negative" ? "DC2626" : "6B7280";
+    slide.addText(
+      `${finding.id} · ${finding.impact.toUpperCase()} · ${horizonLabelPptx(finding.timeHorizon)}`,
+      {
+        x: x + 0.15, y: y + 0.35, w: cellW - 0.3, h: 0.2,
+        fontSize: 7, fontFace: "Arial", bold: true, color: impactColor, charSpacing: 1,
+      },
+    );
+
+    // Insight (compressed)
+    slide.addText(safe(finding.insight).slice(0, 250), {
+      x: x + 0.15, y: y + 0.6, w: cellW - 0.3, h: 0.9,
+      fontSize: 8.5, fontFace: "Arial", color: BRAND.text, valign: "top",
+    });
+
+    // First source
+    if (finding.sources && finding.sources.length > 0) {
+      const s = finding.sources[0];
+      const label = s.publisher || domainFromPptxUrl(s.url);
+      slide.addText(`› ${label}`, {
+        x: x + 0.15, y: y + cellH - 0.3, w: cellW - 0.3, h: 0.2,
+        fontSize: 7, fontFace: "Arial", bold: true, color: "0F766E",
+        hyperlink: { url: s.url },
+      });
+    }
+  });
+}
+
+function buildPortersSlide(pptx: PptxGenJS, porters: PortersFiveForces) {
+  const slide = pptx.addSlide();
+  addSectionHeader(
+    slide,
+    "Porter's Five Forces",
+    porters.summary || `${porters.industry} · 2025–2026 sources`,
+  );
+
+  const forceLabels: Record<string, string> = {
+    rivalry: "Competitive Rivalry",
+    newEntrants: "Threat of New Entrants",
+    substitutes: "Threat of Substitutes",
+    buyerPower: "Buyer Power",
+    supplierPower: "Supplier Power",
+  };
+
+  const startY = 1.35;
+  const rowH = 0.75;
+  const rowW = SLIDE_W - 0.8;
+
+  porters.forces.forEach((f, idx) => {
+    const y = startY + idx * (rowH + 0.05);
+    const intensityColor =
+      f.intensity === "high" ? "DC2626" : f.intensity === "medium" ? "B45309" : "059669";
+
+    // Row bg
+    slide.addShape("rect", {
+      x: 0.4, y, w: rowW, h: rowH,
+      fill: { color: idx % 2 === 0 ? "FFFFFF" : "F9FAFB" },
+      line: { color: BRAND.border, width: 0.5 },
+    });
+
+    // Left intensity bar
+    slide.addShape("rect", {
+      x: 0.4, y, w: 0.1, h: rowH,
+      fill: { color: intensityColor }, line: { color: intensityColor, width: 0 },
+    });
+
+    // Force label
+    slide.addText(`${f.id}  ·  ${forceLabels[f.force] ?? f.force}`, {
+      x: 0.6, y: y + 0.05, w: 3.5, h: 0.25,
+      fontSize: 10.5, fontFace: "Arial", bold: true, color: BRAND.navy,
+    });
+
+    // Intensity badge (top-right)
+    slide.addText(f.intensity.toUpperCase(), {
+      x: SLIDE_W - 1.4, y: y + 0.05, w: 1.0, h: 0.22,
+      fontSize: 9, fontFace: "Arial", bold: true, color: intensityColor,
+      align: "right", charSpacing: 1,
+    });
+
+    // Rationale
+    slide.addText(safe(f.rationale).slice(0, 260), {
+      x: 0.6, y: y + 0.3, w: rowW - 0.3, h: rowH - 0.35,
+      fontSize: 8.5, fontFace: "Arial", color: BRAND.text, valign: "top",
+    });
+
+    // First source pill (bottom-right)
+    if (f.sources && f.sources.length > 0) {
+      const s = f.sources[0];
+      const label = s.publisher || domainFromPptxUrl(s.url);
+      slide.addText(`› ${label}`, {
+        x: SLIDE_W - 3.0, y: y + rowH - 0.28, w: 2.6, h: 0.22,
+        fontSize: 7, fontFace: "Arial", bold: true, color: "0F766E",
+        hyperlink: { url: s.url }, align: "right",
+      });
+    }
+  });
+}
+
+function horizonLabelPptx(h: string): string {
+  if (h === "near") return "<12 MO";
+  if (h === "long") return "3+ YR";
+  return "12-36 MO";
+}
+
+function domainFromPptxUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }

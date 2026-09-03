@@ -1,5 +1,10 @@
 import PDFDocument from "pdfkit";
-import type { ContentPlanPayload } from "@shared/schema";
+import type {
+  ContentPlanPayload,
+  SwotAnalysis,
+  PestelAnalysis,
+  PortersFiveForces,
+} from "@shared/schema";
 import type { Response } from "express";
 import {
   PRICING_BENCHMARKS,
@@ -51,6 +56,9 @@ interface StreamPdfArgs {
   clientName: string;
   clientUrl?: string | null;
   scope: PdfScope;
+  swot?: SwotAnalysis | null;
+  pestel?: PestelAnalysis | null;
+  porters?: PortersFiveForces | null;
 }
 
 export function streamContentPlanPdf({
@@ -59,6 +67,9 @@ export function streamContentPlanPdf({
   clientName,
   clientUrl,
   scope,
+  swot,
+  pestel,
+  porters,
 }: StreamPdfArgs) {
   const safeName = (clientName || "client").replace(/[^a-z0-9-_]/gi, "_");
   const scopeLabel =
@@ -101,6 +112,15 @@ export function streamContentPlanPdf({
       renderStrategyOnly(doc, payload);
     } else {
       renderFullPlan(doc, payload);
+    }
+
+    // -------- Strategic frameworks (before sources appendix) --------
+    if (scope !== "summary" && (swot || pestel || porters)) {
+      try {
+        renderFrameworksSection(doc, { swot, pestel, porters });
+      } catch (err) {
+        console.error("[pdf-export] frameworks failed", err);
+      }
     }
 
     // -------- Sources appendix (always, even if body errored partially) --------
@@ -1729,4 +1749,252 @@ function formatUsdForPdf(n: number): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `$${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`;
   return `$${Math.round(n).toLocaleString()}`;
+}
+
+// =============================================================
+// Strategic Frameworks — SWOT + PESTEL + Porter's Five Forces
+// =============================================================
+function renderFrameworksSection(
+  doc: PDFKit.PDFDocument,
+  ctx: {
+    swot?: SwotAnalysis | null;
+    pestel?: PestelAnalysis | null;
+    porters?: PortersFiveForces | null;
+  },
+) {
+  const { swot, pestel, porters } = ctx;
+
+  // Section title page
+  doc.addPage();
+  doc.fillColor(BRAND.navy).font(FONTS.serif).fontSize(28)
+    .text("Strategic Frameworks", 72, 100);
+  doc.moveTo(72, doc.y + 8).lineTo(200, doc.y + 8).lineWidth(2).stroke(BRAND.accent);
+  doc.moveDown(1);
+  doc.fillColor(BRAND.muted).font(FONTS.sans).fontSize(11)
+    .text(
+      "The following frameworks ground every strategic recommendation in this report. SWOT is derived from the client's own site and competitive teardown. PESTEL and Porter's Five Forces cite external, industry-current sources.",
+      72,
+      doc.y,
+      { width: 470, lineGap: 3 },
+    );
+
+  if (swot) renderSwotPdf(doc, swot);
+  if (pestel) renderPestelPdf(doc, pestel);
+  if (porters) renderPortersPdf(doc, porters);
+}
+
+function renderSwotPdf(doc: PDFKit.PDFDocument, swot: SwotAnalysis) {
+  doc.addPage();
+  doc.fillColor(BRAND.navy).font(FONTS.serif).fontSize(20).text("SWOT Analysis", 72, 72);
+  doc.fillColor(BRAND.muted).font(FONTS.sansOblique).fontSize(9)
+    .text(`Industry context: ${swot.industry}`, 72, doc.y + 2);
+
+  if (swot.summary) {
+    doc.moveDown(0.6);
+    doc.rect(72, doc.y, 468, 0).stroke(BRAND.border);
+    doc.moveDown(0.3);
+    doc.fillColor("#0F766E").font(FONTS.sansBold).fontSize(8)
+      .text("STRATEGIC READ", 72, doc.y);
+    doc.moveDown(0.2);
+    doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(10)
+      .text(swot.summary, 72, doc.y, { width: 468, lineGap: 2 });
+  }
+
+  // 2x2 grid
+  doc.moveDown(1);
+  const startY = doc.y;
+  const col1X = 72;
+  const col2X = 320;
+  const cellW = 218;
+  const cellH = 260;
+
+  drawSwotCell(doc, col1X, startY, cellW, cellH, "STRENGTHS", "#059669", swot.strengths);
+  drawSwotCell(doc, col2X, startY, cellW, cellH, "WEAKNESSES", "#DC2626", swot.weaknesses);
+  drawSwotCell(doc, col1X, startY + cellH + 10, cellW, cellH, "OPPORTUNITIES", "#0284C7", swot.opportunities);
+  drawSwotCell(doc, col2X, startY + cellH + 10, cellW, cellH, "THREATS", "#B45309", swot.threats);
+}
+
+function drawSwotCell(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  label: string,
+  color: string,
+  items: { id: string; title: string; evidence: string }[],
+) {
+  doc.rect(x, y, w, h).fillColor("#FFFFFF").fill().strokeColor(BRAND.border).lineWidth(1).rect(x, y, w, h).stroke();
+  doc.rect(x, y, w, 22).fill(color);
+  doc.fillColor("#FFFFFF").font(FONTS.sansBold).fontSize(9).text(label, x + 10, y + 7);
+
+  let ty = y + 30;
+  const maxY = y + h - 8;
+  (items ?? []).forEach((item) => {
+    if (ty >= maxY - 20) return;
+    doc.fillColor(color).font(FONTS.sansBold).fontSize(8).text(item.id, x + 10, ty);
+    doc.fillColor(BRAND.text).font(FONTS.sansBold).fontSize(9)
+      .text(item.title, x + 32, ty - 1, { width: w - 42, ellipsis: true });
+    ty = doc.y + 1;
+    if (ty >= maxY - 8) return;
+    doc.fillColor(BRAND.muted).font(FONTS.sans).fontSize(8)
+      .text(item.evidence, x + 32, ty, { width: w - 42, lineGap: 1.5 });
+    ty = doc.y + 8;
+  });
+}
+
+function renderPestelPdf(doc: PDFKit.PDFDocument, pestel: PestelAnalysis) {
+  doc.addPage();
+  doc.fillColor(BRAND.navy).font(FONTS.serif).fontSize(20).text("PESTEL Analysis", 72, 72);
+  doc.fillColor(BRAND.muted).font(FONTS.sansOblique).fontSize(9)
+    .text(`Industry context: ${pestel.industry} · 2025–2026 sources`, 72, doc.y + 2);
+
+  if (pestel.summary) {
+    doc.moveDown(0.6);
+    doc.fillColor("#0F766E").font(FONTS.sansBold).fontSize(8).text("MACRO THEME", 72, doc.y);
+    doc.moveDown(0.2);
+    doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(10)
+      .text(pestel.summary, 72, doc.y, { width: 468, lineGap: 2 });
+  }
+  doc.moveDown(0.8);
+
+  const factors: Array<{ key: string; label: string }> = [
+    { key: "political", label: "Political & Regulatory" },
+    { key: "economic", label: "Economic" },
+    { key: "social", label: "Social & Demographic" },
+    { key: "technological", label: "Technological" },
+    { key: "environmental", label: "Environmental & ESG" },
+    { key: "legal", label: "Legal & Compliance" },
+  ];
+
+  factors.forEach((f) => {
+    const findings = pestel.findings.filter((x) => x.factor === (f.key as any));
+    if (!findings.length) return;
+    if (doc.y > 680) doc.addPage();
+
+    doc.fillColor(BRAND.accent).font(FONTS.sansBold).fontSize(9).text(f.label.toUpperCase(), 72, doc.y);
+    doc.moveDown(0.2);
+
+    findings.forEach((finding) => {
+      if (doc.y > 700) doc.addPage();
+      const impactColor =
+        finding.impact === "positive" ? "#059669" : finding.impact === "negative" ? "#DC2626" : "#6B7280";
+
+      doc.fillColor(impactColor).font(FONTS.sansBold).fontSize(8)
+        .text(`${finding.id} · ${finding.impact.toUpperCase()} · ${horizonLabel(finding.timeHorizon)}`, 72, doc.y);
+      doc.moveDown(0.15);
+      doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(10)
+        .text(finding.insight, 72, doc.y, { width: 468, lineGap: 2 });
+
+      // Sources as small pill list
+      if (finding.sources && finding.sources.length > 0) {
+        doc.moveDown(0.2);
+        finding.sources.forEach((s, i) => {
+          const label = s.publisher || domainFromPdfUrl(s.url);
+          const shortUrl = truncateUrl(s.url, 60);
+          doc.fillColor("#0F766E").font(FONTS.sansBold).fontSize(7).text(`  › ${label}`, 72, doc.y, { continued: true });
+          doc.fillColor(BRAND.muted).font(FONTS.sans).fontSize(7).text(` — ${shortUrl}`, {
+            link: s.url,
+            underline: false,
+          });
+        });
+      }
+      doc.moveDown(0.4);
+    });
+    doc.moveDown(0.3);
+  });
+}
+
+function renderPortersPdf(doc: PDFKit.PDFDocument, porters: PortersFiveForces) {
+  doc.addPage();
+  doc.fillColor(BRAND.navy).font(FONTS.serif).fontSize(20).text("Porter's Five Forces", 72, 72);
+  doc.fillColor(BRAND.muted).font(FONTS.sansOblique).fontSize(9)
+    .text(`Industry context: ${porters.industry} · 2025–2026 sources`, 72, doc.y + 2);
+
+  if (porters.overallStructure) {
+    doc.moveDown(0.6);
+    doc.fillColor("#0F766E").font(FONTS.sansBold).fontSize(8).text("INDUSTRY STRUCTURE", 72, doc.y);
+    doc.moveDown(0.15);
+    doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(10)
+      .text(porters.overallStructure, 72, doc.y, { width: 468, lineGap: 2 });
+  }
+  if (porters.summary) {
+    doc.moveDown(0.4);
+    doc.fillColor("#0F766E").font(FONTS.sansBold).fontSize(8).text("DECISIVE FORCE", 72, doc.y);
+    doc.moveDown(0.15);
+    doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(10)
+      .text(porters.summary, 72, doc.y, { width: 468, lineGap: 2 });
+  }
+  doc.moveDown(0.8);
+
+  const forceLabels: Record<string, string> = {
+    rivalry: "Competitive Rivalry",
+    newEntrants: "Threat of New Entrants",
+    substitutes: "Threat of Substitutes",
+    buyerPower: "Buyer Power",
+    supplierPower: "Supplier Power",
+  };
+
+  porters.forces.forEach((f) => {
+    if (doc.y > 640) doc.addPage();
+
+    const intensityColor =
+      f.intensity === "high" ? "#DC2626" : f.intensity === "medium" ? "#B45309" : "#059669";
+
+    // Header row
+    doc.rect(72, doc.y, 468, 22).fillColor("#F9FAFB").fill().strokeColor(BRAND.border).lineWidth(0.5).rect(72, doc.y - 22, 468, 22).stroke();
+    const rowY = doc.y - 22;
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(11)
+      .text(`${f.id}  ·  ${forceLabels[f.force] ?? f.force}`, 82, rowY + 6);
+    doc.fillColor(intensityColor).font(FONTS.sansBold).fontSize(9)
+      .text(f.intensity.toUpperCase(), 460, rowY + 7, { width: 70, align: "right" });
+
+    doc.moveDown(0.3);
+    doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(10)
+      .text(f.rationale, 82, doc.y, { width: 458, lineGap: 2 });
+
+    if (f.drivers && f.drivers.length) {
+      doc.moveDown(0.3);
+      doc.fillColor(BRAND.accent).font(FONTS.sansBold).fontSize(8).text("KEY DRIVERS", 82, doc.y);
+      doc.moveDown(0.1);
+      f.drivers.forEach((d) => {
+        doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(9)
+          .text(`  › ${d}`, 82, doc.y, { width: 458, lineGap: 1.5 });
+      });
+    }
+
+    if (f.sources && f.sources.length) {
+      doc.moveDown(0.3);
+      doc.fillColor("#0F766E").font(FONTS.sansBold).fontSize(8).text("SOURCES", 82, doc.y);
+      doc.moveDown(0.1);
+      f.sources.forEach((s) => {
+        const label = s.publisher || domainFromPdfUrl(s.url);
+        const shortUrl = truncateUrl(s.url, 70);
+        doc.fillColor("#0F766E").font(FONTS.sansBold).fontSize(7).text(`  › ${label}`, 82, doc.y, { continued: true });
+        doc.fillColor(BRAND.muted).font(FONTS.sans).fontSize(7).text(` — ${shortUrl}`, {
+          link: s.url,
+          underline: false,
+        });
+      });
+    }
+    doc.moveDown(0.7);
+  });
+}
+
+function horizonLabel(h: string): string {
+  if (h === "near") return "<12 MO";
+  if (h === "long") return "3+ YR";
+  return "12-36 MO";
+}
+
+function domainFromPdfUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function truncateUrl(url: string, max: number): string {
+  return url.length > max ? url.slice(0, max - 1) + "…" : url;
 }

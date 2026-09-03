@@ -51,6 +51,8 @@ const intakeSchema = z.object({
   goals: z.string().optional(),
   budgetBand: z.string().optional(),
   notes: z.string().optional(),
+  includePestel: z.boolean().optional(),
+  includePorters: z.boolean().optional(),
 });
 
 type FormValues = z.infer<typeof intakeSchema>;
@@ -70,6 +72,8 @@ export default function Home() {
       goals: "",
       budgetBand: "",
       notes: "",
+      includePestel: false,
+      includePorters: false,
     },
   });
 
@@ -306,6 +310,56 @@ export default function Home() {
                   </FormItem>
                 )}
               />
+
+              <div className="space-y-3 rounded-lg border border-border/60 p-4 bg-muted/20">
+                <div className="text-sm font-semibold text-foreground">
+                  Strategic frameworks (optional)
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  SWOT is always included. Add deep macro & industry-structure research
+                  (adds ≈60–120s and pulls cited sources from 2025–2026).
+                </p>
+                <FormField
+                  control={form.control}
+                  name="includePestel"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-3 space-y-0">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border accent-primary"
+                          checked={!!field.value}
+                          onChange={(e) => field.onChange(e.target.checked)}
+                          data-testid="toggle-pestel"
+                        />
+                      </FormControl>
+                      <FormLabel className="font-normal cursor-pointer">
+                        Include PESTEL analysis (macro factors with cited sources)
+                      </FormLabel>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="includePorters"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-3 space-y-0">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border accent-primary"
+                          checked={!!field.value}
+                          onChange={(e) => field.onChange(e.target.checked)}
+                          data-testid="toggle-porters"
+                        />
+                      </FormControl>
+                      <FormLabel className="font-normal cursor-pointer">
+                        Include Porter's Five Forces (industry structure with cited sources)
+                      </FormLabel>
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <div className="pt-2 flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">

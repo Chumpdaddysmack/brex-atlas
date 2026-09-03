@@ -12,15 +12,22 @@ export const analyses = sqliteTable("analyses", {
   goals: text("goals"), // free-text goals
   budgetBand: text("budget_band"),
   notes: text("notes"),
-  status: text("status").notNull(), // queued | extracting | competitors | strategy | sow | done | error
+  // Framework opt-ins (from intake form)
+  includePestel: integer("include_pestel").default(0),   // 0/1
+  includePorters: integer("include_porters").default(0), // 0/1
+  status: text("status").notNull(), // queued | extracting | competitors | strategy | sow | frameworks | done | error
   progress: integer("progress").notNull().default(0), // 0-100
   currentStep: text("current_step"), // label of currently-running step
   errorMessage: text("error_message"),
   // Result payloads (JSON strings)
-  extraction: text("extraction"), // { title, description, positioning, valueProps, offerings, evidence, techStack, seoNotes }
-  competitors: text("competitors"), // [{ name, url, positioning, strengths, weaknesses, hookIdeas }]
-  strategy: text("strategy"), // { icp, positioningGaps, aeoRecommendations, contentPillars, channelMix, quickWins, ninetyDayPlan }
-  sow: text("sow"), // { engagementSummary, phases:[{name,weeks,deliverables,outcomes}], team, priceTiers:[{name,monthly,inclusions}], termsNotes }
+  extraction: text("extraction"),
+  competitors: text("competitors"),
+  strategy: text("strategy"),
+  sow: text("sow"),
+  // Strategic frameworks — added Sep 2026
+  swot: text("swot"),         // SwotAnalysis
+  pestel: text("pestel"),     // PestelAnalysis (only if includePestel)
+  porters: text("porters"),   // PortersFiveForces (only if includePorters)
   createdAt: integer("created_at").notNull(),
 });
 
@@ -32,6 +39,8 @@ export const insertAnalysisSchema = createInsertSchema(analyses).pick({
   goals: true,
   budgetBand: true,
   notes: true,
+  includePestel: true,
+  includePorters: true,
 });
 
 // Extend with validation
@@ -43,6 +52,9 @@ export const intakeSchema = insertAnalysisSchema.extend({
   goals: z.string().optional(),
   budgetBand: z.string().optional(),
   notes: z.string().optional(),
+  // Accept booleans in the intake payload; storage/DB uses 0/1.
+  includePestel: z.union([z.boolean(), z.number()]).optional().default(false),
+  includePorters: z.union([z.boolean(), z.number()]).optional().default(false),
 });
 
 export type InsertAnalysis = z.infer<typeof intakeSchema>;
@@ -85,15 +97,120 @@ export type Strategy = {
   contentPillars: { name: string; description: string; sampleTitles: string[] }[];
   channelMix: { channel: string; role: string; priority: "High" | "Medium" | "Low" }[];
   quickWins: string[];
-  ninetyDayPlan: { phase: string; weeks: string; focus: string; outcomes: string[] }[];
+  ninetyDayPlan: {
+    phase: string;
+    weeks: string;
+    focus: string;
+    outcomes: string[];
+    rationale?: StrategicRationale;
+  }[];
 };
 
 export type SOW = {
   engagementSummary: string;
-  phases: { name: string; weeks: string; deliverables: string[]; outcomes: string[] }[];
+  phases: {
+    name: string;
+    weeks: string;
+    deliverables: string[];
+    outcomes: string[];
+    rationale?: StrategicRationale;
+  }[];
   team: string[];
   priceTiers: { name: string; monthly: string; inclusions: string[]; bestFor: string }[];
   termsNotes: string[];
+};
+
+// ============================================================
+// Strategic Frameworks — SWOT, PESTEL, Porter's Five Forces
+// Added Sep 2026. Feed strategic-rationale blocks on the 90-day plan
+// and SOW recommendations.
+// ============================================================
+
+// Source citation used by PESTEL + Porter's factors.
+export type FrameworkSource = {
+  title: string;
+  url: string;
+  publisher?: string;
+  date?: string;   // ISO-ish ("2026-03") or free-text ("March 2026")
+};
+
+// SWOT — synthesized from the extraction + competitor set. Fast, cheap.
+// Each item has a stable id (e.g. "S1", "W2") so recommendations can cite it.
+export type SwotItem = {
+  id: string;              // "S1" | "W2" | "O3" | "T1"
+  title: string;           // short label, ~5-8 words
+  evidence: string;        // 1-2 sentences grounded in the extraction/competitors
+};
+
+export type SwotAnalysis = {
+  strengths: SwotItem[];   // 3-5
+  weaknesses: SwotItem[];  // 3-5
+  opportunities: SwotItem[]; // 3-5
+  threats: SwotItem[];     // 3-5
+  summary: string;         // 2-3 sentence strategic read
+  industry: string;        // inferred if not user-supplied
+};
+
+// PESTEL — external macro factors. Each factor has 2-4 findings with citations.
+export type PestelFactor = "political" | "economic" | "social" | "technological" | "environmental" | "legal";
+
+export type PestelFinding = {
+  id: string;              // e.g. "PESTEL-Tech-1"
+  factor: PestelFactor;
+  insight: string;         // 1-2 sentences, industry-specific
+  impact: "positive" | "negative" | "neutral";
+  timeHorizon: "near" | "mid" | "long"; // <12mo | 12-36mo | 3yr+
+  sources: FrameworkSource[];
+};
+
+export type PestelAnalysis = {
+  industry: string;
+  findings: PestelFinding[]; // typically 12-20 total across 6 factors
+  summary: string;
+};
+
+// Porter's Five Forces — competitive structure analysis.
+export type PortersForceName =
+  | "rivalry"
+  | "newEntrants"
+  | "substitutes"
+  | "buyerPower"
+  | "supplierPower";
+
+export type PortersForce = {
+  id: string;              // e.g. "P5F-Rivalry"
+  force: PortersForceName;
+  intensity: "low" | "medium" | "high";
+  rationale: string;       // 2-4 sentences
+  drivers: string[];       // 2-4 bullet drivers behind the intensity
+  sources: FrameworkSource[];
+};
+
+export type PortersFiveForces = {
+  industry: string;
+  forces: PortersForce[];  // exactly 5, in canonical order
+  overallStructure: string; // 2-3 sentence read on attractiveness
+  summary: string;
+};
+
+// Strategic rationale block — appended to 90-day plan items and SOW
+// recommendations. Each rationale cites which framework finding(s) drove it.
+export type StrategicRationale = {
+  why: string;             // 1-2 sentences: WHY this recommendation, in plain english
+  citations: string[];     // ids like ["S2", "T1", "PESTEL-Tech-1", "P5F-Rivalry"]
+};
+
+// Convenience bundle stored in a single JSON blob in analyses.strategy when
+// rationale is baked into the 90-day plan / SOW. Optional — the client also
+// composes rationale on-the-fly from the framework payloads.
+export type PlanWithRationale = {
+  ninetyDayPlan: {
+    phase: string;
+    weeks: string;
+    focus: string;
+    outcomes: string[];
+    rationale?: StrategicRationale;
+  }[];
 };
 
 // ============================================================

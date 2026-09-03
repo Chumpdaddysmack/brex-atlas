@@ -20,6 +20,7 @@ import {
   Lightbulb,
   FileText,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 import {
   BREX_LINE_ITEMS,
@@ -35,7 +36,14 @@ import type {
   Competitor,
   Strategy,
   SOW,
+  SwotAnalysis,
+  PestelAnalysis,
+  PortersFiveForces,
+  StrategicRationale,
+  PestelFinding,
+  PortersForce,
 } from "@shared/schema";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
 const STEPS = [
@@ -43,10 +51,11 @@ const STEPS = [
   { key: "competitors", label: "Competitor set", icon: Target, min: 35 },
   { key: "strategy", label: "Strategy & 90-day plan", icon: Lightbulb, min: 60 },
   { key: "sow", label: "Scope of work", icon: FileText, min: 85 },
+  { key: "frameworks", label: "Strategic frameworks", icon: Sparkles, min: 90 },
 ];
 
 function statusIndex(status: string) {
-  const order = ["queued", "extracting", "competitors", "strategy", "sow", "done", "error"];
+  const order = ["queued", "extracting", "competitors", "strategy", "sow", "frameworks", "done", "error"];
   return order.indexOf(status);
 }
 
@@ -168,17 +177,51 @@ export default function AnalysisPage() {
           </Card>
         )}
 
-        {/* Results */}
-        {analysis.extraction && (
-          <ExtractionSection extraction={JSON.parse(analysis.extraction)} />
+        {/* Results — tabbed */}
+        {(analysis.extraction || analysis.competitors || analysis.strategy || analysis.sow) && (
+          <Tabs defaultValue="overview" className="w-full">
+            <TabsList className="grid grid-cols-4 w-full max-w-2xl">
+              <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
+              <TabsTrigger value="strategy" data-testid="tab-strategy">Strategy</TabsTrigger>
+              <TabsTrigger value="sow" data-testid="tab-sow">SOW</TabsTrigger>
+              <TabsTrigger value="frameworks" data-testid="tab-frameworks">Frameworks</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="space-y-8 pt-6">
+              {analysis.extraction && (
+                <ExtractionSection extraction={JSON.parse(analysis.extraction)} />
+              )}
+              {analysis.competitors && (
+                <CompetitorsSection competitors={JSON.parse(analysis.competitors)} />
+              )}
+            </TabsContent>
+
+            <TabsContent value="strategy" className="space-y-8 pt-6">
+              {analysis.strategy ? (
+                <StrategySection strategy={JSON.parse(analysis.strategy)} />
+              ) : (
+                <Card className="p-6 text-sm text-muted-foreground">Strategy still generating…</Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="sow" className="space-y-8 pt-6">
+              {analysis.sow ? (
+                <SOWSection sow={JSON.parse(analysis.sow)} clientName={analysis.clientName} />
+              ) : (
+                <Card className="p-6 text-sm text-muted-foreground">SOW still generating…</Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="frameworks" className="space-y-8 pt-6">
+              <FrameworksSection
+                swot={analysis.swot ? (JSON.parse(analysis.swot) as SwotAnalysis) : null}
+                pestel={analysis.pestel ? (JSON.parse(analysis.pestel) as PestelAnalysis) : null}
+                porters={analysis.porters ? (JSON.parse(analysis.porters) as PortersFiveForces) : null}
+                status={analysis.status}
+              />
+            </TabsContent>
+          </Tabs>
         )}
-        {analysis.competitors && (
-          <CompetitorsSection competitors={JSON.parse(analysis.competitors)} />
-        )}
-        {analysis.strategy && (
-          <StrategySection strategy={JSON.parse(analysis.strategy)} />
-        )}
-        {analysis.sow && <SOWSection sow={JSON.parse(analysis.sow)} clientName={analysis.clientName} />}
 
         {isDone && (
           <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-border">
@@ -611,11 +654,36 @@ function StrategySection({ strategy }: { strategy: Strategy }) {
                   </li>
                 ))}
               </ul>
+              {(phase as any).rationale && (
+                <RationaleBlock rationale={(phase as any).rationale} />
+              )}
             </Card>
           ))}
         </div>
       </div>
     </section>
+  );
+}
+
+function RationaleBlock({ rationale }: { rationale: StrategicRationale }) {
+  return (
+    <div className="mt-4 pt-3 border-t border-border/60">
+      <div className="text-[10px] font-mono text-accent mb-1 tracking-wider">STRATEGIC RATIONALE</div>
+      <p className="text-xs leading-relaxed text-muted-foreground italic">{rationale.why}</p>
+      {rationale.citations && rationale.citations.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {rationale.citations.map((c, i) => (
+            <span
+              key={i}
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent/10 text-accent"
+              data-testid={`rationale-cite-${c}`}
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -716,6 +784,9 @@ function SOWSection({ sow, clientName }: { sow: SOW; clientName: string }) {
                   </ul>
                 </div>
               </div>
+              {(p as any).rationale && (
+                <RationaleBlock rationale={(p as any).rationale} />
+              )}
             </Card>
           ))}
         </div>
@@ -969,4 +1040,317 @@ function BrexVsMarketMatrix() {
       </p>
     </div>
   );
+}
+
+// -------- Frameworks (SWOT / PESTEL / Porter's) --------
+
+function FrameworksSection({
+  swot,
+  pestel,
+  porters,
+  status,
+}: {
+  swot: SwotAnalysis | null;
+  pestel: PestelAnalysis | null;
+  porters: PortersFiveForces | null;
+  status: string;
+}) {
+  const anyLoaded = !!(swot || pestel || porters);
+  const isRunning = status !== "done" && status !== "error";
+
+  if (!anyLoaded) {
+    return (
+      <Card className="p-6 text-sm text-muted-foreground">
+        {isRunning
+          ? "Strategic frameworks are generating…"
+          : "No frameworks generated for this analysis. Re-run the intake with PESTEL / Porter's toggles enabled to get macro + industry-structure research with cited sources."}
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-10">
+      {swot && <SwotView swot={swot} />}
+      {pestel && <PestelView pestel={pestel} />}
+      {porters && <PortersView porters={porters} />}
+      {!pestel && !porters && (
+        <Card className="p-5 bg-muted/30 border-dashed">
+          <div className="text-xs font-mono text-muted-foreground mb-1">TIP</div>
+          <p className="text-sm">
+            Turn on <span className="font-semibold">PESTEL</span> or{" "}
+            <span className="font-semibold">Porter's Five Forces</span> in the intake form
+            to add macro & industry-structure research with cited 2025–2026 sources.
+          </p>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function SwotView({ swot }: { swot: SwotAnalysis }) {
+  const quadrants: Array<{
+    key: "strengths" | "weaknesses" | "opportunities" | "threats";
+    label: string;
+    tone: string;
+    items: Array<{ id: string; title: string; evidence: string }>;
+  }> = [
+    { key: "strengths", label: "Strengths", tone: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200/50 dark:border-emerald-800/50", items: swot.strengths },
+    { key: "weaknesses", label: "Weaknesses", tone: "text-rose-600 bg-rose-50 dark:bg-rose-950/30 border-rose-200/50 dark:border-rose-800/50", items: swot.weaknesses },
+    { key: "opportunities", label: "Opportunities", tone: "text-sky-600 bg-sky-50 dark:bg-sky-950/30 border-sky-200/50 dark:border-sky-800/50", items: swot.opportunities },
+    { key: "threats", label: "Threats", tone: "text-amber-700 bg-amber-50 dark:bg-amber-950/30 border-amber-200/50 dark:border-amber-800/50", items: swot.threats },
+  ];
+
+  return (
+    <section>
+      <SectionHeader
+        index="F1"
+        eyebrow="SWOT"
+        title="Strengths, weaknesses, opportunities, threats"
+        description={`Grounded in the ${swot.industry} extraction and competitor teardown. Every item has a stable ID for cross-referencing.`}
+      />
+      {swot.summary && (
+        <Card className="p-5 mb-4 bg-accent/[0.04] border-accent/20">
+          <div className="text-xs font-mono text-accent mb-1">STRATEGIC READ</div>
+          <p className="text-sm leading-relaxed">{swot.summary}</p>
+        </Card>
+      )}
+      <div className="grid md:grid-cols-2 gap-4">
+        {quadrants.map((q) => (
+          <Card key={q.key} className={`p-5 border ${q.tone}`}>
+            <div className="text-xs font-mono uppercase tracking-wider mb-3 font-semibold">
+              {q.label}
+            </div>
+            <ul className="space-y-3">
+              {q.items?.map((item) => (
+                <li key={item.id} className="text-sm" data-testid={`swot-${item.id}`}>
+                  <div className="flex gap-2 items-baseline">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-background border border-border">
+                      {item.id}
+                    </span>
+                    <span className="font-semibold">{item.title}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    {item.evidence}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PestelView({ pestel }: { pestel: PestelAnalysis }) {
+  const factors: Array<{ key: PestelFinding["factor"]; label: string }> = [
+    { key: "political", label: "Political & Regulatory" },
+    { key: "economic", label: "Economic" },
+    { key: "social", label: "Social & Demographic" },
+    { key: "technological", label: "Technological" },
+    { key: "environmental", label: "Environmental & ESG" },
+    { key: "legal", label: "Legal & Compliance" },
+  ];
+
+  const grouped = factors.map((f) => ({
+    ...f,
+    findings: pestel.findings.filter((x) => x.factor === f.key),
+  }));
+
+  return (
+    <section>
+      <SectionHeader
+        index="F2"
+        eyebrow="PESTEL"
+        title="Macro factors with cited sources"
+        description={`External forces shaping the ${pestel.industry} industry in 2025–2026. Each finding is tied to industry publications, government reports, or analyst commentary.`}
+      />
+      {pestel.summary && (
+        <Card className="p-5 mb-4 bg-accent/[0.04] border-accent/20">
+          <div className="text-xs font-mono text-accent mb-1">MACRO THEME</div>
+          <p className="text-sm leading-relaxed">{pestel.summary}</p>
+        </Card>
+      )}
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {grouped.map((g) => (
+          <Card key={g.key} className="p-5">
+            <div className="text-xs font-mono uppercase tracking-wider text-accent mb-3">
+              {g.label}
+            </div>
+            {g.findings.length === 0 && (
+              <div className="text-xs text-muted-foreground italic">
+                No findings for this factor.
+              </div>
+            )}
+            <ul className="space-y-4">
+              {g.findings.map((f) => (
+                <li key={f.id} className="text-sm" data-testid={`pestel-${f.id}`}>
+                  <div className="flex gap-2 items-baseline mb-1">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-background border border-border">
+                      {f.id}
+                    </span>
+                    <ImpactBadge impact={f.impact} />
+                    <HorizonBadge horizon={f.timeHorizon} />
+                  </div>
+                  <p className="text-sm leading-relaxed">{f.insight}</p>
+                  {f.sources && f.sources.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {f.sources.map((s, i) => (
+                        <a
+                          key={i}
+                          href={s.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-teal-700 text-white hover:bg-teal-800 transition-colors"
+                          data-testid={`pestel-source-${f.id}-${i}`}
+                        >
+                          <span>{s.publisher || domainFromUrl(s.url)}</span>
+                          <ArrowUpRight className="h-2.5 w-2.5" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PortersView({ porters }: { porters: PortersFiveForces }) {
+  const orderedForces = [
+    porters.forces.find((f) => f.force === "rivalry"),
+    porters.forces.find((f) => f.force === "newEntrants"),
+    porters.forces.find((f) => f.force === "substitutes"),
+    porters.forces.find((f) => f.force === "buyerPower"),
+    porters.forces.find((f) => f.force === "supplierPower"),
+  ].filter((f): f is PortersForce => !!f);
+
+  const forceLabels: Record<PortersForce["force"], string> = {
+    rivalry: "Competitive Rivalry",
+    newEntrants: "Threat of New Entrants",
+    substitutes: "Threat of Substitutes",
+    buyerPower: "Buyer Power",
+    supplierPower: "Supplier Power",
+  };
+
+  return (
+    <section>
+      <SectionHeader
+        index="F3"
+        eyebrow="Porter's Five Forces"
+        title="Industry structure & competitive intensity"
+        description={`Five-force analysis of ${porters.industry}. Each force has an intensity rating (low/medium/high), drivers, and cited 2025–2026 sources.`}
+      />
+      {(porters.overallStructure || porters.summary) && (
+        <Card className="p-5 mb-4 bg-accent/[0.04] border-accent/20 space-y-2">
+          {porters.overallStructure && (
+            <div>
+              <div className="text-xs font-mono text-accent mb-1">INDUSTRY STRUCTURE</div>
+              <p className="text-sm leading-relaxed">{porters.overallStructure}</p>
+            </div>
+          )}
+          {porters.summary && (
+            <div>
+              <div className="text-xs font-mono text-accent mb-1">DECISIVE FORCE</div>
+              <p className="text-sm leading-relaxed">{porters.summary}</p>
+            </div>
+          )}
+        </Card>
+      )}
+      <div className="space-y-4">
+        {orderedForces.map((f) => (
+          <Card key={f.id} className="p-5" data-testid={`porters-${f.id}`}>
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-background border border-border">
+                {f.id}
+              </span>
+              <div className="font-semibold text-base flex-1">{forceLabels[f.force]}</div>
+              <IntensityBadge intensity={f.intensity} />
+            </div>
+            <p className="text-sm leading-relaxed mb-3">{f.rationale}</p>
+            {f.drivers && f.drivers.length > 0 && (
+              <div className="mb-3">
+                <div className="text-xs font-mono text-muted-foreground mb-2">KEY DRIVERS</div>
+                <ul className="space-y-1 text-sm">
+                  {f.drivers.map((d, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-accent">›</span>
+                      <span>{d}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {f.sources && f.sources.length > 0 && (
+              <div className="pt-3 border-t border-border/50">
+                <div className="text-xs font-mono text-muted-foreground mb-2">SOURCES</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {f.sources.map((s, i) => (
+                    <a
+                      key={i}
+                      href={s.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-teal-700 text-white hover:bg-teal-800 transition-colors"
+                      data-testid={`porters-source-${f.id}-${i}`}
+                    >
+                      <span>{s.publisher || domainFromUrl(s.url)}</span>
+                      <ArrowUpRight className="h-2.5 w-2.5" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ImpactBadge({ impact }: { impact: "positive" | "negative" | "neutral" }) {
+  const map = {
+    positive: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+    negative: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300",
+    neutral: "bg-slate-100 text-slate-700 dark:bg-slate-800/40 dark:text-slate-300",
+  };
+  return (
+    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded uppercase tracking-wider ${map[impact]}`}>
+      {impact}
+    </span>
+  );
+}
+
+function HorizonBadge({ horizon }: { horizon: "near" | "mid" | "long" }) {
+  const label = horizon === "near" ? "<12mo" : horizon === "mid" ? "12-36mo" : "3yr+";
+  return (
+    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded uppercase tracking-wider bg-muted text-muted-foreground">
+      {label}
+    </span>
+  );
+}
+
+function IntensityBadge({ intensity }: { intensity: "low" | "medium" | "high" }) {
+  const map = {
+    low: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+    medium: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+    high: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300",
+  };
+  return (
+    <span className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase tracking-wider font-semibold ${map[intensity]}`}>
+      {intensity}
+    </span>
+  );
+}
+
+function domainFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }

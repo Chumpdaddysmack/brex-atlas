@@ -234,6 +234,9 @@ export async function registerRoutes(
         payload,
         clientName: analysis.clientName,
         clientUrl: analysis.clientUrl,
+        swot: analysis.swot ? JSON.parse(analysis.swot) : null,
+        pestel: analysis.pestel ? JSON.parse(analysis.pestel) : null,
+        porters: analysis.porters ? JSON.parse(analysis.porters) : null,
       });
 
       const safeName = (analysis.clientName || "client").replace(/[^a-z0-9-_]/gi, "_");
@@ -286,6 +289,9 @@ export async function registerRoutes(
         clientName: analysis.clientName,
         clientUrl: analysis.clientUrl,
         scope,
+        swot: analysis.swot ? JSON.parse(analysis.swot) : null,
+        pestel: analysis.pestel ? JSON.parse(analysis.pestel) : null,
+        porters: analysis.porters ? JSON.parse(analysis.porters) : null,
       });
     } catch (err) {
       console.error("[pdf-export] failed", err);
