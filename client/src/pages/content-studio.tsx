@@ -439,7 +439,9 @@ function ChannelPanel({
   onReview: (p: ContentPiece) => void;
 }) {
   if (isLoading) return <Loader2 className="h-6 w-6 animate-spin" />;
-  if (pieces.length === 0)
+  // Cold email is a hero-only channel (no per-piece rows) — skip the empty-state
+  // early-return so the hero sequence still renders when there are zero pieces.
+  if (pieces.length === 0 && channel !== "cold_email")
     return <div className="text-muted-foreground text-sm">No entries yet for {label}.</div>;
 
   // Blog: grouped by week + calendar header
