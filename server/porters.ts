@@ -197,10 +197,37 @@ export async function generatePorters(params: {
 
   console.log(`[porters] starting deep research for ${clientName} (${industry}). pplx=${isPerplexityConfigured()}`);
 
-  // Fan-out: 5 forces in parallel
-  const forces = await Promise.all(
+  // Fan-out: 5 forces in parallel — never let one force take down the whole framework.
+  const settled = await Promise.allSettled(
     FORCE_ORDER.map((f) => generateForce(f, industry, clientName, compNames)),
   );
+  const forces: PortersForce[] = [];
+  for (let i = 0; i < FORCE_ORDER.length; i++) {
+    const s = settled[i];
+    const f = FORCE_ORDER[i];
+    if (s.status === "fulfilled") {
+      forces.push(s.value);
+    } else {
+      console.error(`[porters] force '${f}' failed:`, s.reason?.message ?? s.reason);
+      // Second-chance: try claude-only (no web research) so this force still appears
+      try {
+        const fallback = await claudeOnlyForce(f, industry, clientName, compNames);
+        forces.push(fallback);
+        console.log(`[porters] force '${f}' recovered via claude-only fallback`);
+      } catch (fallbackErr: any) {
+        console.error(`[porters] force '${f}' claude-only fallback also failed:`, fallbackErr?.message ?? fallbackErr);
+        // Last resort: skeleton entry so the shape stays valid and PDF still renders
+        forces.push({
+          id: `P5F-${forceIdSlug(f)}`,
+          force: f,
+          intensity: "medium",
+          rationale: `Analysis unavailable — research pipeline failure. ${String(s.reason?.message ?? s.reason).slice(0, 200)}`,
+          drivers: [],
+          sources: [],
+        });
+      }
+    }
+  }
 
   // Overall structure + summary from Claude
   const summaryUser = `Client: ${clientName}
@@ -215,25 +242,35 @@ Write:
 
 Return ONLY valid JSON: { "overallStructure": "...", "summary": "..." }`;
 
-  const summaryResp = await llmJson(
-    "You are Kenneth Peavy, senior fractional CMO. Return ONLY valid JSON.",
-    summaryUser,
-    600,
-    {
-      type: "object",
-      additionalProperties: true,
-      required: ["overallStructure", "summary"],
-      properties: {
-        overallStructure: { type: "string" },
-        summary: { type: "string" },
+  let summaryResp: any = null;
+  try {
+    summaryResp = await llmJson(
+      "You are Kenneth Peavy, senior fractional CMO. Return ONLY valid JSON.",
+      summaryUser,
+      600,
+      {
+        type: "object",
+        additionalProperties: true,
+        required: ["overallStructure", "summary"],
+        properties: {
+          overallStructure: { type: "string" },
+          summary: { type: "string" },
+        },
       },
-    },
-  );
+    );
+  } catch (summaryErr: any) {
+    console.error(`[porters] summary generation failed:`, summaryErr?.message ?? summaryErr);
+  }
+
+  const highForces = forces.filter((f) => f.intensity === "high").map((f) => FORCE_LABELS[f.force]);
+  const fallbackSummary = highForces.length > 0
+    ? `The most critical forces are ${highForces.join(", ")}. Focus strategic response on these.`
+    : `Industry structure is balanced. No single force dominates.`;
 
   return {
     industry,
     forces,
-    overallStructure: String(summaryResp?.overallStructure ?? "").trim(),
-    summary: String(summaryResp?.summary ?? "").trim(),
+    overallStructure: String(summaryResp?.overallStructure ?? "").trim() || `Analysis of ${industry} across all five Porter's forces.`,
+    summary: String(summaryResp?.summary ?? "").trim() || fallbackSummary,
   };
 }
