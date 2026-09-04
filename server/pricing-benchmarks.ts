@@ -81,6 +81,20 @@ export const BENCHMARK_SOURCES: BenchmarkSource[] = [
     year: 2026,
   },
   {
+    key: "consultfees-strategy-2026",
+    publisher: "ConsultFees",
+    title: "Strategy Consultant Fees: 2026 Benchmarks & Pricing Guide",
+    url: "https://consultfees.com/use-cases/strategy-consultants",
+    year: 2026,
+  },
+  {
+    key: "markcmo-audit-2026",
+    publisher: "MarkCMO",
+    title: "Marketing Audit Services — Standalone Audit Pricing",
+    url: "https://markcmo.com/marketing-audit",
+    year: 2026,
+  },
+  {
     key: "averi-2026",
     publisher: "Averi",
     title: "Fractional CMO vs. Full-Time CMO 2026 Cost Breakdown",
