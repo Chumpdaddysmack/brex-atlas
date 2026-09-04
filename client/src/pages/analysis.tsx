@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Component, ReactNode, useEffect, useMemo, useState } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -63,6 +63,78 @@ const STEPS = [
 function statusIndex(status: string) {
   const order = ["queued", "extracting", "competitors", "strategy", "sow", "frameworks", "done", "error"];
   return order.indexOf(status);
+}
+
+// Safe JSON.parse — returns null on any failure instead of throwing.
+// Also recursively normalizes any string-that-should-be-array fields: if a
+// known list key comes back as a string (e.g. LLM leaked XML into offerings),
+// we split-and-clean instead of letting .map() blow up the render.
+const ARRAY_KEYS = new Set([
+  "offerings", "valueProps", "evidenceElements", "strengths", "weaknesses",
+  "opportunities", "threats", "quickWins", "positioningGaps",
+  "messagingRecommendations", "aeoRecommendations", "contentPillars",
+  "sampleTitles", "channelMix", "ninetyDayPlan", "outcomes",
+  "citations", "priceTiers", "hookIdeas", "items", "findings", "forces",
+  "pillars", "deliverables", "weeks", "posts", "tags", "sources",
+]);
+
+function normalizeArrays(node: any): any {
+  if (Array.isArray(node)) return node.map(normalizeArrays);
+  if (node && typeof node === "object") {
+    const out: any = {};
+    for (const [k, v] of Object.entries(node)) {
+      if (ARRAY_KEYS.has(k) && !Array.isArray(v)) {
+        // LLM leaked a string/object into a list field — coerce to empty array
+        // so downstream .map() calls don't crash the whole page.
+        console.warn(`[analysis] coercing non-array field '${k}' to []`, v);
+        out[k] = [];
+      } else {
+        out[k] = normalizeArrays(v);
+      }
+    }
+    return out;
+  }
+  return node;
+}
+
+function safeParse<T = any>(raw: string | null | undefined): T | null {
+  if (!raw) return null;
+  try {
+    return normalizeArrays(JSON.parse(raw)) as T;
+  } catch (err) {
+    console.error("[analysis] JSON.parse failed", err, raw?.slice(0, 200));
+    return null;
+  }
+}
+
+// React error boundary — catches render-time errors and shows a readable
+// message instead of blanking the whole app to white.
+class SectionErrorBoundary extends Component<
+  { label: string; children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(err: Error) { console.error("[analysis] render error", err); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
+          <div className="font-semibold text-destructive mb-1">
+            Couldn't render the {this.props.label} section
+          </div>
+          <div className="text-muted-foreground text-xs font-mono">
+            {this.state.error.message}
+          </div>
+          <div className="text-muted-foreground text-xs mt-2">
+            The analysis data returned by the LLM was malformed for this section.
+            Try Edit assumptions → Save & regenerate to re-run.
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export default function AnalysisPage() {
@@ -195,37 +267,47 @@ export default function AnalysisPage() {
             </TabsList>
 
             <TabsContent value="overview" className="space-y-8 pt-6">
-              {analysis.extraction && (
-                <ExtractionSection extraction={JSON.parse(analysis.extraction)} />
-              )}
-              {analysis.competitors && (
-                <CompetitorsSection competitors={JSON.parse(analysis.competitors)} />
-              )}
+              <SectionErrorBoundary label="Website extraction">
+                {analysis.extraction && (
+                  <ExtractionSection extraction={safeParse(analysis.extraction)!} />
+                )}
+              </SectionErrorBoundary>
+              <SectionErrorBoundary label="Competitors">
+                {analysis.competitors && (
+                  <CompetitorsSection competitors={safeParse(analysis.competitors)!} />
+                )}
+              </SectionErrorBoundary>
             </TabsContent>
 
             <TabsContent value="strategy" className="space-y-8 pt-6">
-              {analysis.strategy ? (
-                <StrategySection strategy={JSON.parse(analysis.strategy)} />
-              ) : (
-                <Card className="p-6 text-sm text-muted-foreground">Strategy still generating…</Card>
-              )}
+              <SectionErrorBoundary label="Strategy">
+                {analysis.strategy ? (
+                  <StrategySection strategy={safeParse(analysis.strategy)!} />
+                ) : (
+                  <Card className="p-6 text-sm text-muted-foreground">Strategy still generating…</Card>
+                )}
+              </SectionErrorBoundary>
             </TabsContent>
 
             <TabsContent value="sow" className="space-y-8 pt-6">
-              {analysis.sow ? (
-                <SOWSection sow={JSON.parse(analysis.sow)} clientName={analysis.clientName} />
-              ) : (
-                <Card className="p-6 text-sm text-muted-foreground">SOW still generating…</Card>
-              )}
+              <SectionErrorBoundary label="Scope of Work">
+                {analysis.sow ? (
+                  <SOWSection sow={safeParse(analysis.sow)!} clientName={analysis.clientName} />
+                ) : (
+                  <Card className="p-6 text-sm text-muted-foreground">SOW still generating…</Card>
+                )}
+              </SectionErrorBoundary>
             </TabsContent>
 
             <TabsContent value="frameworks" className="space-y-8 pt-6">
-              <FrameworksSection
-                swot={analysis.swot ? (JSON.parse(analysis.swot) as SwotAnalysis) : null}
-                pestel={analysis.pestel ? (JSON.parse(analysis.pestel) as PestelAnalysis) : null}
-                porters={analysis.porters ? (JSON.parse(analysis.porters) as PortersFiveForces) : null}
-                status={analysis.status}
-              />
+              <SectionErrorBoundary label="Strategic Frameworks">
+                <FrameworksSection
+                  swot={safeParse<SwotAnalysis>(analysis.swot)}
+                  pestel={safeParse<PestelAnalysis>(analysis.pestel)}
+                  porters={safeParse<PortersFiveForces>(analysis.porters)}
+                  status={analysis.status}
+                />
+              </SectionErrorBoundary>
             </TabsContent>
           </Tabs>
         )}

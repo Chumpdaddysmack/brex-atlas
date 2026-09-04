@@ -19,6 +19,39 @@ export const client = REAL_ANTHROPIC
 
 export const MODEL = REAL_ANTHROPIC ? "claude-sonnet-5" : "claude_sonnet_4_6";
 
+// Fields the app treats as string arrays. If the LLM leaks something else
+// into these (XML tool-syntax, a stringified list, a single string, etc.),
+// coerce to [] rather than let downstream .map() calls crash the client.
+const ARRAY_STRING_FIELDS = new Set([
+  "offerings", "valueProps", "evidenceElements", "quickWins",
+  "positioningGaps", "messagingRecommendations", "aeoRecommendations",
+  "sampleTitles", "outcomes", "tags", "deliverables", "strengths",
+  "weaknesses", "hookIdeas",
+]);
+
+export function sanitizeLlmJson(node: any): any {
+  if (Array.isArray(node)) return node.map(sanitizeLlmJson);
+  if (node && typeof node === "object") {
+    const out: any = {};
+    for (const [k, v] of Object.entries(node)) {
+      if (ARRAY_STRING_FIELDS.has(k) && !Array.isArray(v)) {
+        console.warn(`[llm] coercing malformed '${k}' from ${typeof v} to []. value=${JSON.stringify(v).slice(0, 120)}`);
+        // If it's a string that looks like a delimited list, try to salvage.
+        if (typeof v === "string" && !v.includes("<")) {
+          const parts = v.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+          out[k] = parts.length > 0 ? parts : [];
+        } else {
+          out[k] = [];
+        }
+      } else {
+        out[k] = sanitizeLlmJson(v);
+      }
+    }
+    return out;
+  }
+  return node;
+}
+
 export function extractJson(text: string): any {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const src = fenced ? fenced[1] : text;
@@ -118,7 +151,7 @@ export async function llmJson(
           console.log(
             `[llmJson] tool_use hit. shape=${shape} stop=${stopReason} usage=${JSON.stringify(usage)}`,
           );
-          return inp;
+          return sanitizeLlmJson(inp);
         }
       }
 
@@ -159,7 +192,7 @@ export async function llmJson(
   console.log(`[llmJson] text path. stop=${stopReason} textLen=${text.length} usage=${JSON.stringify(usage)}`);
 
   try {
-    return extractJson(text);
+    return sanitizeLlmJson(extractJson(text));
   } catch (e: any) {
     const tail = text.slice(-500);
     console.error(
