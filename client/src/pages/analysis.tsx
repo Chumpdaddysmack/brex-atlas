@@ -78,14 +78,20 @@ const ARRAY_KEYS = new Set([
   "pillars", "deliverables", "weeks", "posts", "tags", "sources",
 ]);
 
+function stripToolLeakage(s: string): string {
+  if (!s || typeof s !== "string") return s;
+  const cutMatch = s.match(/(&lt;|<)\s*\/?(parameter|positioning|valueProps|offerings|evidenceElements|strengths|weaknesses|opportunities|threats|item|quickWins|invoke|function|tool_use|antml:)/i);
+  const cut = cutMatch ? s.slice(0, cutMatch.index).trim() : s;
+  return cut.replace(/[\s,;<>"]+$/, "").trim();
+}
+
 function normalizeArrays(node: any): any {
+  if (typeof node === "string") return stripToolLeakage(node);
   if (Array.isArray(node)) return node.map(normalizeArrays);
   if (node && typeof node === "object") {
     const out: any = {};
     for (const [k, v] of Object.entries(node)) {
       if (ARRAY_KEYS.has(k) && !Array.isArray(v)) {
-        // LLM leaked a string/object into a list field — coerce to empty array
-        // so downstream .map() calls don't crash the whole page.
         console.warn(`[analysis] coercing non-array field '${k}' to []`, v);
         out[k] = [];
       } else {

@@ -29,7 +29,28 @@ const ARRAY_STRING_FIELDS = new Set([
   "weaknesses", "hookIdeas",
 ]);
 
+// Strip leaked Anthropic tool-syntax XML from a string value.
+// The proxy fallback occasionally leaks fragments like
+//   `Some text</positioningStatement> <parameter name="valueProps"> <parameter name="item">More text`
+// into what should be a clean string. Cut at the first stray XML/tool tag
+// and trim, so the visible content is just the leading real prose.
+function stripToolLeakage(s: string): string {
+  if (!s || typeof s !== "string") return s;
+  // Cut at the first HTML-encoded or raw XML/tool tag we recognize
+  const cutMatch = s.match(/(&lt;|<)\s*\/?(parameter|positioning|valueProps|offerings|evidenceElements|strengths|weaknesses|opportunities|threats|item|quickWins|invoke|function|tool_use|antml:)/i);
+  const cut = cutMatch ? s.slice(0, cutMatch.index).trim() : s;
+  // Also collapse stray trailing punctuation left by the cut
+  return cut.replace(/[\s,;<>"]+$/, "").trim();
+}
+
 export function sanitizeLlmJson(node: any): any {
+  if (typeof node === "string") {
+    const cleaned = stripToolLeakage(node);
+    if (cleaned !== node) {
+      console.warn(`[llm] stripped tool-leak from string. before=${node.slice(0, 80)}... after=${cleaned.slice(0, 80)}`);
+    }
+    return cleaned;
+  }
   if (Array.isArray(node)) return node.map(sanitizeLlmJson);
   if (node && typeof node === "object") {
     const out: any = {};
@@ -37,7 +58,7 @@ export function sanitizeLlmJson(node: any): any {
       if (ARRAY_STRING_FIELDS.has(k) && !Array.isArray(v)) {
         console.warn(`[llm] coercing malformed '${k}' from ${typeof v} to []. value=${JSON.stringify(v).slice(0, 120)}`);
         // If it's a string that looks like a delimited list, try to salvage.
-        if (typeof v === "string" && !v.includes("<")) {
+        if (typeof v === "string" && !v.includes("<") && !v.includes("&lt;")) {
           const parts = v.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
           out[k] = parts.length > 0 ? parts : [];
         } else {
