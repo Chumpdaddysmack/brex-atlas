@@ -1791,8 +1791,6 @@ function renderSwotPdf(doc: PDFKit.PDFDocument, swot: SwotAnalysis) {
 
   if (swot.summary) {
     doc.moveDown(0.6);
-    doc.rect(72, doc.y, 468, 0).stroke(BRAND.border);
-    doc.moveDown(0.3);
     doc.fillColor("#0F766E").font(FONTS.sansBold).fontSize(8)
       .text("STRATEGIC READ", 72, doc.y);
     doc.moveDown(0.2);
@@ -1800,47 +1798,54 @@ function renderSwotPdf(doc: PDFKit.PDFDocument, swot: SwotAnalysis) {
       .text(swot.summary, 72, doc.y, { width: 468, lineGap: 2 });
   }
 
-  // 2x2 grid
+  // Four full-width stacked sections — no fixed cells, no clipping.
+  // Reflows across pages naturally without abandoning columns mid-quadrant.
   doc.moveDown(1);
-  const startY = doc.y;
-  const col1X = 72;
-  const col2X = 320;
-  const cellW = 218;
-  const cellH = 260;
-
-  drawSwotCell(doc, col1X, startY, cellW, cellH, "STRENGTHS", "#059669", swot.strengths);
-  drawSwotCell(doc, col2X, startY, cellW, cellH, "WEAKNESSES", "#DC2626", swot.weaknesses);
-  drawSwotCell(doc, col1X, startY + cellH + 10, cellW, cellH, "OPPORTUNITIES", "#0284C7", swot.opportunities);
-  drawSwotCell(doc, col2X, startY + cellH + 10, cellW, cellH, "THREATS", "#B45309", swot.threats);
+  renderSwotSection(doc, "STRENGTHS", "#059669", swot.strengths);
+  renderSwotSection(doc, "WEAKNESSES", "#DC2626", swot.weaknesses);
+  renderSwotSection(doc, "OPPORTUNITIES", "#0284C7", swot.opportunities);
+  renderSwotSection(doc, "THREATS", "#B45309", swot.threats);
 }
 
-function drawSwotCell(
+function renderSwotSection(
   doc: PDFKit.PDFDocument,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
   label: string,
   color: string,
   items: { id: string; title: string; evidence: string }[],
 ) {
-  doc.rect(x, y, w, h).fillColor("#FFFFFF").fill().strokeColor(BRAND.border).lineWidth(1).rect(x, y, w, h).stroke();
-  doc.rect(x, y, w, 22).fill(color);
-  doc.fillColor("#FFFFFF").font(FONTS.sansBold).fontSize(9).text(label, x + 10, y + 7);
+  if (!items || items.length === 0) return;
 
-  let ty = y + 30;
-  const maxY = y + h - 8;
-  (items ?? []).forEach((item) => {
-    if (ty >= maxY - 20) return;
-    doc.fillColor(color).font(FONTS.sansBold).fontSize(8).text(item.id, x + 10, ty);
-    doc.fillColor(BRAND.text).font(FONTS.sansBold).fontSize(9)
-      .text(item.title, x + 32, ty - 1, { width: w - 42, ellipsis: true });
-    ty = doc.y + 1;
-    if (ty >= maxY - 8) return;
-    doc.fillColor(BRAND.muted).font(FONTS.sans).fontSize(8)
-      .text(item.evidence, x + 32, ty, { width: w - 42, lineGap: 1.5 });
-    ty = doc.y + 8;
+  // Section header — always fits, will page-break if needed
+  if (doc.y > 700) doc.addPage();
+
+  const headerY = doc.y;
+  const headerW = 468;
+  const headerH = 22;
+  doc.rect(72, headerY, headerW, headerH).fill(color);
+  doc.fillColor("#FFFFFF").font(FONTS.sansBold).fontSize(10)
+    .text(label, 82, headerY + 6);
+  doc.y = headerY + headerH + 8;
+
+  items.forEach((item) => {
+    if (doc.y > 720) doc.addPage();
+
+    // ID chip + title on one line
+    const itemY = doc.y;
+    doc.fillColor(color).font(FONTS.sansBold).fontSize(9)
+      .text(item.id, 72, itemY, { continued: false });
+    doc.fillColor(BRAND.text).font(FONTS.sansBold).fontSize(10)
+      .text(item.title, 100, itemY - 1, { width: 440, lineGap: 1 });
+
+    // Evidence beneath
+    if (item.evidence) {
+      doc.moveDown(0.15);
+      doc.fillColor(BRAND.muted).font(FONTS.sans).fontSize(9)
+        .text(item.evidence, 100, doc.y, { width: 440, lineGap: 2 });
+    }
+    doc.moveDown(0.5);
   });
+
+  doc.moveDown(0.5);
 }
 
 function renderPestelPdf(doc: PDFKit.PDFDocument, pestel: PestelAnalysis) {
