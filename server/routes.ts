@@ -9,6 +9,7 @@ import { requireAuth } from "./auth";
 import { streamContentPlanPdf, type PdfScope } from "./pdf-export";
 import { buildContentPlanPptx } from "./pptx-export";
 import { llmJson, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
+import { isPerplexityConfigured, pplxAsk } from "./perplexity-search";
 import { calculateRoiProjections, FALLBACK_ASSUMPTIONS, ROI_INFERENCE_SYSTEM_PROMPT } from "./roi-calc";
 import type { RoiAssumptions } from "@shared/schema";
 import type { ContentPlanPayload } from "@shared/schema";
@@ -21,6 +22,38 @@ export async function registerRoutes(
   // Auth endpoints themselves (/api/login, /api/logout, /api/auth/status)
   // are registered in setupAuth() before this and stay unprotected.
   app.use("/api", requireAuth);
+
+  // Config health check — which optional integrations are wired?
+  app.get("/api/config-status", async (_req, res) => {
+    res.json({
+      perplexity: {
+        configured: isPerplexityConfigured(),
+      },
+      anthropic: {
+        configured: !!process.env.CUSTOM_CRED_API_ANTHROPIC_COM_TOKEN,
+      },
+    });
+  });
+
+  // Live smoke test of the Perplexity Sonar client. Returns the number
+  // of citations returned for a trivial query; 0 (or configured=false)
+  // means the key isn't working.
+  app.get("/api/config-status/perplexity-test", async (_req, res) => {
+    if (!isPerplexityConfigured()) {
+      return res.json({ configured: false, ok: false, error: "PERPLEXITY_API_KEY not set" });
+    }
+    const result = await pplxAsk("What is the current US federal funds rate?", { maxTokens: 200 });
+    if (!result) {
+      return res.json({ configured: true, ok: false, error: "pplxAsk returned null — check server logs" });
+    }
+    res.json({
+      configured: true,
+      ok: true,
+      citations: result.citations.length,
+      answerPreview: result.answer.slice(0, 200),
+      sampleCitation: result.citations[0] ?? null,
+    });
+  });
 
   // Create a new analysis and kick off the pipeline (fire-and-forget)
   app.post("/api/analyses", async (req, res) => {
