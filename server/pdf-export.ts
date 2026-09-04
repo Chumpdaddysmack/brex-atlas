@@ -1946,15 +1946,21 @@ function renderPortersPdf(doc: PDFKit.PDFDocument, porters: PortersFiveForces) {
     const intensityColor =
       f.intensity === "high" ? "#DC2626" : f.intensity === "medium" ? "#B45309" : "#059669";
 
-    // Header row
-    doc.rect(72, doc.y, 468, 22).fillColor("#F9FAFB").fill().strokeColor(BRAND.border).lineWidth(0.5).rect(72, doc.y - 22, 468, 22).stroke();
-    const rowY = doc.y - 22;
+    // Header row — capture Y BEFORE any drawing (PDFKit's .fill() does not
+    // advance the text cursor, and doc.y after chained rect/fill/stroke is
+    // unreliable). Pin everything with explicit coordinates, then advance
+    // the text cursor past the header rectangle when we're done.
+    const headerY = doc.y;
+    const headerH = 22;
+    doc.rect(72, headerY, 468, headerH).fillColor("#F9FAFB").fill();
+    doc.rect(72, headerY, 468, headerH).strokeColor(BRAND.border).lineWidth(0.5).stroke();
     doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(11)
-      .text(`${f.id}  ·  ${forceLabels[f.force] ?? f.force}`, 82, rowY + 6);
+      .text(`${f.id}  ·  ${forceLabels[f.force] ?? f.force}`, 82, headerY + 6, { lineBreak: false });
     doc.fillColor(intensityColor).font(FONTS.sansBold).fontSize(9)
-      .text(f.intensity.toUpperCase(), 460, rowY + 7, { width: 70, align: "right" });
+      .text(f.intensity.toUpperCase(), 460, headerY + 7, { width: 70, align: "right", lineBreak: false });
 
-    doc.moveDown(0.3);
+    // Move cursor below header rectangle before drawing body text.
+    doc.y = headerY + headerH + 6;
     doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(10)
       .text(f.rationale, 82, doc.y, { width: 458, lineGap: 2 });
 
