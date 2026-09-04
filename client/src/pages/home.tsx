@@ -53,6 +53,13 @@ const intakeSchema = z.object({
   notes: z.string().optional(),
   includePestel: z.boolean().optional(),
   includePorters: z.boolean().optional(),
+  // Underlying assumptions (all string inputs; parsed to numbers before submit)
+  currentAnnualRevenue: z.string().optional(),
+  currentMarketingBudget: z.string().optional(),
+  grossMarginPct: z.string().optional(),
+  revenueGrowthTargetPct: z.string().optional(),
+  topCompetitors: z.string().optional(),
+  preferredTier: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof intakeSchema>;
@@ -74,16 +81,48 @@ export default function Home() {
       notes: "",
       includePestel: false,
       includePorters: false,
+      currentAnnualRevenue: "",
+      currentMarketingBudget: "",
+      grossMarginPct: "",
+      revenueGrowthTargetPct: "",
+      topCompetitors: "",
+      preferredTier: "",
     },
   });
 
   const submitMutation = useMutation({
     mutationFn: async (values: FormValues) => {
+      // Parse assumption strings → typed numbers/enums for the API
+      const parseNum = (v?: string) => {
+        if (!v) return undefined;
+        const cleaned = String(v).replace(/[$,\s]/g, "");
+        const n = parseFloat(cleaned);
+        return Number.isFinite(n) && n > 0 ? n : undefined;
+      };
+      const assumptions: Record<string, unknown> = {};
+      const rev = parseNum(values.currentAnnualRevenue);
+      const mkt = parseNum(values.currentMarketingBudget);
+      const gm = parseNum(values.grossMarginPct);
+      const grow = parseNum(values.revenueGrowthTargetPct);
+      if (rev !== undefined) assumptions.currentAnnualRevenue = rev;
+      if (mkt !== undefined) assumptions.currentMarketingBudget = mkt;
+      if (gm !== undefined && gm <= 100) assumptions.grossMarginPct = gm;
+      if (grow !== undefined) assumptions.revenueGrowthTargetPct = grow;
+      if (values.topCompetitors?.trim()) assumptions.topCompetitors = values.topCompetitors.trim();
+      if (values.preferredTier && values.preferredTier !== "") assumptions.preferredTier = values.preferredTier;
+
+      const {
+        currentAnnualRevenue: _r, currentMarketingBudget: _b, grossMarginPct: _g,
+        revenueGrowthTargetPct: _t, topCompetitors: _c, preferredTier: _p,
+        ...intake
+      } = values;
+
       const normalized = {
-        ...values,
-        clientUrl: values.clientUrl.startsWith("http")
-          ? values.clientUrl
-          : `https://${values.clientUrl}`,
+        ...intake,
+        clientUrl: intake.clientUrl.startsWith("http")
+          ? intake.clientUrl
+          : `https://${intake.clientUrl}`,
+        assumptions: Object.keys(assumptions).length > 0 ? assumptions : undefined,
       };
       const res = await apiRequest("POST", "/api/analyses", normalized);
       return (await res.json()) as Analysis;
@@ -310,6 +349,110 @@ export default function Home() {
                   </FormItem>
                 )}
               />
+
+              {/* Underlying Assumptions — grounds ROI math + framework outputs in prospect reality */}
+              <div className="space-y-4 rounded-lg border border-accent/30 p-4 bg-accent/5">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">
+                    Underlying assumptions (optional)
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Fill in what you know. These drive the ROI math, growth targets, and framework recommendations.
+                    You can also edit them later on the analysis page.
+                  </p>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="currentAnnualRevenue"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Current annual revenue (USD)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. 5000000" data-testid="input-assumption-revenue" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="currentMarketingBudget"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Current marketing budget (USD/yr)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. 250000" data-testid="input-assumption-marketing-budget" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="grossMarginPct"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Gross margin %</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. 65" data-testid="input-assumption-margin" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="revenueGrowthTargetPct"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Revenue growth target (next 12mo, %)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. 25" data-testid="input-assumption-growth" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={form.control}
+                  name="topCompetitors"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Top 3 known competitors</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Sage Intacct, SAP Business One, Microsoft Dynamics" data-testid="input-assumption-competitors" {...field} />
+                      </FormControl>
+                      <FormDescription className="text-xs">Comma-separated. Feeds directly into SWOT and Porter's Five Forces.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="preferredTier"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Preferred engagement tier</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-assumption-tier">
+                            <SelectValue placeholder="No preference" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="advisor">Advisor — 17% discount</SelectItem>
+                          <SelectItem value="strategist">Strategist — 24% discount</SelectItem>
+                          <SelectItem value="fractional">Fractional — 32% discount</SelectItem>
+                          <SelectItem value="unknown">Not sure yet</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <div className="space-y-3 rounded-lg border border-border/60 p-4 bg-muted/20">
                 <div className="text-sm font-semibold text-foreground">

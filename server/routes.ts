@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import { storage } from "./storage";
-import { intakeSchema } from "@shared/schema";
+import { intakeSchema, assumptionsSchema } from "@shared/schema";
 import { runPipeline } from "./pipeline";
 import { runContentPlanGeneration } from "./content-pipeline";
 import { requireAuth } from "./auth";
@@ -45,6 +45,61 @@ export async function registerRoutes(
   app.get("/api/analyses", async (_req, res) => {
     const rows = await storage.listAnalyses();
     res.json(rows);
+  });
+
+  // Update the underlying assumptions blob for an analysis.
+  // Persists ONLY — the client can call the regenerate endpoint separately
+  // when they want the LLM outputs re-run with the new assumptions.
+  app.patch("/api/analyses/:id/assumptions", async (req, res) => {
+    const existing = await storage.getAnalysis(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    const parsed = assumptionsSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid assumptions", details: parsed.error.flatten() });
+    }
+    // Persist the parsed object; storage layer will marshal to string (SQLite) or jsonb (Supabase).
+    const updated = await storage.updateAnalysis(req.params.id, {
+      assumptions: JSON.stringify(parsed.data),
+    } as any);
+    res.json(updated);
+  });
+
+  // Regenerate the analysis with (optionally) fresh assumptions.
+  // Body may include the new assumptions to persist first; if omitted we
+  // reuse whatever's already saved. Re-runs the full pipeline fire-and-forget.
+  app.post("/api/analyses/:id/regenerate", async (req, res) => {
+    const existing = await storage.getAnalysis(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.status !== "done" && existing.status !== "error") {
+      return res.status(400).json({ error: "Analysis is still running; wait for it to finish before regenerating" });
+    }
+    // Persist any assumptions passed in this request
+    if (req.body && typeof req.body === "object" && Object.keys(req.body).length > 0) {
+      const parsed = assumptionsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid assumptions", details: parsed.error.flatten() });
+      }
+      await storage.updateAnalysis(req.params.id, {
+        assumptions: JSON.stringify(parsed.data),
+      } as any);
+    }
+    // Reset stage state so the pipeline runs clean; keep the row id/assumptions
+    await storage.updateAnalysis(req.params.id, {
+      status: "queued",
+      progress: 0,
+      currentStep: "Regenerating with updated assumptions",
+      errorMessage: null,
+      extraction: null,
+      competitors: null,
+      strategy: null,
+      sow: null,
+      swot: null,
+      pestel: null,
+      porters: null,
+    } as any);
+    runPipeline(req.params.id).catch((err) => console.error("[pipeline] regenerate fatal", err));
+    const updated = await storage.getAnalysis(req.params.id);
+    res.status(202).json(updated);
   });
 
   // -------- Content plan endpoints --------

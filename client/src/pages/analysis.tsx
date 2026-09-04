@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRoute, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AppShell } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -21,6 +25,8 @@ import {
   FileText,
   AlertTriangle,
   Sparkles,
+  Sliders,
+  RotateCw,
 } from "lucide-react";
 import {
   BREX_LINE_ITEMS,
@@ -151,6 +157,7 @@ export default function AnalysisPage() {
             {analysis.industry && <Badge variant="secondary">{analysis.industry}</Badge>}
             {analysis.revenueBand && <Badge variant="secondary">{analysis.revenueBand}</Badge>}
             {analysis.budgetBand && <Badge variant="secondary">{analysis.budgetBand}</Badge>}
+            {isDone && <AssumptionsDialog analysis={analysis} />}
           </div>
         </div>
 
@@ -1353,4 +1360,207 @@ function domainFromUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+// ============================================================================
+// Underlying Assumptions dialog — edit assumptions live with a prospect and
+// optionally regenerate the analysis with the new numbers.
+// ============================================================================
+type AssumptionsForm = {
+  currentAnnualRevenue: string;
+  currentMarketingBudget: string;
+  grossMarginPct: string;
+  revenueGrowthTargetPct: string;
+  topCompetitors: string;
+  preferredTier: string;
+};
+
+function AssumptionsDialog({ analysis }: { analysis: Analysis }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+
+  // Parse existing assumptions JSON from the analysis row into form strings
+  const parseInitial = (): AssumptionsForm => {
+    let saved: any = {};
+    try {
+      saved = analysis.assumptions ? JSON.parse(analysis.assumptions as string) : {};
+    } catch { saved = {}; }
+    return {
+      currentAnnualRevenue: saved.currentAnnualRevenue?.toString() ?? "",
+      currentMarketingBudget: saved.currentMarketingBudget?.toString() ?? "",
+      grossMarginPct: saved.grossMarginPct?.toString() ?? "",
+      revenueGrowthTargetPct: saved.revenueGrowthTargetPct?.toString() ?? "",
+      topCompetitors: saved.topCompetitors ?? "",
+      preferredTier: saved.preferredTier ?? "",
+    };
+  };
+
+  const [form, setForm] = useState<AssumptionsForm>(parseInitial);
+
+  // Re-parse when dialog opens (in case the row updated since mount)
+  useEffect(() => {
+    if (open) setForm(parseInitial());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, analysis.assumptions]);
+
+  // Parse the string form into the API payload
+  function buildPayload(): Record<string, unknown> {
+    const parseNum = (v: string) => {
+      if (!v) return undefined;
+      const cleaned = v.replace(/[$,\s]/g, "");
+      const n = parseFloat(cleaned);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+    const out: Record<string, unknown> = {};
+    const rev = parseNum(form.currentAnnualRevenue);
+    const mkt = parseNum(form.currentMarketingBudget);
+    const gm = parseNum(form.grossMarginPct);
+    const grow = parseNum(form.revenueGrowthTargetPct);
+    if (rev !== undefined) out.currentAnnualRevenue = rev;
+    if (mkt !== undefined) out.currentMarketingBudget = mkt;
+    if (gm !== undefined && gm <= 100) out.grossMarginPct = gm;
+    if (grow !== undefined) out.revenueGrowthTargetPct = grow;
+    if (form.topCompetitors.trim()) out.topCompetitors = form.topCompetitors.trim();
+    if (form.preferredTier && form.preferredTier !== "") out.preferredTier = form.preferredTier;
+    return out;
+  }
+
+  // Save without regenerating — just persist the JSON blob
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/analyses/${analysis.id}/assumptions`, buildPayload());
+      return await res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/analyses", analysis.id] });
+      toast({ title: "Assumptions saved", description: "Click Regenerate to re-run the analysis with these values." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Save failed", description: err?.message ?? "Try again.", variant: "destructive" });
+    },
+  });
+
+  // Save AND regenerate the analysis with these assumptions
+  const regenerateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/analyses/${analysis.id}/regenerate`, buildPayload());
+      return await res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/analyses", analysis.id] });
+      setOpen(false);
+      toast({
+        title: "Regeneration started",
+        description: "The analysis is re-running with the updated assumptions. Refresh in ~2 minutes.",
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Regenerate failed", description: err?.message ?? "Try again.", variant: "destructive" });
+    },
+  });
+
+  const busy = saveMutation.isPending || regenerateMutation.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" data-testid="btn-edit-assumptions">
+          <Sliders className="h-3.5 w-3.5 mr-1.5" />
+          Edit assumptions
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Underlying assumptions</DialogTitle>
+          <DialogDescription>
+            These drive the ROI math, growth targets, and framework recommendations.
+            Save to persist, or Regenerate to re-run the full analysis with new numbers.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Current annual revenue (USD)</Label>
+              <Input
+                placeholder="e.g. 5000000"
+                value={form.currentAnnualRevenue}
+                onChange={(e) => setForm({ ...form, currentAnnualRevenue: e.target.value })}
+                data-testid="dialog-assumption-revenue"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Current marketing budget (USD/yr)</Label>
+              <Input
+                placeholder="e.g. 250000"
+                value={form.currentMarketingBudget}
+                onChange={(e) => setForm({ ...form, currentMarketingBudget: e.target.value })}
+                data-testid="dialog-assumption-marketing-budget"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Gross margin %</Label>
+              <Input
+                placeholder="e.g. 65"
+                value={form.grossMarginPct}
+                onChange={(e) => setForm({ ...form, grossMarginPct: e.target.value })}
+                data-testid="dialog-assumption-margin"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Revenue growth target (12mo, %)</Label>
+              <Input
+                placeholder="e.g. 25"
+                value={form.revenueGrowthTargetPct}
+                onChange={(e) => setForm({ ...form, revenueGrowthTargetPct: e.target.value })}
+                data-testid="dialog-assumption-growth"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Top 3 known competitors</Label>
+            <Input
+              placeholder="e.g. Sage Intacct, SAP Business One, Microsoft Dynamics"
+              value={form.topCompetitors}
+              onChange={(e) => setForm({ ...form, topCompetitors: e.target.value })}
+              data-testid="dialog-assumption-competitors"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Preferred engagement tier</Label>
+            <Select value={form.preferredTier} onValueChange={(v) => setForm({ ...form, preferredTier: v })}>
+              <SelectTrigger data-testid="dialog-assumption-tier"><SelectValue placeholder="No preference" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="advisor">Advisor — 17% discount</SelectItem>
+                <SelectItem value="strategist">Strategist — 24% discount</SelectItem>
+                <SelectItem value="fractional">Fractional — 32% discount</SelectItem>
+                <SelectItem value="unknown">Not sure yet</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button
+            variant="outline"
+            onClick={() => saveMutation.mutate()}
+            disabled={busy}
+            data-testid="btn-save-assumptions"
+          >
+            {saveMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+            Save only
+          </Button>
+          <Button
+            onClick={() => regenerateMutation.mutate()}
+            disabled={busy}
+            data-testid="btn-regenerate-analysis"
+          >
+            {regenerateMutation.isPending
+              ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              : <RotateCw className="h-3.5 w-3.5 mr-1.5" />}
+            Save & regenerate
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }

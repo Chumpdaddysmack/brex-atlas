@@ -15,6 +15,8 @@ export const analyses = sqliteTable("analyses", {
   // Framework opt-ins (from intake form)
   includePestel: integer("include_pestel").default(0),   // 0/1
   includePorters: integer("include_porters").default(0), // 0/1
+  // Underlying assumptions (JSON blob) — editable on intake AND analysis page
+  assumptions: text("assumptions"),  // JSON string of Assumptions type
   status: text("status").notNull(), // queued | extracting | competitors | strategy | sow | frameworks | done | error
   progress: integer("progress").notNull().default(0), // 0-100
   currentStep: text("current_step"), // label of currently-running step
@@ -41,7 +43,21 @@ export const insertAnalysisSchema = createInsertSchema(analyses).pick({
   notes: true,
   includePestel: true,
   includePorters: true,
+  assumptions: true,
 });
+
+// Underlying Assumptions — what the analysis is grounded in. Every field optional so
+// the intake can accept partials; each field is either a plain USD number, a number,
+// a short string, or a small enum. Persisted as JSON in analyses.assumptions.
+export const assumptionsSchema = z.object({
+  currentAnnualRevenue: z.number().positive().nullable().optional(),   // USD
+  currentMarketingBudget: z.number().positive().nullable().optional(), // USD/yr
+  grossMarginPct: z.number().min(0).max(100).nullable().optional(),    // 0-100
+  revenueGrowthTargetPct: z.number().min(0).nullable().optional(),     // % lift next 12 mo
+  topCompetitors: z.string().max(500).nullable().optional(),           // comma-separated
+  preferredTier: z.enum(["advisor", "strategist", "fractional", "unknown"]).nullable().optional(),
+});
+export type Assumptions = z.infer<typeof assumptionsSchema>;
 
 // Extend with validation
 export const intakeSchema = insertAnalysisSchema.extend({
@@ -55,6 +71,8 @@ export const intakeSchema = insertAnalysisSchema.extend({
   // Accept booleans in the intake payload; storage/DB uses 0/1.
   includePestel: z.union([z.boolean(), z.number()]).optional().default(false),
   includePorters: z.union([z.boolean(), z.number()]).optional().default(false),
+  // Assumptions can come in as either a parsed object OR a JSON string (client sends object; DB stores string)
+  assumptions: z.union([z.string(), assumptionsSchema]).nullable().optional(),
 });
 
 export type InsertAnalysis = z.infer<typeof intakeSchema>;

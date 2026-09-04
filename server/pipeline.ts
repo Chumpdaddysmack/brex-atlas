@@ -4,7 +4,30 @@ import { generateSwot } from "./swot";
 import { generatePestel } from "./pestel";
 import { generatePorters } from "./porters";
 import { injectRationale } from "./rationale";
-import type { SwotAnalysis, PestelAnalysis, PortersFiveForces, Strategy, SOW, Extraction, Competitor } from "@shared/schema";
+import type { SwotAnalysis, PestelAnalysis, PortersFiveForces, Strategy, SOW, Extraction, Competitor, Assumptions } from "@shared/schema";
+
+// Format the assumptions blob into a bracketed prompt block. Empty/null yields "".
+// Called from every LLM stage so the model grounds outputs in prospect reality.
+function formatAssumptions(raw: unknown): string {
+  if (!raw) return "";
+  let a: Partial<Assumptions>;
+  try {
+    a = typeof raw === "string" ? JSON.parse(raw) : (raw as Partial<Assumptions>);
+  } catch {
+    return "";
+  }
+  if (!a || typeof a !== "object") return "";
+  const rows: string[] = [];
+  const fmtUsd = (n: number) => n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `$${(n / 1_000).toFixed(0)}K` : `$${n}`;
+  if (a.currentAnnualRevenue) rows.push(`- Current annual revenue: ${fmtUsd(a.currentAnnualRevenue)}`);
+  if (a.currentMarketingBudget) rows.push(`- Current annual marketing budget: ${fmtUsd(a.currentMarketingBudget)}`);
+  if (a.grossMarginPct != null) rows.push(`- Gross margin: ${a.grossMarginPct}%`);
+  if (a.revenueGrowthTargetPct != null) rows.push(`- Revenue growth target (next 12 mo): ${a.revenueGrowthTargetPct}%`);
+  if (a.topCompetitors) rows.push(`- Top competitors named by client: ${a.topCompetitors}`);
+  if (a.preferredTier && a.preferredTier !== "unknown") rows.push(`- Client's preferred engagement tier: ${a.preferredTier} (Advisor=17% / Strategist=24% / Fractional=32% bundle discount)`);
+  if (rows.length === 0) return "";
+  return `\n\n=== CLIENT-PROVIDED ASSUMPTIONS (ground your ROI math, growth targets, and tier recommendations in these) ===\n${rows.join("\n")}\n`;
+}
 
 // ------------ Utilities ------------
 
@@ -57,9 +80,10 @@ export async function runPipeline(id: string) {
     });
 
     const site = await fetchSite(record.clientUrl);
+    const assumptionsBlock = formatAssumptions((record as any).assumptions);
     const extraction = await llmJson(
       SYS_EXTRACT,
-      `Client name: ${record.clientName}\nClient URL: ${record.clientUrl}\nIndustry (self-reported, may be blank): ${record.industry ?? ""}\nStated goals: ${record.goals ?? ""}\n\n=== WEBSITE TEXT ===\n${site.textSummary}`,
+      `Client name: ${record.clientName}\nClient URL: ${record.clientUrl}\nIndustry (self-reported, may be blank): ${record.industry ?? ""}\nStated goals: ${record.goals ?? ""}${assumptionsBlock}\n\n=== WEBSITE TEXT ===\n${site.textSummary}`,
       3500,
       SCHEMA_EXTRACT,
     );
@@ -91,10 +115,10 @@ export async function runPipeline(id: string) {
       competitors: JSON.stringify(competitors),
     });
 
-    // Stage 3: Strategy
+    // Stage 3: Strategy — assumptions grounding is CRITICAL here for ROI math
     const strategy = await llmJson(
       SYS_STRATEGY,
-      `Client: ${record.clientName}\nGoals: ${record.goals ?? "(not specified)"}\nRevenue band: ${record.revenueBand ?? "(not specified)"}\nBudget band: ${record.budgetBand ?? "(not specified)"}\n\nEXTRACTION:\n${JSON.stringify(extraction).slice(0, 5000)}\n\nCOMPETITORS:\n${JSON.stringify(competitors).slice(0, 5000)}`,
+      `Client: ${record.clientName}\nGoals: ${record.goals ?? "(not specified)"}\nRevenue band: ${record.revenueBand ?? "(not specified)"}\nBudget band: ${record.budgetBand ?? "(not specified)"}${assumptionsBlock}\n\nEXTRACTION:\n${JSON.stringify(extraction).slice(0, 5000)}\n\nCOMPETITORS:\n${JSON.stringify(competitors).slice(0, 5000)}`,
       12000,
       SCHEMA_STRATEGY,
     );
@@ -106,10 +130,10 @@ export async function runPipeline(id: string) {
       strategy: JSON.stringify(strategy),
     });
 
-    // Stage 4: Scope of Work
+    // Stage 4: Scope of Work — tier preference from assumptions steers tier recommendation
     const sow = await llmJson(
       SYS_SOW,
-      `Client: ${record.clientName}\nBudget band: ${record.budgetBand ?? "(not specified)"}\nRevenue band: ${record.revenueBand ?? "(not specified)"}\n\nSTRATEGY:\n${JSON.stringify(strategy).slice(0, 6000)}`,
+      `Client: ${record.clientName}\nBudget band: ${record.budgetBand ?? "(not specified)"}\nRevenue band: ${record.revenueBand ?? "(not specified)"}${assumptionsBlock}\n\nSTRATEGY:\n${JSON.stringify(strategy).slice(0, 6000)}`,
       10000,
       SCHEMA_SOW,
     );
@@ -133,7 +157,7 @@ export async function runPipeline(id: string) {
         industry: record.industry,
         extraction: extraction as Extraction,
         competitors: competitors as Competitor[],
-        notes: record.notes,
+        notes: [record.notes, assumptionsBlock].filter(Boolean).join("\n\n"),
       });
 
       // Infer industry from SWOT (which infers from extraction) for PESTEL/Porter's

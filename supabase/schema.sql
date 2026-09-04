@@ -40,6 +40,7 @@ create table if not exists public.analyses (
 -- Idempotent alter for pre-existing installs (Sep 2026 migration)
 alter table public.analyses add column if not exists include_pestel  boolean not null default false;
 alter table public.analyses add column if not exists include_porters boolean not null default false;
+alter table public.analyses add column if not exists assumptions jsonb;
 alter table public.analyses add column if not exists swot    jsonb;
 alter table public.analyses add column if not exists pestel  jsonb;
 alter table public.analyses add column if not exists porters jsonb;

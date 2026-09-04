@@ -59,6 +59,7 @@ sqlite.exec(`
     notes TEXT,
     include_pestel INTEGER DEFAULT 0,
     include_porters INTEGER DEFAULT 0,
+    assumptions TEXT,
     status TEXT NOT NULL,
     progress INTEGER NOT NULL DEFAULT 0,
     current_step TEXT,
@@ -113,11 +114,28 @@ for (const sql of [
   "ALTER TABLE analyses ADD COLUMN swot TEXT",
   "ALTER TABLE analyses ADD COLUMN pestel TEXT",
   "ALTER TABLE analyses ADD COLUMN porters TEXT",
+  "ALTER TABLE analyses ADD COLUMN assumptions TEXT",
 ]) {
   try { sqlite.exec(sql); } catch { /* column already exists */ }
 }
 
 export const db = drizzle(sqlite);
+
+// ------- Helpers for Assumptions JSON marshaling ---------------------------
+// SQLite stores as TEXT; Postgres stores as jsonb. Both call sites need
+// consistent normalization: intake can send an object OR a string OR null.
+function assumptionsToString(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === "string") return v;
+  try { return JSON.stringify(v); } catch { return null; }
+}
+function parseAssumptionsForRow(v: unknown): any {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    try { return JSON.parse(v); } catch { return null; }
+  }
+  return v;
+}
 
 export class SqliteStorage implements IStorage {
   async createAnalysis(input: InsertAnalysis): Promise<Analysis> {
@@ -134,6 +152,7 @@ export class SqliteStorage implements IStorage {
       notes: input.notes ?? null,
       includePestel: input.includePestel ? 1 : 0,
       includePorters: input.includePorters ? 1 : 0,
+      assumptions: assumptionsToString((input as any).assumptions),
       status: "queued",
       progress: 0,
       currentStep: "Queued",
@@ -243,6 +262,7 @@ type AnalysisRow = {
   notes: string | null;
   include_pestel: boolean | number | null;
   include_porters: boolean | number | null;
+  assumptions: any; // jsonb in postgres, TEXT in sqlite
   status: string;
   progress: number;
   current_step: string | null;
@@ -303,6 +323,7 @@ function analysisFromRow(r: AnalysisRow): Analysis {
     notes: r.notes,
     includePestel: r.include_pestel ? 1 : 0,
     includePorters: r.include_porters ? 1 : 0,
+    assumptions: r.assumptions == null ? null : (typeof r.assumptions === "string" ? r.assumptions : JSON.stringify(r.assumptions)),
     status: r.status,
     progress: r.progress,
     currentStep: r.current_step,
@@ -330,6 +351,10 @@ function analysisToRow(patch: Partial<Analysis>): Partial<AnalysisRow> {
   if (patch.notes !== undefined) out.notes = patch.notes;
   if ((patch as any).includePestel !== undefined) out.include_pestel = !!(patch as any).includePestel;
   if ((patch as any).includePorters !== undefined) out.include_porters = !!(patch as any).includePorters;
+  if ((patch as any).assumptions !== undefined) {
+    const a = (patch as any).assumptions;
+    out.assumptions = a == null ? null : (typeof a === "string" ? JSON.parse(a) : a);
+  }
   if (patch.status !== undefined) out.status = patch.status;
   if (patch.progress !== undefined) out.progress = patch.progress;
   if (patch.currentStep !== undefined) out.current_step = patch.currentStep;
@@ -428,6 +453,7 @@ export class SupabaseStorage implements IStorage {
       notes: input.notes ?? null,
       include_pestel: !!input.includePestel,
       include_porters: !!input.includePorters,
+      assumptions: parseAssumptionsForRow((input as any).assumptions),
       status: "queued",
       progress: 0,
       current_step: "Queued",
