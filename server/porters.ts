@@ -133,12 +133,13 @@ ${citationsPreview}`;
     });
   }
 
+  const rawDrivers = Array.isArray(structured?.drivers) ? structured.drivers : [];
   return {
     id: `P5F-${forceIdSlug(force)}`,
     force,
     intensity: validIntensity(structured?.intensity),
     rationale: String(structured?.rationale ?? "").trim(),
-    drivers: (structured?.drivers ?? []).map((d: any) => String(d).trim()).filter((d: string) => d),
+    drivers: rawDrivers.map((d: any) => String(d).trim()).filter((d: string) => d),
     sources,
   };
 }
@@ -160,12 +161,13 @@ Do NOT invent citations \u2014 leave sources empty.`;
 
   const structured = await llmJson(sys, question, 1200, SCHEMA_STRUCTURE);
 
+  const rawDrivers = Array.isArray(structured?.drivers) ? structured.drivers : [];
   return {
     id: `P5F-${forceIdSlug(force)}`,
     force,
     intensity: validIntensity(structured?.intensity),
     rationale: String(structured?.rationale ?? "").trim(),
-    drivers: (structured?.drivers ?? []).map((d: any) => String(d).trim()).filter((d: string) => d),
+    drivers: rawDrivers.map((d: any) => String(d).trim()).filter((d: string) => d),
     sources: [],
   };
 }

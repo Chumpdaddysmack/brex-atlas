@@ -112,7 +112,8 @@ ${citationsPreview}`;
 
   const structured = await llmJson(SYS_STRUCTURE, structUser, 2000, SCHEMA_STRUCTURE);
 
-  const findings: PestelFinding[] = (structured?.findings ?? [])
+  const rawFindings = Array.isArray(structured?.findings) ? structured.findings : [];
+  const findings: PestelFinding[] = rawFindings
     .slice(0, 4)
     .map((f: any, i: number) => {
       const idxs: number[] = Array.isArray(f?.sourceIndexes) ? f.sourceIndexes : [];
@@ -170,7 +171,8 @@ Do NOT invent citations — leave sources empty for now.`;
 
   const structured = await llmJson(sys, question, 1500, SCHEMA_STRUCTURE);
 
-  return (structured?.findings ?? []).slice(0, 3).map((f: any, i: number) => ({
+  const rawFindings2 = Array.isArray(structured?.findings) ? structured.findings : [];
+  return rawFindings2.slice(0, 3).map((f: any, i: number) => ({
     id: `PESTEL-${capitalize(factor)}-${i + 1}`,
     factor,
     insight: String(f?.insight ?? "").trim(),
