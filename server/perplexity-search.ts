@@ -65,32 +65,49 @@ export async function pplxAsk(
     search_recency_filter: options?.recency ?? "year",
   };
 
-  try {
-    const res = await fetch(PPLX_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${PPLX_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(45_000),
-    });
+  // Retry once on 429 / 5xx / network error with backoff. Handles the parallel
+  // fan-out case where PESTEL (6) + Porter's (5) = 11 concurrent Sonar calls
+  // trip Perplexity's rate limiter mid-run.
+  const maxAttempts = 2;
+  let lastErr: string = "";
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(PPLX_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${PPLX_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(45_000),
+      });
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error(`[pplx] ${res.status} ${res.statusText}: ${errText.slice(0, 300)}`);
-      return null;
-    }
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        lastErr = `${res.status} ${res.statusText}: ${errText.slice(0, 200)}`;
+        console.error(`[pplx] attempt ${attempt}/${maxAttempts} — ${lastErr}`);
+        // Retry on rate limit or server error
+        if ((res.status === 429 || res.status >= 500) && attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
+          continue;
+        }
+        return null;
+      }
 
-    const data: any = await res.json();
-    const answer: string =
-      data?.choices?.[0]?.message?.content ??
-      data?.choices?.[0]?.delta?.content ??
-      "";
+      const data: any = await res.json();
+      const answer: string =
+        data?.choices?.[0]?.message?.content ??
+        data?.choices?.[0]?.delta?.content ??
+        "";
 
-    // Perplexity returns citations as an array of URL strings OR objects.
-    // Normalize into PplxCitation with best-effort title inference.
-    const rawCites: any[] = data?.citations ?? data?.choices?.[0]?.citations ?? [];
+      // Perplexity returns citations under several possible keys depending on
+      // Sonar model + API version: `citations` (legacy), `choices[0].citations`,
+      // or `search_results` (current sonar-pro). Merge all sources.
+      const rawCites: any[] = [
+        ...(Array.isArray(data?.citations) ? data.citations : []),
+        ...(Array.isArray(data?.choices?.[0]?.citations) ? data.choices[0].citations : []),
+        ...(Array.isArray(data?.search_results) ? data.search_results : []),
+      ];
     const citations: PplxCitation[] = rawCites
       .map((c: any): PplxCitation | null => {
         if (typeof c === "string") {
@@ -110,11 +127,23 @@ export async function pplxAsk(
       })
       .filter((c): c is PplxCitation => c !== null);
 
-    return { answer, citations };
-  } catch (err: any) {
-    console.error(`[pplx] request failed: ${String(err?.message ?? err).slice(0, 300)}`);
-    return null;
+      if (citations.length === 0) {
+        console.warn(`[pplx] returned answer with 0 citations for question: ${question.slice(0, 120)}`);
+      }
+
+      return { answer, citations };
+    } catch (err: any) {
+      lastErr = String(err?.message ?? err).slice(0, 200);
+      console.error(`[pplx] attempt ${attempt}/${maxAttempts} network error: ${lastErr}`);
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
+        continue;
+      }
+      return null;
+    }
   }
+  console.error(`[pplx] all attempts exhausted: ${lastErr}`);
+  return null;
 }
 
 function prettyDomain(url: string): string {
