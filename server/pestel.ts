@@ -200,10 +200,20 @@ export async function generatePestel(params: {
 
   console.log(`[pestel] starting deep research for ${clientName} (${industry}). pplx=${isPerplexityConfigured()}`);
 
-  // Fan-out: 6 factors in parallel. Each factor does 1 pplx call + 1 Claude call.
-  const factorResults = await Promise.all(
-    FACTOR_ORDER.map((f) => generateFactor(f, industry, clientName)),
-  );
+  // SERIAL fan-out: 6 factors one at a time. Perplexity Sonar rate-limits
+  // aggressively when many concurrent requests fire; serial per-framework
+  // keeps at most 2 Sonar calls in flight (this framework + Porter's running
+  // in parallel at the pipeline level). Individual factor failures degrade
+  // gracefully to empty findings for that factor.
+  const factorResults: PestelFinding[][] = [];
+  for (const f of FACTOR_ORDER) {
+    try {
+      factorResults.push(await generateFactor(f, industry, clientName));
+    } catch (err: any) {
+      console.error(`[pestel] factor '${f}' failed:`, err?.message ?? err);
+      factorResults.push([]);
+    }
+  }
 
   const findings: PestelFinding[] = factorResults.flat();
 
@@ -216,16 +226,21 @@ ${findings.map((f) => `- [${f.factor}] ${f.insight} (impact: ${f.impact})`).join
 
 Write a 2-3 sentence strategic summary: what is the single most important macro theme this client must respond to?`;
 
-  const summaryResp = await llmJson(
-    "You are Kenneth Peavy, senior fractional CMO. Return ONLY valid JSON: { \"summary\": \"...\" }",
-    summaryUser,
-    500,
-    { type: "object", additionalProperties: true, required: ["summary"], properties: { summary: { type: "string" } } },
-  );
+  let summaryResp: any = null;
+  try {
+    summaryResp = await llmJson(
+      "You are Kenneth Peavy, senior fractional CMO. Return ONLY valid JSON: { \"summary\": \"...\" }",
+      summaryUser,
+      500,
+      { type: "object", additionalProperties: true, required: ["summary"], properties: { summary: { type: "string" } } },
+    );
+  } catch (err: any) {
+    console.error(`[pestel] summary failed:`, err?.message ?? err);
+  }
 
   return {
     industry,
     findings,
-    summary: String(summaryResp?.summary ?? "").trim(),
+    summary: String(summaryResp?.summary ?? "").trim() || `${findings.length} PESTEL findings across ${FACTOR_ORDER.length} factors for ${industry}.`,
   };
 }

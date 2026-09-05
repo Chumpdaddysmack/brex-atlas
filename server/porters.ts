@@ -197,31 +197,28 @@ export async function generatePorters(params: {
 
   console.log(`[porters] starting deep research for ${clientName} (${industry}). pplx=${isPerplexityConfigured()}`);
 
-  // Fan-out: 5 forces in parallel — never let one force take down the whole framework.
-  const settled = await Promise.allSettled(
-    FORCE_ORDER.map((f) => generateForce(f, industry, clientName, compNames)),
-  );
+  // SERIAL fan-out: 5 forces one at a time. Perplexity Sonar rate-limits
+  // aggressively when many concurrent requests fire; serial per-framework
+  // keeps at most 2 Sonar calls in flight (this framework + PESTEL running
+  // in parallel at the pipeline level). Trades ~2 min extra latency for
+  // near-100% citation coverage.
   const forces: PortersForce[] = [];
-  for (let i = 0; i < FORCE_ORDER.length; i++) {
-    const s = settled[i];
-    const f = FORCE_ORDER[i];
-    if (s.status === "fulfilled") {
-      forces.push(s.value);
-    } else {
-      console.error(`[porters] force '${f}' failed:`, s.reason?.message ?? s.reason);
-      // Second-chance: try claude-only (no web research) so this force still appears
+  for (const f of FORCE_ORDER) {
+    try {
+      forces.push(await generateForce(f, industry, clientName, compNames));
+    } catch (err: any) {
+      console.error(`[porters] force '${f}' failed:`, err?.message ?? err);
       try {
         const fallback = await claudeOnlyForce(f, industry, clientName, compNames);
         forces.push(fallback);
         console.log(`[porters] force '${f}' recovered via claude-only fallback`);
       } catch (fallbackErr: any) {
         console.error(`[porters] force '${f}' claude-only fallback also failed:`, fallbackErr?.message ?? fallbackErr);
-        // Last resort: skeleton entry so the shape stays valid and PDF still renders
         forces.push({
           id: `P5F-${forceIdSlug(f)}`,
           force: f,
           intensity: "medium",
-          rationale: `Analysis unavailable — research pipeline failure. ${String(s.reason?.message ?? s.reason).slice(0, 200)}`,
+          rationale: `Analysis unavailable — research pipeline failure. ${String(err?.message ?? err).slice(0, 200)}`,
           drivers: [],
           sources: [],
         });
