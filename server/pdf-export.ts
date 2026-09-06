@@ -2265,24 +2265,27 @@ function renderSitemapPageCompact(
   ensureSpace(doc, 34);
   const y = doc.y;
 
-  // Title + slug
-  doc
-    .fillColor(BRAND.text)
-    .font(FONTS.sansBold)
-    .fontSize(10.5)
-    .text(safe(page.title), leftMargin, y, {
-      width: pageWidth * 0.68,
-      lineBreak: false,
-      ellipsis: true,
-    });
-
-  // Intent chip on the right
+  // Reserve right rail for the intent chip; wrap title in the remainder.
   const intentColor =
     SITEMAP_INTENT_COLOR[page.keywordIntent] ?? SITEMAP_INTENT_COLOR.navigational;
   const chipText = String(page.keywordIntent ?? "").toUpperCase();
+  let chipW = 0;
   if (chipText) {
     doc.font(FONTS.sansBold).fontSize(8);
-    const chipW = doc.widthOfString(chipText) + 12;
+    chipW = doc.widthOfString(chipText) + 12;
+  }
+  const titleWidth = pageWidth - chipW - 12;
+
+  // Title
+  doc.fillColor(BRAND.text).font(FONTS.sansBold).fontSize(10.5);
+  const titleHeight = doc.heightOfString(safe(page.title), {
+    width: titleWidth,
+    lineGap: 1,
+  });
+  doc.text(safe(page.title), leftMargin, y, { width: titleWidth, lineGap: 1 });
+
+  // Intent chip aligned to first line
+  if (chipText) {
     const chipX = leftMargin + pageWidth - chipW;
     doc
       .roundedRect(chipX, y + 1, chipW, 13, 3)
@@ -2294,7 +2297,7 @@ function renderSitemapPageCompact(
       .text(chipText, chipX, y + 4, { width: chipW, align: "center", lineBreak: false });
   }
 
-  doc.y = y + 14;
+  const afterTitleY = y + Math.max(titleHeight, 14) + 2;
   doc
     .fillColor(BRAND.muted)
     .font(FONTS.sans)
@@ -2302,10 +2305,11 @@ function renderSitemapPageCompact(
     .text(
       safe(page.slug) + (isOrphan ? "  ·  orphan" : ""),
       leftMargin,
-      doc.y,
+      afterTitleY,
       { width: pageWidth, lineBreak: false, ellipsis: true },
     );
-  doc.moveDown(0.5);
+  doc.y = afterTitleY + 12;
+  doc.moveDown(0.35);
 }
 
 function renderSitemapPageFull(
@@ -2317,28 +2321,40 @@ function renderSitemapPageFull(
 ) {
   ensureSpace(doc, 140);
 
-  // Card container top border (thin amber tick + light bg strip for the title)
   const topY = doc.y;
-  doc.rect(leftMargin, topY, 2, 18).fill(BRAND.accent);
 
-  // Title
-  doc
-    .fillColor(BRAND.navy)
-    .font(FONTS.sansBold)
-    .fontSize(11.5)
-    .text(safe(page.title), leftMargin + 10, topY + 1, {
-      width: pageWidth * 0.7,
-      lineBreak: false,
-      ellipsis: true,
-    });
-
-  // Intent chip on the right
+  // Reserve the right rail for the intent chip so the wrapped title doesn't
+  // collide with it. Compute chip width first, then wrap the title in the
+  // remaining left column with ellipsis on a hard 2-line cap.
   const intentColor =
     SITEMAP_INTENT_COLOR[page.keywordIntent] ?? SITEMAP_INTENT_COLOR.navigational;
   const chipText = String(page.keywordIntent ?? "").toUpperCase();
+  let chipW = 0;
   if (chipText) {
     doc.font(FONTS.sansBold).fontSize(8);
-    const chipW = doc.widthOfString(chipText) + 12;
+    chipW = doc.widthOfString(chipText) + 12;
+  }
+  const titleWidth = pageWidth - 10 - chipW - 12; // 10px indent + 12px gutter before chip
+
+  // Amber tick
+  doc.rect(leftMargin, topY, 2, 18).fill(BRAND.accent);
+
+  // Title (may wrap; measure its height so subsequent lines don't collide)
+  doc
+    .fillColor(BRAND.navy)
+    .font(FONTS.sansBold)
+    .fontSize(11.5);
+  const titleHeight = doc.heightOfString(safe(page.title), {
+    width: titleWidth,
+    lineGap: 1,
+  });
+  doc.text(safe(page.title), leftMargin + 10, topY + 1, {
+    width: titleWidth,
+    lineGap: 1,
+  });
+
+  // Intent chip aligned to the title's first line
+  if (chipText) {
     const chipX = leftMargin + pageWidth - chipW;
     doc
       .roundedRect(chipX, topY + 2, chipW, 13, 3)
@@ -2350,19 +2366,19 @@ function renderSitemapPageFull(
       .text(chipText, chipX, topY + 5, { width: chipW, align: "center", lineBreak: false });
   }
 
-  doc.y = topY + 20;
-
-  // Slug + orphan marker
+  // Slug + orphan marker (position BELOW the wrapped title)
+  const afterTitleY = topY + Math.max(titleHeight, 16) + 4;
   doc
     .fillColor(BRAND.muted)
     .font(FONTS.sans)
     .fontSize(9)
-    .text(safe(page.slug) + (isOrphan ? "   ·   orphan" : ""), leftMargin + 10, doc.y, {
+    .text(safe(page.slug) + (isOrphan ? "   ·   orphan" : ""), leftMargin + 10, afterTitleY, {
       width: pageWidth - 10,
       lineBreak: false,
       ellipsis: true,
     });
-  doc.moveDown(0.35);
+  doc.y = afterTitleY + 12;
+  doc.moveDown(0.25);
 
   // Primary keyword + secondary keywords
   if (page.primaryKeyword) {
@@ -2455,7 +2471,7 @@ function renderSitemapPageFull(
     labeled(
       doc,
       "Primary CTA",
-      ctaTarget ? `${safe(page.primaryCta.label)}  →  ${safe(ctaTarget)}` : safe(page.primaryCta.label),
+      ctaTarget ? `${safe(page.primaryCta.label)}  ›  ${safe(ctaTarget)}` : safe(page.primaryCta.label),
     );
   }
 
