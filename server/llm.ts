@@ -43,6 +43,71 @@ function stripToolLeakage(s: string): string {
   return cut.replace(/[\s,;<>"]+$/, "").trim();
 }
 
+// Reclaim orphan `item1, item2, ...` keys that Claude occasionally leaks at the
+// top level of the extraction object when it emits `<parameter name="item">`
+// XML-tool-syntax fragments alongside empty arrays. Rebind them into whichever
+// of the known array fields is currently empty (evidenceElements first, then
+// valueProps, then offerings), so the UI "What the site says today" section
+// actually renders instead of collapsing silently.
+function reclaimOrphanItemKeys(obj: any): any {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+  const orphanKeys = Object.keys(obj).filter((k) => /^item\d+$/i.test(k));
+  if (orphanKeys.length === 0) return obj;
+
+  // Preserve numeric order so item1 comes before item10.
+  orphanKeys.sort((a, b) => {
+    const na = parseInt(a.replace(/^item/i, ""), 10);
+    const nb = parseInt(b.replace(/^item/i, ""), 10);
+    return na - nb;
+  });
+  const orphanValues = orphanKeys
+    .map((k) => obj[k])
+    .filter((v) => typeof v === "string" && v.trim().length > 0);
+
+  if (orphanValues.length === 0) {
+    // Nothing worth reclaiming — still drop the keys so the shape is clean.
+    const cleaned: any = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (!orphanKeys.includes(k)) cleaned[k] = v;
+    }
+    return cleaned;
+  }
+
+  // Pick a target array field. Extraction has 3 array fields; the leak
+  // pattern in practice has been evidenceElements. If evidenceElements is
+  // present and empty, prefer that. Otherwise fall back to valueProps,
+  // then offerings. If none are known-empty targets, do nothing.
+  const targets = ["evidenceElements", "valueProps", "offerings"] as const;
+  let target: string | null = null;
+  for (const t of targets) {
+    const v = (obj as any)[t];
+    if (Array.isArray(v) && v.length === 0) {
+      target = t;
+      break;
+    }
+    if (v === undefined) {
+      target = t;
+      break;
+    }
+  }
+
+  const cleaned: any = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (!orphanKeys.includes(k)) cleaned[k] = v;
+  }
+  if (target) {
+    console.warn(
+      `[llm] reclaimed ${orphanValues.length} orphan itemN key(s) into '${target}'. keys=${orphanKeys.join(",")}`,
+    );
+    cleaned[target] = orphanValues;
+  } else {
+    console.warn(
+      `[llm] dropped ${orphanKeys.length} orphan itemN key(s) — no empty target field to reclaim into. keys=${orphanKeys.join(",")}`,
+    );
+  }
+  return cleaned;
+}
+
 export function sanitizeLlmJson(node: any): any {
   if (typeof node === "string") {
     const cleaned = stripToolLeakage(node);
@@ -53,8 +118,9 @@ export function sanitizeLlmJson(node: any): any {
   }
   if (Array.isArray(node)) return node.map(sanitizeLlmJson);
   if (node && typeof node === "object") {
+    const withReclaimed = reclaimOrphanItemKeys(node);
     const out: any = {};
-    for (const [k, v] of Object.entries(node)) {
+    for (const [k, v] of Object.entries(withReclaimed)) {
       if (ARRAY_STRING_FIELDS.has(k) && !Array.isArray(v)) {
         console.warn(`[llm] coercing malformed '${k}' from ${typeof v} to []. value=${JSON.stringify(v).slice(0, 120)}`);
         // If it's a string that looks like a delimited list, try to salvage.

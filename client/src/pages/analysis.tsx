@@ -85,12 +85,51 @@ function stripToolLeakage(s: string): string {
   return cut.replace(/[\s,;<>"]+$/, "").trim();
 }
 
+// Reclaim orphan `item1, item2, ...` keys that the LLM occasionally leaks at
+// the top level of the extraction object (empty arrays + itemN keys with the
+// real content). Rebind them into the first empty target array so the UI
+// actually renders instead of collapsing silently. Mirrors the server-side
+// reclaimOrphanItemKeys in server/llm.ts so already-stored malformed rows
+// still render correctly without a DB migration.
+function reclaimOrphanItemKeys(obj: any): any {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+  const orphanKeys = Object.keys(obj).filter((k) => /^item\d+$/i.test(k));
+  if (orphanKeys.length === 0) return obj;
+  orphanKeys.sort((a, b) => parseInt(a.replace(/^item/i, ""), 10) - parseInt(b.replace(/^item/i, ""), 10));
+  const orphanValues = orphanKeys
+    .map((k) => obj[k])
+    .filter((v) => typeof v === "string" && v.trim().length > 0);
+
+  const cleaned: any = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (!orphanKeys.includes(k)) cleaned[k] = v;
+  }
+  if (orphanValues.length === 0) return cleaned;
+
+  const targets = ["evidenceElements", "valueProps", "offerings"] as const;
+  for (const t of targets) {
+    const v = (obj as any)[t];
+    if (Array.isArray(v) && v.length === 0) {
+      cleaned[t] = orphanValues;
+      console.warn(`[analysis] reclaimed ${orphanValues.length} orphan itemN keys into '${t}'`);
+      return cleaned;
+    }
+    if (v === undefined) {
+      cleaned[t] = orphanValues;
+      console.warn(`[analysis] reclaimed ${orphanValues.length} orphan itemN keys into missing '${t}'`);
+      return cleaned;
+    }
+  }
+  return cleaned;
+}
+
 function normalizeArrays(node: any): any {
   if (typeof node === "string") return stripToolLeakage(node);
   if (Array.isArray(node)) return node.map(normalizeArrays);
   if (node && typeof node === "object") {
+    const withReclaimed = reclaimOrphanItemKeys(node);
     const out: any = {};
-    for (const [k, v] of Object.entries(node)) {
+    for (const [k, v] of Object.entries(withReclaimed)) {
       if (ARRAY_KEYS.has(k) && !Array.isArray(v)) {
         console.warn(`[analysis] coercing non-array field '${k}' to []`, v);
         out[k] = [];

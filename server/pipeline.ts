@@ -235,7 +235,7 @@ export async function runPipeline(id: string) {
 
 const SYS_EXTRACT = `You are a senior fractional CMO analyst for Brex Consulting (Big Rock Method). You will receive raw text extracted from a client's website. Produce a rigorous positioning analysis.
 
-Return ONLY valid JSON matching this exact schema — no prose, no markdown:
+Return ONLY valid JSON matching this exact schema — no prose, no markdown, no XML/tool-syntax tags:
 {
   "title": "string — the site's primary H1 or brand hero line",
   "description": "string — 1-2 sentence summary of what the company does",
@@ -248,7 +248,14 @@ Return ONLY valid JSON matching this exact schema — no prose, no markdown:
   "seoNotes": "string — observations on SEO fundamentals from what's visible (titles, structure, keywords)",
   "aeoReadinessScore": 0,   // integer 0-100 — how ready is this site to be cited by AI answer engines (Perplexity, ChatGPT, Google AI Overviews)? Consider: clear entity definitions, FAQ presence, schema hints, distinct claims, comparison content
   "aeoReadinessNotes": "string — 2-3 sentences justifying the score with concrete observations"
-}`;
+}
+
+CRITICAL SHAPE RULES — the client renderer WILL silently collapse if you deviate:
+- valueProps, offerings, and evidenceElements MUST be JSON arrays of strings inline in the object. Example: "evidenceElements": ["Trade show presence: IWF Atlanta 2026", "No customer logos visible", "No testimonials visible"].
+- NEVER emit numbered top-level keys like "item1", "item2", "item3" as a substitute for array items. Do not use "itemN" keys anywhere in the output.
+- NEVER emit XML-style tool syntax like <parameter name="item"> or <item>...</item>. Use pure JSON arrays only.
+- valueProps must contain 3-6 items. offerings must contain 2+ items. evidenceElements must contain 3+ items (use "None visible" / "No X visible" strings when the site genuinely lacks that evidence — do not return an empty array).
+- Only the exact keys listed in the schema are allowed. Do not add extra keys like "seoNotesAdditional", "item1", or others.`;
 
 const SYS_COMPETITORS = `You are a senior competitive strategist. Given a client's positioning and offerings, identify the 4 most relevant competitors — real, named companies in the same category. Be specific with real company names. Do not invent generic placeholders.
 
