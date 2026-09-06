@@ -500,10 +500,12 @@ function PageDetail({ page }: { page: SitemapPageBrief }) {
       {/* Strategy alignment */}
       <Section title="Strategy alignment">
         <div className="space-y-2 text-sm">
-          <div>
-            <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground mr-2">USP:</span>
-            {page.uspAlignment}
-          </div>
+          {page.uspAlignment && page.uspAlignment.trim() && (
+            <div>
+              <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground mr-2">USP:</span>
+              {page.uspAlignment}
+            </div>
+          )}
           {page.compellingOfferTieIn && (
             <div>
               <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground mr-2">

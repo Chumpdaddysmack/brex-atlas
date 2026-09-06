@@ -100,6 +100,7 @@ CRITICAL rules:
 5. Every page must reinforce at least ONE named differentiator from the "why-us" input.
 6. Every page has a primary CTA that maps to a specific sales route (Route 1 book call, Route 2 request assessment, Route 3 download resource, Route 4 contact us).
 7. Draft body must feel like Kenneth Peavy would ship it \u2014 confident, specific, no jargon, no clich\u00e9s ("in today's fast-paced world", "cutting-edge solutions", etc.).
+8. uspAlignment MUST be a non-empty 1-2 sentence explanation of which specific USP this page proves. Never return an empty string; if the page is a utility page (contact, blog hub) explain how it still supports the overall positioning.
 
 Return JSON matching the schema.`;
 
@@ -732,7 +733,10 @@ function assemblePage(args: {
       targetSlug: brief?.primaryCta?.targetSlug ? normalizeSlug(String(brief.primaryCta.targetSlug)) : undefined,
       targetUrl: brief?.primaryCta?.targetUrl ? String(brief.primaryCta.targetUrl).trim() : undefined,
     },
-    uspAlignment: String(brief?.uspAlignment ?? "").trim(),
+    uspAlignment:
+      String(brief?.uspAlignment ?? "").trim() ||
+      String(planItem?.uspAlignment ?? "").trim() ||
+      `Reinforces the core positioning by giving buyers a dedicated ${planItem?.pageType ?? "pillar"} page for "${planItem?.title ?? "this offer"}".`,
     compellingOfferTieIn: brief?.compellingOfferTieIn ? String(brief.compellingOfferTieIn).trim() : undefined,
     whyUsDifferentiators,
     icpTargets,
