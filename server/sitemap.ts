@@ -354,7 +354,7 @@ Design a 15-25 page sitemap for this client. Match pillar pages to their actual 
 
   let plan: any;
   try {
-    plan = await llmJson(PLAN_SYS, planUser, 3500, PLAN_SCHEMA);
+    plan = await llmJson(PLAN_SYS, planUser, 4096, PLAN_SCHEMA);
   } catch (err: any) {
     console.error(`[sitemap] plan generation failed:`, err?.message ?? err);
     throw new Error(`Sitemap plan generation failed: ${err?.message ?? err}`);
@@ -362,7 +362,13 @@ Design a 15-25 page sitemap for this client. Match pillar pages to their actual 
 
   const rawPages = Array.isArray(plan?.pages) ? plan.pages : [];
   if (rawPages.length === 0) {
-    throw new Error("Sitemap plan returned no pages");
+    // Log the actual Claude shape so we can see what it returned
+    console.error(
+      `[sitemap] EMPTY_PAGES. plan.keys=${Object.keys(plan ?? {}).join(",")} plan.pages_type=${typeof plan?.pages} raw=${JSON.stringify(plan ?? {}).slice(0, 1500)}`,
+    );
+    throw new Error(
+      `Sitemap plan returned no pages. Claude keys: [${Object.keys(plan ?? {}).join(", ")}]. pages type: ${typeof plan?.pages}.`,
+    );
   }
   console.log(`[sitemap] plan returned ${rawPages.length} pages`);
 
