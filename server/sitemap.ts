@@ -226,6 +226,21 @@ const LOCAL_SCHEMA = {
 
 // ---------- Input assembly ----------
 
+// Storage layer returns swot/pestel/porters/strategy/extraction/competitors
+// as JSON strings (see storage.ts:333-336). Parse defensively so this module
+// works regardless of whether the caller passes a string or an object.
+function parseIfString<T>(v: T | string | null | undefined): T | null {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    try {
+      return JSON.parse(v) as T;
+    } catch {
+      return null;
+    }
+  }
+  return v as T;
+}
+
 function buildStrategyContext(params: {
   extraction: Extraction;
   strategy: Strategy;
@@ -234,23 +249,40 @@ function buildStrategyContext(params: {
   pestel?: PestelAnalysis | null;
   competitors: Competitor[];
 }): string {
-  const { extraction, strategy, swot, porters, pestel, competitors } = params;
+  const extraction = parseIfString<Extraction>(params.extraction) ?? ({} as Extraction);
+  const strategy = parseIfString<Strategy>(params.strategy) ?? ({} as Strategy);
+  const swot = parseIfString<SwotAnalysis>(params.swot);
+  const porters = parseIfString<PortersFiveForces>(params.porters);
+  const pestel = parseIfString<PestelAnalysis>(params.pestel);
+  const competitors = Array.isArray(params.competitors)
+    ? params.competitors
+    : (parseIfString<Competitor[]>(params.competitors as any) ?? []);
 
-  const strengths = swot?.strengths?.map((s: any) => `- ${s.insight}`).join("\n") ?? "";
-  const opportunities = swot?.opportunities?.map((o: any) => `- ${o.insight}`).join("\n") ?? "";
+  const strengthsArr = Array.isArray(swot?.strengths) ? swot!.strengths : [];
+  const oppsArr = Array.isArray(swot?.opportunities) ? swot!.opportunities : [];
+  const strengths = strengthsArr.map((s: any) => `- ${s?.insight ?? s}`).join("\n");
+  const opportunities = oppsArr.map((o: any) => `- ${o?.insight ?? o}`).join("\n");
 
-  const porterHighs =
-    porters?.forces
-      ?.filter((f) => f.intensity === "high")
-      ?.map((f) => `- ${f.force}: ${f.rationale.slice(0, 200)}`)
-      ?.join("\n") ?? "";
+  const forcesArr = Array.isArray(porters?.forces) ? porters!.forces : [];
+  const porterHighs = forcesArr
+    .filter((f: any) => f?.intensity === "high")
+    .map((f: any) => `- ${f.force}: ${String(f?.rationale ?? "").slice(0, 200)}`)
+    .join("\n");
 
+  // PESTEL impact values in production are "negative" / "positive" / "neutral"
+  // (not "high"/"low"). Prefer the negative + positive material findings since
+  // those are what the sitemap needs to react to. Cap at 6 to keep the prompt
+  // tight.
+  const pestelFindings = Array.isArray(pestel?.findings) ? pestel!.findings : [];
   const pestelHighs =
-    pestel?.findings
-      ?.filter((f: any) => f.impact === "high" || f.impact === "High")
-      ?.slice(0, 6)
-      ?.map((f: any) => `- [${f.factor}] ${f.insight}`)
-      ?.join("\n") ?? "";
+    pestelFindings
+      .filter((f: any) => {
+        const imp = String(f?.impact ?? "").toLowerCase();
+        return imp === "negative" || imp === "positive" || imp === "high";
+      })
+      .slice(0, 6)
+      .map((f: any) => `- [${f.factor}] ${f.insight}`)
+      .join("\n");
 
   const competitorList = competitors
     ?.slice(0, 5)
