@@ -299,6 +299,53 @@ export async function registerRoutes(
     }
   });
 
+  // Sitemap regenerate: rebuild the SEO/GEO Site Architecture and its
+  // bidirectional cross-links to blogs/social, without touching the rest of
+  // the plan. Runs synchronously and returns the new sitemap payload.
+  app.post("/api/content-plans/:id/sitemap/regenerate", async (req, res) => {
+    const plan = await storage.getContentPlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: "Plan not found" });
+    if (plan.status !== "ready" || !plan.planJson) {
+      return res.status(400).json({ error: "Plan is not ready" });
+    }
+    const analysis = await storage.getAnalysis(plan.analysisId);
+    if (!analysis) return res.status(404).json({ error: "Analysis not found" });
+
+    let payload: ContentPlanPayload;
+    try {
+      payload = typeof plan.planJson === "string"
+        ? (JSON.parse(plan.planJson) as ContentPlanPayload)
+        : (plan.planJson as unknown as ContentPlanPayload);
+    } catch {
+      return res.status(500).json({ error: "Plan data is malformed" });
+    }
+
+    try {
+      const { generateSitemap, crossLinkContentToSitemap } = await import("./sitemap");
+      const sitemap = await generateSitemap({
+        analysis,
+        extraction: analysis.extraction as any,
+        strategy: analysis.strategy as any,
+        swot: analysis.swot as any,
+        porters: analysis.porters as any,
+        pestel: analysis.pestel as any,
+        competitors: (analysis.competitors as any) ?? [],
+      });
+      payload.sitemap = sitemap;
+      await crossLinkContentToSitemap(payload);
+      await storage.updateContentPlan(plan.id, { planJson: JSON.stringify(payload) });
+      return res.json({
+        ok: true,
+        totalPages: payload.sitemap?.totalPages ?? 0,
+        hasLocalSection: payload.sitemap?.hasLocalSection ?? false,
+        linkingSummary: payload.sitemap?.linkingSummary,
+      });
+    } catch (err: any) {
+      console.error("[sitemap regenerate] failed", err);
+      return res.status(500).json({ error: err?.message ?? "Sitemap regenerate failed" });
+    }
+  });
+
   app.get("/api/content-plans/:id/pptx", async (req, res) => {
     const plan = await storage.getContentPlan(req.params.id);
     if (!plan) return res.status(404).json({ error: "Plan not found" });

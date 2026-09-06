@@ -305,12 +305,22 @@ export type ContentPlanPayload = {
         primaryKeyword: string;
         aeoQuery: string; // the AEO-shaped question this post ranks for
       };
+      // Bidirectional linking to Site Architecture (assigned by cross-linker)
+      targetPageSlug?: string;    // primary pillar page this post supports
+      targetPageTitle?: string;   // convenience copy for UI/PDF display
     }[];
   }[];
   socialCadence: {
     channel: "linkedin" | "instagram" | "x";
     postsPerWeek: number;
-    starterPosts: { title: string; hook: string; targetQuery: string; angle: string }[];
+    starterPosts: {
+      title: string;
+      hook: string;
+      targetQuery: string;
+      angle: string;
+      targetPageSlug?: string;    // pillar page this social post references
+      targetPageTitle?: string;
+    }[];
   }[];
   adBrief: {
     channel: "meta_ad" | "linkedin_ad";
@@ -348,6 +358,89 @@ export type ContentPlanPayload = {
     outline: string[];
   }[];
   roiProjections?: RoiProjections;
+  // SEO/GEO Site Architecture — 15-25 pillar + spoke pages with full briefs +
+  // draft copy, plus bidirectional linking to blog posts and social content.
+  sitemap?: SitemapPayload;
+};
+
+// -------- SEO/GEO Site Architecture --------
+// Full sitemap tree with pillar + spoke pages, local-SEO section (city hub +
+// location pages), draft copy for every page, and a bidirectional linking
+// map to the content plan's blog posts and social starters.
+
+export type SitemapPageType =
+  | "home"
+  | "about"
+  | "service"       // core service pillar
+  | "solution"      // industry/use-case landing
+  | "why-us"        // differentiators, USP proof
+  | "pricing"       // if applicable
+  | "case-study"    // proof/social-proof pages
+  | "resources"     // guides / whitepapers hub
+  | "faq"           // AEO/GEO answer page (also feeds FAQ schema)
+  | "contact"
+  | "blog-hub"
+  | "comparison"    // vs. competitors
+  | "local-hub"     // city or metro landing
+  | "local-location"; // individual location page
+
+export type SitemapKeywordIntent = "informational" | "commercial" | "transactional" | "navigational";
+
+export type SitemapPageBrief = {
+  // Structural
+  id: string;                       // stable id like "pg-home", "pg-svc-fractional-cmo"
+  slug: string;                     // URL path, e.g. "/services/fractional-cmo"
+  pageType: SitemapPageType;
+  title: string;                    // human-facing page title
+  parentId?: string;                // for tree structure; undefined = top level
+
+  // SEO/GEO metadata
+  primaryKeyword: string;
+  secondaryKeywords: string[];      // 3-6
+  metaTitle: string;                // ≤ 60 chars
+  metaDescription: string;          // ≤ 155 chars
+  h1: string;
+  keywordIntent: SitemapKeywordIntent;
+
+  // Content structure
+  h2Outline: { h2: string; h3s: string[] }[]; // section outline
+  geoAnswerBlocks: { question: string; answer: string }[]; // AEO/GEO Q&A blocks (FAQ-schema ready)
+  draftBody: string;                // 300-500 word draft body copy in Markdown
+  primaryCta: { label: string; targetSlug?: string; targetUrl?: string };
+
+  // Strategy alignment
+  uspAlignment: string;             // 1 sentence: which USP this page proves
+  compellingOfferTieIn?: string;    // if applicable
+  whyUsDifferentiators: string[];   // 2-4 differentiators surfaced on this page
+  icpTargets: string[];             // ICP names/labels
+  salesRouteMapping?: string;       // which of the 4 sales routes this feeds
+
+  // Linking (populated by cross-linker; readable but writable during regen)
+  inboundBlogTitles: string[];      // blog posts that link INTO this page
+  inboundSocialTitles: string[];    // social starters that reference this page
+  internalLinksOut: { anchorText: string; targetSlug: string }[]; // links FROM this page to other pages
+};
+
+export type SitemapPayload = {
+  overview: string;                 // 2-3 sentence architecture summary
+  totalPages: number;
+  hasLocalSection: boolean;
+  pages: SitemapPageBrief[];
+  // Local SEO section (always generated as optional — empty if not applicable)
+  local?: {
+    included: boolean;
+    guidance: string;               // 2-3 sentences: when to activate
+    serviceAreas: string[];         // suggested city/region names
+    cityHubSlug?: string;           // if included, the hub page id
+    locationPageSlugs: string[];    // individual location page ids
+  };
+  // Bidirectional linking map summary
+  linkingSummary: {
+    totalInternalLinks: number;
+    blogsLinked: number;            // count of blog posts assigned a targetPageSlug
+    socialsLinked: number;
+    orphanPages: string[];          // page ids that have no inbound content
+  };
 };
 
 // -------- ROI Projections --------

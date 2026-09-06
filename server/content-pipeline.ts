@@ -7,6 +7,7 @@
 import { storage } from "./storage";
 import { llmJson, SCHEMA_SHELL, SCHEMA_BLOG_BATCH, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
 import { ROI_INFERENCE_SYSTEM_PROMPT, calculateRoiProjections, FALLBACK_ASSUMPTIONS } from "./roi-calc";
+import { generateSitemap, crossLinkContentToSitemap } from "./sitemap";
 import type { RoiAssumptions } from "@shared/schema";
 import { BREX_VOICE } from "./voice/brex";
 import { CONCENTRUS_VOICE } from "./voice/concentrus";
@@ -420,6 +421,41 @@ export async function runContentPlanGeneration(planId: string) {
     } catch (roiErr) {
       console.error("[roi-inference] failed, using fallback", roiErr);
       payload.roiProjections = calculateRoiProjections(FALLBACK_ASSUMPTIONS, payload);
+    }
+
+    // -------- SEO/GEO Site Architecture --------
+    // Generate the pillar+spoke sitemap, then bidirectionally link every blog
+    // post and social starter to its best pillar page. Fault-tolerant: if
+    // either step fails, the plan still ships without the sitemap section.
+    await storage.updateContentPlan(planId, {
+      progress: 97,
+      currentStep: "Designing SEO/GEO site architecture",
+    });
+
+    try {
+      const sitemap = await generateSitemap({
+        analysis,
+        extraction: analysis.extraction as any,
+        strategy: analysis.strategy as any,
+        swot: analysis.swot as any,
+        porters: analysis.porters as any,
+        pestel: analysis.pestel as any,
+        competitors: (analysis.competitors as any) ?? [],
+      });
+      payload.sitemap = sitemap;
+
+      await storage.updateContentPlan(planId, {
+        progress: 99,
+        currentStep: "Cross-linking blogs and social to sitemap",
+      });
+
+      const linked = await crossLinkContentToSitemap(payload);
+      // crossLinkContentToSitemap mutates in place and returns the same ref,
+      // but reassign for clarity.
+      Object.assign(payload, linked);
+    } catch (sitemapErr) {
+      console.error("[sitemap] generation failed \u2014 shipping plan without site architecture", sitemapErr);
+      payload.sitemap = undefined;
     }
 
     await storage.updateContentPlan(planId, {
