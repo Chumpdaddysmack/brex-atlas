@@ -4,6 +4,8 @@ import type {
   SwotAnalysis,
   PestelAnalysis,
   PortersFiveForces,
+  SitemapPageBrief,
+  SitemapPageType,
 } from "@shared/schema";
 import type { Response } from "express";
 import {
@@ -336,6 +338,13 @@ function renderExecutiveSummary(doc: PDFKit.PDFDocument, p: ContentPlanPayload) 
     console.error("[pdf-export] ROI section (summary) failed", err);
   }
 
+  // ---- SEO/GEO Site Architecture (compact list) ----
+  try {
+    renderSitemapSection(doc, p, { compact: true });
+  } catch (err) {
+    console.error("[pdf-export] sitemap section (summary) failed", err);
+  }
+
   sectionHeader(doc, "Next Steps");
   bulletList(doc, [
     "Approve the strategy direction and pillar framing.",
@@ -443,6 +452,13 @@ function renderFullPlan(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
     renderInvestmentBenchmarks(doc, { compact: false });
   } catch (err) {
     console.error("[pdf-export] investment benchmarks failed", err);
+  }
+
+  // ---- SEO/GEO Site Architecture (full per-page briefs) ----
+  try {
+    renderSitemapSection(doc, p, { compact: false });
+  } catch (err) {
+    console.error("[pdf-export] sitemap section (full) failed", err);
   }
 
   if (p.heroMetaAd) {
@@ -2008,4 +2024,477 @@ function domainFromPdfUrl(url: string): string {
 
 function truncateUrl(url: string, max: number): string {
   return url.length > max ? url.slice(0, max - 1) + "…" : url;
+}
+
+// =============================================================
+// Site Architecture (SEO/GEO) section
+// =============================================================
+
+const SITEMAP_TYPE_ORDER: SitemapPageType[] = [
+  "home",
+  "about",
+  "service",
+  "solution",
+  "why-us",
+  "pricing",
+  "comparison",
+  "case-study",
+  "resources",
+  "faq",
+  "blog-hub",
+  "contact",
+  "local-hub",
+  "local-location",
+];
+
+const SITEMAP_TYPE_LABELS: Record<SitemapPageType, string> = {
+  home: "Home",
+  about: "About",
+  service: "Services",
+  solution: "Solutions & Industries",
+  "why-us": "Why Us",
+  pricing: "Pricing",
+  comparison: "Comparison pages",
+  "case-study": "Case studies",
+  resources: "Resources",
+  faq: "FAQ",
+  "blog-hub": "Blog",
+  contact: "Contact",
+  "local-hub": "City hub (Local SEO)",
+  "local-location": "Location pages (Local SEO)",
+};
+
+// Amber-family intent chips consistent with the app UI
+const SITEMAP_INTENT_COLOR: Record<string, { fill: string; text: string; border: string }> = {
+  informational: { fill: "#DBEAFE", text: "#1E3A8A", border: "#BFDBFE" },
+  navigational: { fill: "#F1F5F9", text: "#0F172A", border: "#E2E8F0" },
+  commercial: { fill: "#FEF3C7", text: "#78350F", border: "#FDE68A" },
+  transactional: { fill: "#D1FAE5", text: "#064E3B", border: "#A7F3D0" },
+};
+
+function renderSitemapSection(
+  doc: PDFKit.PDFDocument,
+  p: ContentPlanPayload,
+  opts: { compact: boolean },
+) {
+  const sitemap = p.sitemap;
+  if (!sitemap || !Array.isArray(sitemap.pages) || sitemap.pages.length === 0) return;
+
+  // Always start on a fresh page for a clean spread
+  doc.addPage();
+
+  const leftMargin = doc.page.margins.left;
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  // ---- Section header (matches ROI section styling) ----
+  const headerY = doc.y;
+  doc.rect(leftMargin, headerY, 4, 22).fill(BRAND.accent);
+  doc
+    .fillColor(BRAND.navy)
+    .font(FONTS.sansBold)
+    .fontSize(18)
+    .text("SEO / GEO Site Architecture", leftMargin + 14, headerY, {
+      characterSpacing: 0.5,
+      lineBreak: false,
+    });
+  doc.y = headerY + 28;
+
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sansOblique)
+    .fontSize(9)
+    .text(
+      "Pillar + spoke architecture with per-page briefs, GEO answer blocks, and bidirectional linking to the blog and social calendar.",
+      leftMargin,
+      doc.y,
+      { width: pageWidth },
+    );
+  doc.moveDown(0.6);
+
+  // ---- Overview paragraph ----
+  if (sitemap.overview) {
+    bodyParagraph(doc, safe(sitemap.overview));
+  }
+
+  // ---- Stat block ----
+  {
+    const y = doc.y;
+    const nextY = drawStatBlock(
+      doc,
+      [
+        { value: String(sitemap.totalPages ?? sitemap.pages.length), label: "Total pages" },
+        {
+          value: String(sitemap.linkingSummary?.totalInternalLinks ?? 0),
+          label: "Internal links",
+        },
+        {
+          value: String(sitemap.linkingSummary?.blogsLinked ?? 0),
+          label: "Blogs linked",
+        },
+        {
+          value: String(sitemap.linkingSummary?.socialsLinked ?? 0),
+          label: "Socials linked",
+        },
+      ],
+      leftMargin,
+      y,
+      pageWidth,
+    );
+    doc.y = nextY;
+    doc.moveDown(0.5);
+  }
+
+  // ---- Orphan warning ----
+  const orphans = sitemap.linkingSummary?.orphanPages ?? [];
+  if (orphans.length > 0) {
+    ensureSpace(doc, 60);
+    const y = doc.y;
+    doc
+      .rect(leftMargin, y, pageWidth, 44)
+      .fillOpacity(1)
+      .fillAndStroke("#FEF3C7", "#FDE68A");
+    doc
+      .fillColor("#78350F")
+      .font(FONTS.sansBold)
+      .fontSize(9)
+      .text(`${orphans.length} ORPHAN PAGE${orphans.length === 1 ? "" : "S"}`, leftMargin + 10, y + 8, {
+        characterSpacing: 1.2,
+      });
+    doc
+      .fillColor("#78350F")
+      .font(FONTS.sans)
+      .fontSize(9)
+      .text(
+        "These pages have no inbound blog or social links. Rerun Refresh links to reassign content.",
+        leftMargin + 10,
+        y + 22,
+        { width: pageWidth - 20 },
+      );
+    doc.y = y + 52;
+    doc.moveDown(0.3);
+  }
+
+  // ---- Local SEO card ----
+  if (sitemap.local?.guidance) {
+    ensureSpace(doc, 80);
+    const y = doc.y;
+    const barColor = sitemap.local.included ? BRAND.accent : BRAND.border;
+    doc.rect(leftMargin, y, 3, 60).fill(barColor);
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sansBold)
+      .fontSize(9)
+      .text("LOCAL SEO", leftMargin + 12, y + 2, { characterSpacing: 1.2 });
+    doc
+      .fillColor(BRAND.navy)
+      .font(FONTS.sansBold)
+      .fontSize(12)
+      .text(
+        sitemap.local.included ? "Included in this build" : "Not applicable",
+        leftMargin + 12,
+        y + 16,
+      );
+    doc
+      .fillColor(BRAND.text)
+      .font(FONTS.sans)
+      .fontSize(9.5)
+      .text(safe(sitemap.local.guidance), leftMargin + 12, y + 32, {
+        width: pageWidth - 20,
+        lineGap: 2,
+      });
+    doc.y = Math.max(doc.y, y + 68);
+    doc.moveDown(0.4);
+    if (sitemap.local.included && sitemap.local.serviceAreas?.length) {
+      labeled(doc, "Service areas", sitemap.local.serviceAreas.join(" · "));
+    }
+  }
+
+  // ---- Group + render pages ----
+  const byType: Partial<Record<SitemapPageType, SitemapPageBrief[]>> = {};
+  for (const pg of sitemap.pages) {
+    const t = (pg.pageType ?? "service") as SitemapPageType;
+    if (!byType[t]) byType[t] = [];
+    byType[t]!.push(pg);
+  }
+  const orphanSet = new Set(orphans);
+
+  for (const type of SITEMAP_TYPE_ORDER) {
+    const pages = byType[type];
+    if (!pages || pages.length === 0) continue;
+
+    // Group header
+    ensureSpace(doc, 40);
+    doc.moveDown(0.4);
+    const gY = doc.y;
+    doc
+      .fillColor(BRAND.navy)
+      .font(FONTS.sansBold)
+      .fontSize(12)
+      .text(SITEMAP_TYPE_LABELS[type], leftMargin, gY, { continued: true });
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sans)
+      .fontSize(10)
+      .text(`  ·  ${pages.length} page${pages.length === 1 ? "" : "s"}`);
+    // Underline the group
+    doc
+      .strokeColor(BRAND.border)
+      .lineWidth(0.5)
+      .moveTo(leftMargin, doc.y + 2)
+      .lineTo(leftMargin + pageWidth, doc.y + 2)
+      .stroke();
+    doc.moveDown(0.5);
+
+    for (const page of pages) {
+      if (opts.compact) {
+        renderSitemapPageCompact(doc, page, orphanSet.has(page.id), leftMargin, pageWidth);
+      } else {
+        renderSitemapPageFull(doc, page, orphanSet.has(page.id), leftMargin, pageWidth);
+      }
+    }
+  }
+}
+
+function renderSitemapPageCompact(
+  doc: PDFKit.PDFDocument,
+  page: SitemapPageBrief,
+  isOrphan: boolean,
+  leftMargin: number,
+  pageWidth: number,
+) {
+  ensureSpace(doc, 34);
+  const y = doc.y;
+
+  // Title + slug
+  doc
+    .fillColor(BRAND.text)
+    .font(FONTS.sansBold)
+    .fontSize(10.5)
+    .text(safe(page.title), leftMargin, y, {
+      width: pageWidth * 0.68,
+      lineBreak: false,
+      ellipsis: true,
+    });
+
+  // Intent chip on the right
+  const intentColor =
+    SITEMAP_INTENT_COLOR[page.keywordIntent] ?? SITEMAP_INTENT_COLOR.navigational;
+  const chipText = String(page.keywordIntent ?? "").toUpperCase();
+  if (chipText) {
+    doc.font(FONTS.sansBold).fontSize(8);
+    const chipW = doc.widthOfString(chipText) + 12;
+    const chipX = leftMargin + pageWidth - chipW;
+    doc
+      .roundedRect(chipX, y + 1, chipW, 13, 3)
+      .fillAndStroke(intentColor.fill, intentColor.border);
+    doc
+      .fillColor(intentColor.text)
+      .font(FONTS.sansBold)
+      .fontSize(8)
+      .text(chipText, chipX, y + 4, { width: chipW, align: "center", lineBreak: false });
+  }
+
+  doc.y = y + 14;
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(8.5)
+    .text(
+      safe(page.slug) + (isOrphan ? "  ·  orphan" : ""),
+      leftMargin,
+      doc.y,
+      { width: pageWidth, lineBreak: false, ellipsis: true },
+    );
+  doc.moveDown(0.5);
+}
+
+function renderSitemapPageFull(
+  doc: PDFKit.PDFDocument,
+  page: SitemapPageBrief,
+  isOrphan: boolean,
+  leftMargin: number,
+  pageWidth: number,
+) {
+  ensureSpace(doc, 140);
+
+  // Card container top border (thin amber tick + light bg strip for the title)
+  const topY = doc.y;
+  doc.rect(leftMargin, topY, 2, 18).fill(BRAND.accent);
+
+  // Title
+  doc
+    .fillColor(BRAND.navy)
+    .font(FONTS.sansBold)
+    .fontSize(11.5)
+    .text(safe(page.title), leftMargin + 10, topY + 1, {
+      width: pageWidth * 0.7,
+      lineBreak: false,
+      ellipsis: true,
+    });
+
+  // Intent chip on the right
+  const intentColor =
+    SITEMAP_INTENT_COLOR[page.keywordIntent] ?? SITEMAP_INTENT_COLOR.navigational;
+  const chipText = String(page.keywordIntent ?? "").toUpperCase();
+  if (chipText) {
+    doc.font(FONTS.sansBold).fontSize(8);
+    const chipW = doc.widthOfString(chipText) + 12;
+    const chipX = leftMargin + pageWidth - chipW;
+    doc
+      .roundedRect(chipX, topY + 2, chipW, 13, 3)
+      .fillAndStroke(intentColor.fill, intentColor.border);
+    doc
+      .fillColor(intentColor.text)
+      .font(FONTS.sansBold)
+      .fontSize(8)
+      .text(chipText, chipX, topY + 5, { width: chipW, align: "center", lineBreak: false });
+  }
+
+  doc.y = topY + 20;
+
+  // Slug + orphan marker
+  doc
+    .fillColor(BRAND.muted)
+    .font(FONTS.sans)
+    .fontSize(9)
+    .text(safe(page.slug) + (isOrphan ? "   ·   orphan" : ""), leftMargin + 10, doc.y, {
+      width: pageWidth - 10,
+      lineBreak: false,
+      ellipsis: true,
+    });
+  doc.moveDown(0.35);
+
+  // Primary keyword + secondary keywords
+  if (page.primaryKeyword) {
+    labeled(doc, "Primary keyword", safe(page.primaryKeyword));
+  }
+  if (page.secondaryKeywords?.length) {
+    labeled(doc, "Secondary keywords", page.secondaryKeywords.join(" · "));
+  }
+
+  // SEO meta
+  if (page.metaTitle) {
+    labeled(doc, `Meta title (${page.metaTitle.length} chars)`, safe(page.metaTitle));
+  }
+  if (page.metaDescription) {
+    labeled(
+      doc,
+      `Meta description (${page.metaDescription.length} chars)`,
+      safe(page.metaDescription),
+    );
+  }
+
+  // H1
+  if (page.h1) {
+    labeled(doc, "H1", safe(page.h1));
+  }
+
+  // Page outline
+  if (page.h2Outline?.length) {
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sansBold)
+      .fontSize(9)
+      .text("PAGE OUTLINE", leftMargin, doc.y, { characterSpacing: 1.2 });
+    doc.moveDown(0.15);
+    for (const section of page.h2Outline) {
+      ensureSpace(doc, 24);
+      doc
+        .fillColor(BRAND.text)
+        .font(FONTS.sansBold)
+        .fontSize(10)
+        .text(`H2  —  ${safe(section.h2)}`, leftMargin, doc.y, {
+          width: pageWidth,
+          lineGap: 2,
+        });
+      for (const h3 of section.h3s ?? []) {
+        ensureSpace(doc, 16);
+        doc
+          .fillColor(BRAND.muted)
+          .font(FONTS.sans)
+          .fontSize(9.5)
+          .text(`H3  —  ${safe(h3)}`, leftMargin + 18, doc.y, {
+            width: pageWidth - 18,
+            lineGap: 2,
+          });
+      }
+    }
+    doc.moveDown(0.3);
+  }
+
+  // GEO answer blocks
+  if (page.geoAnswerBlocks?.length) {
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sansBold)
+      .fontSize(9)
+      .text(`GEO / AEO ANSWER BLOCKS (${page.geoAnswerBlocks.length})`, leftMargin, doc.y, {
+        characterSpacing: 1.2,
+      });
+    doc.moveDown(0.15);
+    for (const qa of page.geoAnswerBlocks) {
+      ensureSpace(doc, 40);
+      doc
+        .fillColor(BRAND.text)
+        .font(FONTS.sansBold)
+        .fontSize(9.5)
+        .text(`Q: ${safe(qa.question)}`, leftMargin, doc.y, { width: pageWidth, lineGap: 2 });
+      doc
+        .fillColor(BRAND.text)
+        .font(FONTS.sans)
+        .fontSize(9.5)
+        .text(safe(qa.answer), leftMargin, doc.y, { width: pageWidth, lineGap: 2 });
+      doc.moveDown(0.2);
+    }
+    doc.moveDown(0.2);
+  }
+
+  // Primary CTA
+  if (page.primaryCta?.label) {
+    const ctaTarget = page.primaryCta.targetSlug || page.primaryCta.targetUrl || "";
+    labeled(
+      doc,
+      "Primary CTA",
+      ctaTarget ? `${safe(page.primaryCta.label)}  →  ${safe(ctaTarget)}` : safe(page.primaryCta.label),
+    );
+  }
+
+  // Strategy alignment
+  if (page.uspAlignment) {
+    labeled(doc, "USP", safe(page.uspAlignment));
+  }
+  if (page.compellingOfferTieIn) {
+    labeled(doc, "Offer tie-in", safe(page.compellingOfferTieIn));
+  }
+  if (page.whyUsDifferentiators?.length) {
+    labeled(doc, "Differentiators", page.whyUsDifferentiators.join(" · "));
+  }
+  if (page.icpTargets?.length) {
+    labeled(doc, "ICP targets", page.icpTargets.join(" · "));
+  }
+  if (page.salesRouteMapping) {
+    labeled(doc, "Sales route", safe(page.salesRouteMapping));
+  }
+
+  // Linking
+  const inboundBlogs = page.inboundBlogTitles?.length ?? 0;
+  const inboundSocials = page.inboundSocialTitles?.length ?? 0;
+  const outbound = page.internalLinksOut?.length ?? 0;
+  if (inboundBlogs + inboundSocials + outbound > 0) {
+    labeled(
+      doc,
+      "Internal linking",
+      `${inboundBlogs} inbound blog${inboundBlogs === 1 ? "" : "s"}  ·  ${inboundSocials} inbound social${inboundSocials === 1 ? "" : "s"}  ·  ${outbound} outbound`,
+    );
+  }
+
+  // Divider
+  doc.moveDown(0.3);
+  doc
+    .strokeColor(BRAND.border)
+    .lineWidth(0.5)
+    .moveTo(leftMargin, doc.y)
+    .lineTo(leftMargin + pageWidth, doc.y)
+    .stroke();
+  doc.moveDown(0.5);
 }
