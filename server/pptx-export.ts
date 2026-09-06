@@ -26,6 +26,7 @@ import {
   buildRoiCostSlide,
   buildRoiPaybackSlide,
 } from "./pptx-roi-slides";
+import { buildSitemapSlides } from "./pptx-sitemap-slides";
 
 // Brex brand palette
 const BRAND = {
@@ -1260,6 +1261,9 @@ export async function buildContentPlanPptx(args: PptxExportArgs): Promise<Buffer
 
   // 10c. Investment benchmarks (supporting industry detail)
   buildBenchmarksSlide(pptx);
+
+  // 10d. SEO/GEO Site Architecture (sitemap section — overview + type mix + highlights + directory)
+  buildSitemapSlides(pptx, payload);
 
   // 11-15. ROI projections (5 slides — headline + 4 charts)
   if (payload.roiProjections) {
