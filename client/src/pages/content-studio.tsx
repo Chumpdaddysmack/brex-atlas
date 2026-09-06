@@ -33,6 +33,7 @@ import {
   Presentation,
   TrendingUp,
   ChevronDown,
+  Search,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -45,6 +46,7 @@ import {
 import type { Analysis, ContentPlan, ContentPiece, ContentPlanPayload } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { RoiPanel } from "@/components/RoiPanel";
+import { SitemapPanel } from "@/components/SitemapPanel";
 
 const CHANNELS: { key: string; label: string; icon: any }[] = [
   { key: "blog", label: "Blog calendar", icon: FileText },
@@ -378,6 +380,10 @@ export default function ContentStudio() {
                     <TrendingUp className="h-4 w-4" />
                     ROI Projections
                   </TabsTrigger>
+                  <TabsTrigger value="sitemap" className="gap-2" data-testid="tab-sitemap">
+                    <Search className="h-4 w-4" />
+                    Site Architecture
+                  </TabsTrigger>
                   {CHANNELS.map((c) => {
                     const Icon = c.icon;
                     return (
@@ -388,7 +394,7 @@ export default function ContentStudio() {
                     );
                   })}
                 </TabsList>
-                {activeChannel !== "roi" && (
+                {activeChannel !== "roi" && activeChannel !== "sitemap" && (
                   <Button variant="ghost" size="sm" onClick={copyChannelMarkdown}>
                     <Copy className="h-4 w-4 mr-2" /> Copy this channel
                   </Button>
@@ -397,6 +403,14 @@ export default function ContentStudio() {
 
               <TabsContent value="roi" className="mt-6">
                 <RoiPanel planId={plan!.id} initialRoi={planPayload?.roiProjections} />
+              </TabsContent>
+
+              <TabsContent value="sitemap" className="mt-6">
+                <SitemapPanel
+                  planId={plan!.id}
+                  planPayload={planPayload}
+                  planStatus={plan!.status}
+                />
               </TabsContent>
 
               {CHANNELS.map((c) => (
