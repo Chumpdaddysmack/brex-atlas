@@ -299,9 +299,11 @@ export async function registerRoutes(
     }
   });
 
-  // Sitemap regenerate: rebuild the SEO/GEO Site Architecture and its
-  // bidirectional cross-links to blogs/social, without touching the rest of
-  // the plan. Runs synchronously and returns the new sitemap payload.
+  // Sitemap regenerate: rebuild the SEO/GEO Site Architecture async because
+  // full generation can take 10+ minutes (Railway edge times out at 5min).
+  // POST returns immediately with a job status; GET polls progress. When
+  // running, plan.currentStep is 'Regenerating site architecture' with
+  // progress 97; when done, status returns to 'ready' with progress 100.
   app.post("/api/content-plans/:id/sitemap/regenerate", async (req, res) => {
     const plan = await storage.getContentPlan(req.params.id);
     if (!plan) return res.status(404).json({ error: "Plan not found" });
@@ -320,30 +322,57 @@ export async function registerRoutes(
       return res.status(500).json({ error: "Plan data is malformed" });
     }
 
-    try {
-      const { generateSitemap, crossLinkContentToSitemap } = await import("./sitemap");
-      const sitemap = await generateSitemap({
-        analysis,
-        extraction: analysis.extraction as any,
-        strategy: analysis.strategy as any,
-        swot: analysis.swot as any,
-        porters: analysis.porters as any,
-        pestel: analysis.pestel as any,
-        competitors: (analysis.competitors as any) ?? [],
-      });
-      payload.sitemap = sitemap;
-      await crossLinkContentToSitemap(payload);
-      await storage.updateContentPlan(plan.id, { planJson: JSON.stringify(payload) });
-      return res.json({
-        ok: true,
-        totalPages: payload.sitemap?.totalPages ?? 0,
-        hasLocalSection: payload.sitemap?.hasLocalSection ?? false,
-        linkingSummary: payload.sitemap?.linkingSummary,
-      });
-    } catch (err: any) {
-      console.error("[sitemap regenerate] failed", err);
-      return res.status(500).json({ error: err?.message ?? "Sitemap regenerate failed" });
-    }
+    // Mark as regenerating and return immediately
+    await storage.updateContentPlan(plan.id, {
+      status: "generating",
+      progress: 97,
+      currentStep: "Regenerating site architecture",
+      errorMessage: null,
+    });
+
+    // Fire and forget — the async worker updates status on completion
+    (async () => {
+      try {
+        const { generateSitemap, crossLinkContentToSitemap } = await import("./sitemap");
+        const sitemap = await generateSitemap({
+          analysis,
+          extraction: analysis.extraction as any,
+          strategy: analysis.strategy as any,
+          swot: analysis.swot as any,
+          porters: analysis.porters as any,
+          pestel: analysis.pestel as any,
+          competitors: (analysis.competitors as any) ?? [],
+        });
+        payload.sitemap = sitemap;
+        await storage.updateContentPlan(plan.id, {
+          progress: 99,
+          currentStep: "Cross-linking content to sitemap",
+        });
+        await crossLinkContentToSitemap(payload);
+        await storage.updateContentPlan(plan.id, {
+          status: "ready",
+          progress: 100,
+          currentStep: "Ready",
+          planJson: JSON.stringify(payload),
+        });
+        console.log(`[sitemap regenerate] ${plan.id} complete: ${sitemap.totalPages} pages`);
+      } catch (err: any) {
+        console.error("[sitemap regenerate] failed", err);
+        // Restore plan to ready state so user isn't stuck; surface error
+        await storage.updateContentPlan(plan.id, {
+          status: "ready",
+          progress: 100,
+          currentStep: "Ready",
+          errorMessage: `Sitemap regenerate failed: ${err?.message ?? String(err)}`.slice(0, 500),
+        });
+      }
+    })().catch((e) => console.error("[sitemap regenerate] outer", e));
+
+    return res.status(202).json({
+      ok: true,
+      status: "generating",
+      message: "Sitemap regeneration started. Poll GET /api/content-plans/:id for status.",
+    });
   });
 
   app.get("/api/content-plans/:id/pptx", async (req, res) => {
