@@ -462,40 +462,42 @@ Determine whether local SEO applies. If yes, produce a city hub + 3 location pag
 
 // ---------- Cross-linker: bidirectional map between sitemap + blogs + social ----------
 
-const CROSSLINK_SYS = `You are an internal-linking strategist. You are given a website sitemap (pillar pages) and a list of blog posts + social media posts. Your job: assign each blog post and each social post to the ONE most relevant pillar page it should link to.
+// Cross-linker runs in TWO separate Claude calls (blogs, then socials) rather
+// than one combined call. In the combined form, Claude was exhausting its
+// output-token budget assigning blogs (120 posts) and truncating or omitting
+// socialAssignments entirely, leaving all social posts unlinked.
+
+const CROSSLINK_BLOGS_SYS = `You are an internal-linking strategist. You are given a website sitemap (pillar pages) and a list of blog posts. Assign each blog post to the ONE most relevant pillar page it should link to.
 
 Rules:
-- Every blog/social post gets exactly one target (or "none" if truly irrelevant).
+- Every blog post gets exactly one target.
 - Match on topic + reader intent. Prefer service/solution/why-us pages over blog-hub or contact.
 - Do NOT assign more than 40% of posts to the same page \u2014 spread evenly to build authority across the sitemap.
 
-Return JSON: { "blogAssignments": [ {"blogIndex": 0, "targetPageId": "pg-svc-x"}, ... ], "socialAssignments": [ {"socialIndex": 0, "targetPageId": "pg-svc-x"}, ... ] }`;
+Return JSON: { "assignments": [ {"index": 0, "targetPageId": "pg-svc-x"}, ... ] }`;
 
-const CROSSLINK_SCHEMA = {
+const CROSSLINK_SOCIALS_SYS = `You are an internal-linking strategist. You are given a website sitemap (pillar pages) and a list of social media posts. Assign each social post to the ONE most relevant pillar page it should link to.
+
+Rules:
+- Every social post gets exactly one target.
+- Match on topic + reader intent. Prefer service/solution/why-us pages over blog-hub or contact.
+- Spread targets across the sitemap; avoid piling every social post onto one page.
+
+Return JSON: { "assignments": [ {"index": 0, "targetPageId": "pg-svc-x"}, ... ] }`;
+
+const CROSSLINK_SINGLE_SCHEMA = {
   type: "object",
   additionalProperties: true,
-  required: ["blogAssignments", "socialAssignments"],
+  required: ["assignments"],
   properties: {
-    blogAssignments: {
+    assignments: {
       type: "array",
       items: {
         type: "object",
         additionalProperties: true,
-        required: ["blogIndex", "targetPageId"],
+        required: ["index", "targetPageId"],
         properties: {
-          blogIndex: { type: "number" },
-          targetPageId: { type: "string" },
-        },
-      },
-    },
-    socialAssignments: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: true,
-        required: ["socialIndex", "targetPageId"],
-        properties: {
-          socialIndex: { type: "number" },
+          index: { type: "number" },
           targetPageId: { type: "string" },
         },
       },
@@ -535,41 +537,65 @@ export async function crossLinkContentToSitemap(
     .map((p) => `- ${p.id} (${p.pageType}, ${p.slug}): ${p.title} \u2014 targets "${p.primaryKeyword}"`)
     .join("\n");
 
-  const blogsList = blogs.map((b) => `[${b.idx}] "${b.title}" (query: ${b.targetQuery ?? "-"}, pillar: ${b.pillar ?? "-"})`).join("\n");
-  const socialsList = socials.map((s) => `[${s.idx}] (${s.channel}) "${s.title}" \u2014 ${s.hook.slice(0, 80)}`).join("\n");
+  const pageById = new Map(plan.sitemap.pages.map((p) => [p.id, p]));
+  const blogAssignments: Map<number, string> = new Map();
+  const socialAssignments: Map<number, string> = new Map();
 
-  const user = `# SITEMAP PAGES
+  // --- Blogs (own Claude call) ---
+  if (blogs.length > 0) {
+    const blogsList = blogs
+      .map((b) => `[${b.idx}] "${b.title}" (query: ${b.targetQuery ?? "-"}, pillar: ${b.pillar ?? "-"})`)
+      .join("\n");
+    const blogUser = `# SITEMAP PAGES
 ${pagesList}
 
 # BLOG POSTS (${blogs.length} total)
 ${blogsList}
 
+Assign each blog post to its best pillar page.`;
+    try {
+      const resp = await llmJson(CROSSLINK_BLOGS_SYS, blogUser, 6000, CROSSLINK_SINGLE_SCHEMA);
+      const arr = Array.isArray(resp?.assignments) ? resp.assignments : [];
+      for (const a of arr) {
+        if (typeof a?.index === "number" && typeof a?.targetPageId === "string" && pageById.has(a.targetPageId)) {
+          blogAssignments.set(a.index, a.targetPageId);
+        }
+      }
+      console.log(`[sitemap crosslink] blogs: ${blogAssignments.size}/${blogs.length} assigned`);
+    } catch (err: any) {
+      console.error(`[sitemap crosslink] blogs failed:`, err?.message ?? err);
+    }
+  }
+
+  // --- Socials (own Claude call) ---
+  if (socials.length > 0) {
+    const socialsList = socials
+      .map((s) => `[${s.idx}] (${s.channel}) "${s.title}" \u2014 ${s.hook.slice(0, 80)}`)
+      .join("\n");
+    const socialUser = `# SITEMAP PAGES
+${pagesList}
+
 # SOCIAL POSTS (${socials.length} total)
 ${socialsList}
 
-Assign each blog post and each social post to its best pillar page.`;
-
-  let assignments: any = null;
-  try {
-    assignments = await llmJson(CROSSLINK_SYS, user, 4000, CROSSLINK_SCHEMA);
-  } catch (err: any) {
-    console.error(`[sitemap crosslink] failed:`, err?.message ?? err);
-    return plan; // return unchanged; UI will show unlinked state
-  }
-
-  const pageById = new Map(plan.sitemap.pages.map((p) => [p.id, p]));
-  const blogAssignments: Map<number, string> = new Map(); // blogIndex -> pageId
-  const socialAssignments: Map<number, string> = new Map();
-
-  for (const a of assignments?.blogAssignments ?? []) {
-    if (typeof a?.blogIndex === "number" && typeof a?.targetPageId === "string" && pageById.has(a.targetPageId)) {
-      blogAssignments.set(a.blogIndex, a.targetPageId);
+Assign each social post to its best pillar page.`;
+    try {
+      const resp = await llmJson(CROSSLINK_SOCIALS_SYS, socialUser, 2000, CROSSLINK_SINGLE_SCHEMA);
+      const arr = Array.isArray(resp?.assignments) ? resp.assignments : [];
+      for (const a of arr) {
+        if (typeof a?.index === "number" && typeof a?.targetPageId === "string" && pageById.has(a.targetPageId)) {
+          socialAssignments.set(a.index, a.targetPageId);
+        }
+      }
+      console.log(`[sitemap crosslink] socials: ${socialAssignments.size}/${socials.length} assigned`);
+    } catch (err: any) {
+      console.error(`[sitemap crosslink] socials failed:`, err?.message ?? err);
     }
   }
-  for (const a of assignments?.socialAssignments ?? []) {
-    if (typeof a?.socialIndex === "number" && typeof a?.targetPageId === "string" && pageById.has(a.targetPageId)) {
-      socialAssignments.set(a.socialIndex, a.targetPageId);
-    }
+
+  if (blogAssignments.size === 0 && socialAssignments.size === 0) {
+    console.error("[sitemap crosslink] both blog and social assignments empty \u2014 skipping");
+    return plan;
   }
 
   // Apply forward links onto posts
