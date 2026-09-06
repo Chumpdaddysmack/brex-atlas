@@ -375,6 +375,40 @@ export async function registerRoutes(
     });
   });
 
+  // Crosslink-only: re-run the cross-linker against an existing sitemap
+  // without regenerating the sitemap itself. Fast (2 Claude calls, ~30s)
+  // and used to fix stale blog/social ↔ sitemap mappings after prompt tweaks.
+  app.post("/api/content-plans/:id/sitemap/crosslink", async (req, res) => {
+    const plan = await storage.getContentPlan(req.params.id);
+    if (!plan) return res.status(404).json({ error: "Plan not found" });
+    if (plan.status !== "ready" || !plan.planJson) {
+      return res.status(400).json({ error: "Plan is not ready" });
+    }
+    let payload: ContentPlanPayload;
+    try {
+      payload = typeof plan.planJson === "string"
+        ? (JSON.parse(plan.planJson) as ContentPlanPayload)
+        : (plan.planJson as unknown as ContentPlanPayload);
+    } catch {
+      return res.status(500).json({ error: "Plan data is malformed" });
+    }
+    if (!payload.sitemap || (payload.sitemap.pages?.length ?? 0) === 0) {
+      return res.status(400).json({ error: "Plan has no sitemap yet — run /sitemap/regenerate first" });
+    }
+    try {
+      const { crossLinkContentToSitemap } = await import("./sitemap");
+      await crossLinkContentToSitemap(payload);
+      await storage.updateContentPlan(plan.id, { planJson: JSON.stringify(payload) });
+      return res.json({
+        ok: true,
+        linkingSummary: payload.sitemap?.linkingSummary,
+      });
+    } catch (err: any) {
+      console.error("[sitemap crosslink] failed", err);
+      return res.status(500).json({ error: err?.message ?? "Crosslink failed" });
+    }
+  });
+
   app.get("/api/content-plans/:id/pptx", async (req, res) => {
     const plan = await storage.getContentPlan(req.params.id);
     if (!plan) return res.status(404).json({ error: "Plan not found" });
