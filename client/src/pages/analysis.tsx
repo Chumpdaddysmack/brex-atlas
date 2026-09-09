@@ -476,25 +476,37 @@ function ExtractionSection({ extraction }: { extraction: Extraction }) {
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <div className="text-xs font-mono text-muted-foreground mb-2">VALUE PROPS</div>
-              <ul className="space-y-1 text-sm">
-                {extraction.valueProps?.map((v, i) => (
-                  <li key={i} className="flex gap-2">
-                    <span className="text-accent">›</span>
-                    <span>{v}</span>
-                  </li>
-                ))}
-              </ul>
+              {extraction.valueProps && extraction.valueProps.length > 0 ? (
+                <ul className="space-y-1 text-sm">
+                  {extraction.valueProps.map((v, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-accent">›</span>
+                      <span>{v}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">
+                  No value propositions found on-site. This is a positioning gap — the site does not clearly articulate customer benefits and is a candidate for messaging work.
+                </p>
+              )}
             </div>
             <div>
               <div className="text-xs font-mono text-muted-foreground mb-2">OFFERINGS</div>
-              <ul className="space-y-1 text-sm">
-                {extraction.offerings?.map((v, i) => (
-                  <li key={i} className="flex gap-2">
-                    <span className="text-accent">›</span>
-                    <span>{v}</span>
-                  </li>
-                ))}
-              </ul>
+              {extraction.offerings && extraction.offerings.length > 0 ? (
+                <ul className="space-y-1 text-sm">
+                  {extraction.offerings.map((v, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-accent">›</span>
+                      <span>{v}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">
+                  No offerings visible on-site. The site does not present distinct products or services — a candidate for an offer-architecture engagement.
+                </p>
+              )}
             </div>
           </div>
         </Card>
@@ -523,14 +535,20 @@ function ExtractionSection({ extraction }: { extraction: Extraction }) {
         </Card>
         <Card className="p-5">
           <div className="text-xs font-mono text-muted-foreground mb-2">EVIDENCE ELEMENTS</div>
-          <ul className="space-y-1 text-sm">
-            {extraction.evidenceElements?.map((v, i) => (
-              <li key={i} className="flex gap-2">
-                <span className="text-accent">›</span>
-                <span>{v}</span>
-              </li>
-            ))}
-          </ul>
+          {extraction.evidenceElements && extraction.evidenceElements.length > 0 ? (
+            <ul className="space-y-1 text-sm">
+              {extraction.evidenceElements.map((v, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-accent">›</span>
+                  <span>{v}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">
+              No evidence elements visible on-site (no case studies, testimonials, client logos, or trust marks). This is one of the highest-leverage credibility gaps to close.
+            </p>
+          )}
         </Card>
       </div>
     </section>

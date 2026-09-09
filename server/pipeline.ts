@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import { llmJson, SCHEMA_EXTRACT, SCHEMA_COMPETITORS, SCHEMA_STRATEGY, SCHEMA_SOW } from "./llm";
+import { llmJson, retryFillExtraction, SCHEMA_EXTRACT, SCHEMA_COMPETITORS, SCHEMA_STRATEGY, SCHEMA_SOW } from "./llm";
 import { generateSwot } from "./swot";
 import { generatePestel } from "./pestel";
 import { generatePorters } from "./porters";
@@ -87,6 +87,30 @@ export async function runPipeline(id: string) {
       3500,
       SCHEMA_EXTRACT,
     );
+
+    // Retry-fill missing/empty valueProps + evidenceElements. The primary
+    // SYS_EXTRACT call occasionally returns objects where these arrays are
+    // absent (proxy fallback text-path truncation) or empty (model played it
+    // safe). A targeted second pass with narrower prompting recovers real
+    // content in the former case and returns explicit "None visible" strings
+    // in the latter — either outcome is materially better than a blank
+    // section in the pitch UI. Cheap (~$0.02/plan), non-fatal on failure.
+    const vpMissing = !Array.isArray(extraction?.valueProps) || extraction.valueProps.length === 0;
+    const evMissing = !Array.isArray(extraction?.evidenceElements) || extraction.evidenceElements.length === 0;
+    if (vpMissing || evMissing) {
+      console.warn(
+        `[pipeline] extraction incomplete for ${record.clientName}: vpMissing=${vpMissing} evMissing=${evMissing}. Running retry-fill.`,
+      );
+      const refill = await retryFillExtraction({
+        clientName: record.clientName,
+        clientUrl: record.clientUrl,
+        siteText: site.textSummary,
+        needsValueProps: vpMissing,
+        needsEvidence: evMissing,
+      });
+      if (refill?.valueProps && vpMissing) (extraction as any).valueProps = refill.valueProps;
+      if (refill?.evidenceElements && evMissing) (extraction as any).evidenceElements = refill.evidenceElements;
+    }
 
     await storage.updateAnalysis(id, {
       progress: 35,

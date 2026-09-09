@@ -37,7 +37,11 @@ const ARRAY_STRING_FIELDS = new Set([
 function stripToolLeakage(s: string): string {
   if (!s || typeof s !== "string") return s;
   // Cut at the first HTML-encoded or raw XML/tool tag we recognize
-  const cutMatch = s.match(/(&lt;|<)\s*\/?(parameter|positioning|valueProps|offerings|evidenceElements|strengths|weaknesses|opportunities|threats|item|quickWins|invoke|function|tool_use|antml:)/i);
+  // NB: also catch the string-field close-tags the model occasionally leaks
+  // into what should be plain prose (description, targetAudience, ctaAudit,
+  // seoNotes, aeoReadinessNotes, title). Spotmill exposed this in prod:
+  // description ended with "…traditional production vendor.</description"
+  const cutMatch = s.match(/(&lt;|<)\s*\/?(parameter|positioning|valueProps|offerings|evidenceElements|strengths|weaknesses|opportunities|threats|item|quickWins|invoke|function|tool_use|antml:|description|targetAudience|ctaAudit|seoNotes|aeoReadinessNotes|title|hookIdeas)/i);
   const cut = cutMatch ? s.slice(0, cutMatch.index).trim() : s;
   // Also collapse stray trailing punctuation left by the cut
   return cut.replace(/[\s,;<>"]+$/, "").trim();
@@ -480,3 +484,76 @@ export const SCHEMA_ROI_ASSUMPTIONS = {
     },
   },
 };
+
+// -----------------------------------------------------------------------------
+// Retry-fill for extraction: when the initial SYS_EXTRACT call comes back
+// with valueProps / evidenceElements missing or empty, re-ask the LLM for
+// JUST those fields with a much narrower prompt. The narrower ask gets past
+// two failure modes we saw in prod:
+//   1. The proxy fallback text-path leaks XML close-tags (Spotmill: description
+//      ended with "</description"), truncating the JSON before the array
+//      fields were emitted.
+//   2. The model conservatively returned partial output rather than fill in
+//      arrays where it "wasn't sure" — a targeted retry with explicit
+//      permission to say "None visible" resolves this cleanly.
+//
+// If the site genuinely lacks these elements, the retry returns
+// ["None visible on site"] style entries, which is materially more useful for
+// the pitch call than a blank section (empty = ambiguous = looks broken).
+// -----------------------------------------------------------------------------
+
+const RETRY_FILL_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["valueProps", "evidenceElements"],
+  properties: {
+    valueProps: { type: "array", items: { type: "string" }, minItems: 3 },
+    evidenceElements: { type: "array", items: { type: "string" }, minItems: 3 },
+  },
+};
+
+const SYS_RETRY_FILL = `You previously analyzed a client website for Brex Consulting and returned an incomplete extraction. Look at the site text again and return ONLY two fields as pure JSON:
+
+{
+  "valueProps": ["string", ...],       // 3-6 value propositions the site claims (benefit-oriented statements to the customer)
+  "evidenceElements": ["string", ...]  // 3-8 evidence elements: named client logos, testimonials, case studies, awards, certifications, press mentions, trade-show presence, stats
+}
+
+RULES:
+- Return EXACTLY this JSON shape. No prose. No markdown. No XML.
+- If the site genuinely does not present value props in canonical form (e.g. it uses metaphorical language, or is mostly imagery), infer 3-6 value props from what a customer would take away from the visible content.
+- If the site has no visible evidence elements, return descriptive "None visible" entries like "No customer logos shown on-site", "No case studies visible", "No testimonials present" — do NOT return an empty array. A confident negative finding is more useful than silence.
+- Do not include \`item1\`, \`item2\`, etc. keys. Use pure JSON arrays only.`;
+
+export async function retryFillExtraction(params: {
+  clientName: string;
+  clientUrl: string;
+  siteText: string;
+  needsValueProps: boolean;
+  needsEvidence: boolean;
+}): Promise<{ valueProps?: string[]; evidenceElements?: string[] } | null> {
+  const { clientName, clientUrl, siteText, needsValueProps, needsEvidence } = params;
+  if (!needsValueProps && !needsEvidence) return null;
+  try {
+    const result = await llmJson(
+      SYS_RETRY_FILL,
+      `Client name: ${clientName}\nClient URL: ${clientUrl}\n\n=== WEBSITE TEXT ===\n${siteText.slice(0, 12000)}`,
+      1500,
+      RETRY_FILL_SCHEMA,
+    );
+    const out: { valueProps?: string[]; evidenceElements?: string[] } = {};
+    if (needsValueProps && Array.isArray(result?.valueProps) && result.valueProps.length > 0) {
+      out.valueProps = result.valueProps.filter((s: any) => typeof s === "string" && s.trim().length > 0);
+    }
+    if (needsEvidence && Array.isArray(result?.evidenceElements) && result.evidenceElements.length > 0) {
+      out.evidenceElements = result.evidenceElements.filter((s: any) => typeof s === "string" && s.trim().length > 0);
+    }
+    console.log(
+      `[retryFill] refilled ${clientName}: vp=${out.valueProps?.length ?? 0} ev=${out.evidenceElements?.length ?? 0}`,
+    );
+    return out;
+  } catch (err: any) {
+    console.error(`[retryFill] failed for ${clientName}:`, err?.message ?? err);
+    return null;
+  }
+}
