@@ -1,6 +1,8 @@
 import type { Request, Response, NextFunction, Express } from "express";
 import session from "express-session";
 import { timingSafeEqual } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+import { SupabaseSessionStore } from "./session-store-supabase";
 
 // Extend session type
 declare module "express-session" {
@@ -50,12 +52,33 @@ export function setupAuth(app: Express) {
     console.error("[auth] FATAL: SESSION_SECRET env var not set. Sessions will not work.");
   }
 
+  // Persistent session store (Supabase). Falls back to in-memory MemoryStore
+  // if SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY aren't set (dev sandbox).
+  // In-memory means every container restart logs everyone out — production
+  // must set the Supabase env vars.
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  let store: session.Store | undefined;
+  if (supabaseUrl && supabaseKey) {
+    const client = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    store = new SupabaseSessionStore(client);
+    console.log("[auth] using Supabase-backed session store");
+  } else {
+    console.warn(
+      "[auth] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — using in-memory session store. Sessions will not survive container restarts.",
+    );
+  }
+
   // Session middleware — cookie expires when browser closes (no maxAge)
   app.use(
     session({
       secret: sessionSecret || "unsafe-dev-fallback-do-not-use-in-prod",
       resave: false,
       saveUninitialized: false,
+      store,
       cookie: {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production", // HTTPS only in prod
