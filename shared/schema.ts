@@ -513,11 +513,35 @@ export type RoiMonthlyPoint = {
   cumulativeGrossProfit: number;
 };
 
+// Sensitivity scenario — same shape as headline outcomes, produced by
+// re-running the ROI math with each of the 5 sensitivity variables flexed
+// by a fixed percentage in the pessimistic and optimistic directions.
+// Lets the report show a defensible RANGE instead of a single point estimate.
+export type RoiScenario = {
+  label: string;                 // "Pessimistic" | "Central" | "Optimistic"
+  flexPercent: number;           // e.g. -20, 0, +20
+  totalRevenue: number;
+  totalGrossProfit: number;
+  totalLeads: number;
+  totalClosedWon: number;
+  roiMultiple: number;
+  paybackMonth: number | null;
+};
+
+export type RoiSensitivity = {
+  scenarios: RoiScenario[];      // Always length 3: [pessimistic, central, optimistic]
+  flexedVariables: string[];     // Names of the variables that were flexed
+  flexPercent: number;           // Absolute flex applied to each side, e.g. 20
+};
+
 export type RoiProjections = {
   assumptions: RoiAssumptions;
   outcomes: RoiOutcomes;
   monthlyProjection: RoiMonthlyPoint[]; // 12 rows
   disclaimer: string;
+  // Optional so existing persisted analyses without sensitivity data still
+  // deserialize cleanly. The PDF/UI show sensitivity only when present.
+  sensitivity?: RoiSensitivity;
 };
 
 // Channel-specific draft shapes
