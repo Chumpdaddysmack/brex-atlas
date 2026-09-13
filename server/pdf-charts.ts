@@ -447,7 +447,6 @@ export function drawTwoSeriesLine(
   yFormat: "usd" | "num",
   xLabels: string[],
   breakevenX?: number, // 1-indexed month for vertical reference line
-  breakevenSubLabel?: string, // optional second line under the "Breakeven" marker
 ) {
   const leftPad = 44;
   const bottomPad = 24;
@@ -510,24 +509,11 @@ export function drawTwoSeriesLine(
       .lineTo(bx, y + topPad + chartH)
       .stroke()
       .undash();
-    // Draw "Breakeven" label ABOVE the plot area to avoid legend collision
     doc
       .fillColor("#065F46")
       .font("Helvetica-Bold")
       .fontSize(7)
-      .text("Breakeven", bx - 22, y - 2, { width: 44, align: "center", lineBreak: false });
-    if (breakevenSubLabel) {
-      // Place BELOW the chart to avoid colliding with top-right legend
-      doc
-        .fillColor("#065F46")
-        .font("Helvetica-Oblique")
-        .fontSize(7)
-        .text(breakevenSubLabel, x + leftPad, y + topPad + chartH + 14, {
-          width: chartW,
-          align: "left",
-          lineBreak: false,
-        });
-    }
+      .text("Breakeven", bx - 22, y + topPad + 2, { width: 44, align: "center", lineBreak: false });
   }
 
   // Draw both series
