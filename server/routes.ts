@@ -480,6 +480,38 @@ export async function registerRoutes(
       return res.status(500).json({ error: "Plan data is malformed" });
     }
 
+    // Corruption guards — defend against pipeline bugs that produce
+    // pathological payloads (e.g. blogCalendar with tens of thousands of
+    // char-string entries, which OOM the PDF renderer). Real plans have
+    // <= 52 weeks and <= 5 posts per week.
+    const MAX_WEEKS = 100;
+    const MAX_POSTS_PER_WEEK = 20;
+    const cal = payload?.blogCalendar;
+    if (Array.isArray(cal)) {
+      if (cal.length > MAX_WEEKS) {
+        console.error(`[pdf-export] rejecting corrupt plan ${plan.id}: blogCalendar length ${cal.length} > ${MAX_WEEKS}`);
+        return res.status(422).json({
+          error: `Plan data is corrupt (blogCalendar has ${cal.length} entries, max ${MAX_WEEKS}). Please regenerate the plan.`,
+        });
+      }
+      for (let i = 0; i < cal.length; i++) {
+        const wk = cal[i] as unknown;
+        if (typeof wk !== "object" || wk === null) {
+          console.error(`[pdf-export] rejecting corrupt plan ${plan.id}: blogCalendar[${i}] is ${typeof wk}, expected object`);
+          return res.status(422).json({
+            error: "Plan data is corrupt (calendar entries are not objects). Please regenerate the plan.",
+          });
+        }
+        const posts = (wk as { posts?: unknown }).posts;
+        if (Array.isArray(posts) && posts.length > MAX_POSTS_PER_WEEK) {
+          console.error(`[pdf-export] rejecting corrupt plan ${plan.id}: week ${i} has ${posts.length} posts > ${MAX_POSTS_PER_WEEK}`);
+          return res.status(422).json({
+            error: `Plan data is corrupt (week ${i + 1} has ${posts.length} posts, max ${MAX_POSTS_PER_WEEK}). Please regenerate the plan.`,
+          });
+        }
+      }
+    }
+
     try {
       streamContentPlanPdf({
         res,
