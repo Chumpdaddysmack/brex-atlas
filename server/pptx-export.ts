@@ -6,8 +6,11 @@ import PptxGenJS from "pptxgenjs";
 import type {
   ContentPlanPayload,
   SwotAnalysis,
+  SwotItem,
   PestelAnalysis,
   PortersFiveForces,
+  PortersForce,
+  PortersForceName,
 } from "@shared/schema";
 import { PRICING_BENCHMARKS, BENCHMARK_SOURCES, formatMoney } from "./pricing-benchmarks";
 import {
@@ -119,6 +122,14 @@ function addFooter(slide: PptxGenJS.Slide, pageNum: number, totalPages: number, 
   });
 }
 
+// Standard header body starts at y=1.4. Long subtitles must be truncated so
+// they don't overflow into the slide body. Roughly ~110 chars fits in the
+// single-line subtitle band (0.85 to 1.15).
+function truncateSubtitle(s: string, max = 110): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1).replace(/\s+\S*$/, "") + "…";
+}
+
 function addSectionHeader(slide: PptxGenJS.Slide, title: string, subtitle?: string) {
   // Amber accent bar
   slide.addShape("rect", {
@@ -142,14 +153,15 @@ function addSectionHeader(slide: PptxGenJS.Slide, title: string, subtitle?: stri
   });
 
   if (subtitle) {
-    slide.addText(subtitle, {
+    slide.addText(truncateSubtitle(subtitle), {
       x: 0.6,
-      y: 0.85,
+      y: 0.9,
       w: SLIDE_W - 1.2,
-      h: 0.3,
-      fontSize: 11,
+      h: 0.28,
+      fontSize: 10.5,
       fontFace: "Arial",
       color: BRAND.muted,
+      valign: "top",
     });
   }
 }
@@ -1249,9 +1261,9 @@ export async function buildContentPlanPptx(args: PptxExportArgs): Promise<Buffer
   buildTimelineSlide(pptx, payload);
 
   // 9a-c. Strategic frameworks (before pricing matrix)
-  if (swot) buildSwotSlide(pptx, swot);
+  if (swot) buildSwotSlides(pptx, swot);
   if (pestel) buildPestelSlide(pptx, pestel);
-  if (porters) buildPortersSlide(pptx, porters);
+  if (porters) buildPortersSlides(pptx, porters);
 
   // 10a. Brex vs. Market — Tier comparison
   buildBrexTierMatrixSlide(pptx);
@@ -1296,16 +1308,30 @@ export async function buildContentPlanPptx(args: PptxExportArgs): Promise<Buffer
 // =============================================================
 // Strategic Frameworks slide builders
 // =============================================================
-function buildSwotSlide(pptx: PptxGenJS, swot: SwotAnalysis) {
-  const slide = pptx.addSlide();
-  addSectionHeader(slide, "SWOT Analysis", swot.summary || `Industry: ${swot.industry}`);
+// SWOT is rendered across 5 slides: 1 overview + 1 per quadrant.
+// The 16:9 slide (10" × 5.625") cannot fit 4 quadrants × 3-5 items with
+// full-sentence evidence without overlap. Splitting gives each item room
+// to breathe and reads better in presentation mode.
+function buildSwotSlides(pptx: PptxGenJS, swot: SwotAnalysis) {
+  buildSwotOverviewSlide(pptx, swot);
+  buildSwotQuadrantSlide(pptx, "Strengths", "059669", swot.strengths, swot.industry);
+  buildSwotQuadrantSlide(pptx, "Weaknesses", "DC2626", swot.weaknesses, swot.industry);
+  buildSwotQuadrantSlide(pptx, "Opportunities", "0284C7", swot.opportunities, swot.industry);
+  buildSwotQuadrantSlide(pptx, "Threats", "B45309", swot.threats, swot.industry);
+}
 
-  // Layout: 2×2 grid. Each cell is tall enough for 3 items with full-sentence
-  // evidence wrapped to 3 lines. Item height budget: title (0.28") + evidence
-  // block (0.75") = 1.03" per item. 3 items × 1.03 + 0.4 (label bar + pad) = ~3.5".
-  const startY = 1.4;
+// Overview slide: 2×2 grid of quadrant summaries — just the label + one-line
+// title per item. Full detail follows on dedicated slides.
+function buildSwotOverviewSlide(pptx: PptxGenJS, swot: SwotAnalysis) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "SWOT Analysis", `Industry: ${swot.industry}`);
+
+  // Cell budget: startY=1.4, slide floor 5.625, 0.3 bottom pad, one row gap 0.15
+  // → available = 5.625 - 1.4 - 0.3 = 3.925 for 2 rows + 1 gap → cellH = 1.89.
+  // Bumped to 2.05 by tightening header to y=1.3 so 5 items fit without overflow.
+  const startY = 1.3;
   const cellW = 4.5;
-  const cellH = 3.5;
+  const cellH = 2.0;
   const col1X = 0.4;
   const col2X = 5.1;
   const rowGap = 0.15;
@@ -1317,13 +1343,8 @@ function buildSwotSlide(pptx: PptxGenJS, swot: SwotAnalysis) {
     { x: col2X, y: startY + cellH + rowGap, label: "THREATS", color: "B45309", items: swot.threats },
   ];
 
-  // Item slot budgets (inside cell)
-  const titleH = 0.24;
-  const evidenceH = 0.72;
-  const itemGap = 0.08;
-  const itemH = titleH + evidenceH + itemGap;
-
   cells.forEach((c) => {
+    const items = c.items ?? [];
     // Cell border
     slide.addShape("rect", {
       x: c.x, y: c.y, w: cellW, h: cellH,
@@ -1335,26 +1356,102 @@ function buildSwotSlide(pptx: PptxGenJS, swot: SwotAnalysis) {
       fill: { color: c.color }, line: { color: c.color, width: 0 },
     });
     slide.addText(c.label, {
-      x: c.x + 0.1, y: c.y + 0.03, w: cellW - 0.2, h: 0.26,
+      x: c.x + 0.14, y: c.y + 0.03, w: cellW - 1.0, h: 0.26,
       fontSize: 10, fontFace: "Arial", bold: true, color: "FFFFFF", charSpacing: 2, valign: "middle",
     });
-
-    // Items (top 3 max; each item gets a title row and 3-line evidence block)
-    const items = (c.items ?? []).slice(0, 3);
-    let ty = c.y + 0.42;
-    items.forEach((it) => {
-      // Title row
-      slide.addText(`${it.id}  ${it.title}`, {
-        x: c.x + 0.14, y: ty, w: cellW - 0.28, h: titleH,
-        fontSize: 9.5, fontFace: "Arial", bold: true, color: BRAND.navy, valign: "top",
-      });
-      // Evidence — no slice, let PPTX wrap. Height budget fits ~3 lines of 8pt.
-      slide.addText(safe(it.evidence), {
-        x: c.x + 0.26, y: ty + titleH, w: cellW - 0.4, h: evidenceH,
-        fontSize: 8, fontFace: "Arial", color: BRAND.muted, valign: "top",
-      });
-      ty += itemH;
+    slide.addText(`${items.length} • detail follows`, {
+      x: c.x + cellW - 1.7, y: c.y + 0.03, w: 1.6, h: 0.26,
+      fontSize: 8, fontFace: "Arial", bold: true, color: "FFFFFF", italic: true,
+      align: "right", valign: "middle",
     });
+
+    // Titles only in the overview — one line each. Cap at 5.
+    // Budget: cellH - 0.32 label - 0.1 top pad - 0.05 bottom pad = usable.
+    const maxTitles = Math.min(items.length, 5);
+    const titleAreaTop = c.y + 0.42;
+    const titleAreaH = cellH - 0.5;
+    const titleH = titleAreaH / Math.max(maxTitles, 1);
+    for (let i = 0; i < maxTitles; i++) {
+      const it = items[i];
+      // Truncate title to a single line at this cell width (~40 chars fits at 8.5pt)
+      const label = safe(it.title);
+      const oneLine = label.length > 60 ? label.slice(0, 59) + "…" : label;
+      slide.addText(`${it.id}  ${oneLine}`, {
+        x: c.x + 0.14, y: titleAreaTop + i * titleH, w: cellW - 0.28, h: titleH,
+        fontSize: 8.5, fontFace: "Arial", color: BRAND.text, valign: "middle",
+      });
+    }
+  });
+}
+
+// One quadrant detail slide: heading + all items with full evidence.
+// Body height budget: startY=1.35 → slide floor 5.625 minus 0.3 bottom pad
+// = 3.975". Items split evenly; 5 items × evidenceH still fits at fontSize 9.
+// When items > 5 (rare), we split across multiple slides ("(cont.)").
+function buildSwotQuadrantSlide(
+  pptx: PptxGenJS,
+  label: string,
+  color: string,
+  items: SwotItem[] | undefined,
+  industry: string,
+) {
+  const src = items ?? [];
+  if (src.length === 0) {
+    const slide = pptx.addSlide();
+    addSectionHeader(slide, `SWOT — ${label}`, `Industry: ${industry}`);
+    slide.addText("No items in this quadrant.", {
+      x: 0.6, y: 1.5, w: SLIDE_W - 1.2, h: 0.4,
+      fontSize: 12, fontFace: "Arial", italic: true, color: BRAND.muted,
+    });
+    return;
+  }
+
+  // Split into pages of at most 5 items each.
+  const perPage = 5;
+  const pages: SwotItem[][] = [];
+  for (let i = 0; i < src.length; i += perPage) {
+    pages.push(src.slice(i, i + perPage));
+  }
+
+  pages.forEach((pageItems, pageIdx) => {
+    const slide = pptx.addSlide();
+    const suffix = pages.length > 1 ? ` (${pageIdx + 1} of ${pages.length})` : "";
+    addSectionHeader(slide, `SWOT — ${label}${suffix}`, `Industry: ${industry}`);
+
+    const startY = 1.35;
+    const bodyW = SLIDE_W - 0.8;
+    const itemGap = 0.1;
+    const available = SLIDE_H - startY - 0.3;
+    const n = pageItems.length;
+    const itemH = (available - (n - 1) * itemGap) / n;
+    const titleH = 0.3;
+    const evidenceH = itemH - titleH - 0.06;
+
+    for (let i = 0; i < n; i++) {
+      const it = pageItems[i];
+      const y = startY + i * (itemH + itemGap);
+
+      slide.addShape("rect", {
+        x: 0.4, y, w: bodyW, h: itemH,
+        fill: { color: "FFFFFF" }, line: { color: BRAND.border, width: 0.75 },
+      });
+      slide.addShape("rect", {
+        x: 0.4, y, w: 0.08, h: itemH,
+        fill: { color }, line: { color, width: 0 },
+      });
+      slide.addText(it.id, {
+        x: 0.55, y: y + 0.06, w: 0.55, h: 0.26,
+        fontSize: 10, fontFace: "Arial", bold: true, color, valign: "middle",
+      });
+      slide.addText(safe(it.title), {
+        x: 1.12, y: y + 0.06, w: bodyW - 0.82, h: titleH,
+        fontSize: 11.5, fontFace: "Arial", bold: true, color: BRAND.navy, valign: "middle",
+      });
+      slide.addText(safe(it.evidence), {
+        x: 0.55, y: y + titleH + 0.08, w: bodyW - 0.25, h: evidenceH,
+        fontSize: 9.5, fontFace: "Arial", color: BRAND.text, valign: "top",
+      });
+    }
   });
 }
 
@@ -1435,34 +1532,60 @@ function buildPestelSlide(pptx: PptxGenJS, pestel: PestelAnalysis) {
   });
 }
 
-function buildPortersSlide(pptx: PptxGenJS, porters: PortersFiveForces) {
+// Porter's is rendered across 6 slides: 1 overview + 1 per force.
+// The 16:9 slide (5.625" tall) can't fit 5 forces × rationale + drivers +
+// sources without overlap; split gives each force room for the full read.
+function buildPortersSlides(pptx: PptxGenJS, porters: PortersFiveForces) {
+  buildPortersOverviewSlide(pptx, porters);
+  const canonicalOrder: PortersForceName[] = [
+    "rivalry", "newEntrants", "substitutes", "buyerPower", "supplierPower",
+  ];
+  const byName = new Map(porters.forces.map((f) => [f.force, f]));
+  canonicalOrder.forEach((name) => {
+    const f = byName.get(name);
+    if (f) buildPortersForceSlide(pptx, f, porters.industry);
+  });
+}
+
+const PORTERS_FORCE_LABELS: Record<PortersForceName, string> = {
+  rivalry: "Competitive Rivalry",
+  newEntrants: "Threat of New Entrants",
+  substitutes: "Threat of Substitutes",
+  buyerPower: "Buyer Power",
+  supplierPower: "Supplier Power",
+};
+
+function portersIntensityColor(intensity: string): string {
+  return intensity === "high" ? "DC2626" : intensity === "medium" ? "B45309" : "059669";
+}
+
+// Extract the first sentence of a paragraph, or the first ~N chars ending on
+// a word boundary. Never cuts mid-word.
+function firstSentenceOrClamp(text: string, maxChars = 200): string {
+  const s = safe(text).trim();
+  if (!s) return "";
+  const firstSentence = s.split(/(?<=[.!?])\s+/)[0] ?? s;
+  if (firstSentence.length <= maxChars) return firstSentence;
+  return firstSentence.slice(0, maxChars - 1).replace(/\s+\S*$/, "") + "…";
+}
+
+// Overview: table of 5 forces with intensity + short takeaway. Body only.
+function buildPortersOverviewSlide(pptx: PptxGenJS, porters: PortersFiveForces) {
   const slide = pptx.addSlide();
   addSectionHeader(
     slide,
     "Porter's Five Forces",
-    porters.summary || `${porters.industry} · 2025–2026 sources`,
+    porters.overallStructure || `${porters.industry} · 2025–2026 sources`,
   );
 
-  const forceLabels: Record<string, string> = {
-    rivalry: "Competitive Rivalry",
-    newEntrants: "Threat of New Entrants",
-    substitutes: "Threat of Substitutes",
-    buyerPower: "Buyer Power",
-    supplierPower: "Supplier Power",
-  };
-
-  // Each row must fit: header (0.3") + rationale wrapped to 3 lines (0.6") +
-  // source pill (0.2") + bottom pad (0.1") = 1.2". 5 rows × 1.2 + 4 gaps = 6.4",
-  // fits comfortably above the 7.5" slide floor from startY 1.35.
-  const startY = 1.35;
-  const rowH = 1.15;
-  const rowGap = 0.08;
+  const startY = 1.4;
+  const rowH = 0.78;
+  const rowGap = 0.06;
   const rowW = SLIDE_W - 0.8;
 
   porters.forces.forEach((f, idx) => {
     const y = startY + idx * (rowH + rowGap);
-    const intensityColor =
-      f.intensity === "high" ? "DC2626" : f.intensity === "medium" ? "B45309" : "059669";
+    const intensityColor = portersIntensityColor(f.intensity);
 
     // Row bg
     slide.addShape("rect", {
@@ -1470,43 +1593,111 @@ function buildPortersSlide(pptx: PptxGenJS, porters: PortersFiveForces) {
       fill: { color: idx % 2 === 0 ? "FFFFFF" : "F9FAFB" },
       line: { color: BRAND.border, width: 0.5 },
     });
-
     // Left intensity bar
     slide.addShape("rect", {
-      x: 0.4, y, w: 0.1, h: rowH,
+      x: 0.4, y, w: 0.12, h: rowH,
       fill: { color: intensityColor }, line: { color: intensityColor, width: 0 },
     });
-
     // Force label
-    slide.addText(`${f.id}  ·  ${forceLabels[f.force] ?? f.force}`, {
-      x: 0.6, y: y + 0.08, w: 4.5, h: 0.25,
-      fontSize: 10.5, fontFace: "Arial", bold: true, color: BRAND.navy, valign: "middle",
+    slide.addText(PORTERS_FORCE_LABELS[f.force] ?? f.force, {
+      x: 0.62, y: y + 0.06, w: 4.8, h: 0.3,
+      fontSize: 12, fontFace: "Arial", bold: true, color: BRAND.navy, valign: "middle",
     });
-
     // Intensity badge (top-right)
     slide.addText(f.intensity.toUpperCase(), {
-      x: SLIDE_W - 1.4, y: y + 0.08, w: 1.0, h: 0.22,
-      fontSize: 9, fontFace: "Arial", bold: true, color: intensityColor,
-      align: "right", charSpacing: 1, valign: "middle",
+      x: SLIDE_W - 1.6, y: y + 0.06, w: 1.2, h: 0.3,
+      fontSize: 11, fontFace: "Arial", bold: true, color: intensityColor,
+      align: "right", charSpacing: 1.5, valign: "middle",
     });
-
-    // Rationale — no slice, let PPTX wrap into the taller row
-    slide.addText(safe(f.rationale), {
-      x: 0.6, y: y + 0.38, w: rowW - 0.3, h: 0.55,
-      fontSize: 8.5, fontFace: "Arial", color: BRAND.text, valign: "top",
+    // Takeaway: first full sentence (or clamped at a word boundary).
+    slide.addText(firstSentenceOrClamp(f.rationale, 200), {
+      x: 0.62, y: y + 0.4, w: rowW - 0.3, h: 0.35,
+      fontSize: 9, fontFace: "Arial", color: BRAND.muted, valign: "top",
     });
+  });
+}
 
-    // First source pill (bottom-right)
-    if (f.sources && f.sources.length > 0) {
-      const s = f.sources[0];
-      const label = s.publisher || domainFromPptxUrl(s.url);
-      slide.addText(`› ${label}`, {
-        x: SLIDE_W - 3.0, y: y + rowH - 0.28, w: 2.6, h: 0.22,
-        fontSize: 7, fontFace: "Arial", bold: true, color: "0F766E",
-        hyperlink: { url: s.url }, align: "right",
+// One force detail slide: full rationale + drivers list + first source.
+function buildPortersForceSlide(pptx: PptxGenJS, f: PortersForce, industry: string) {
+  const slide = pptx.addSlide();
+  const forceLabel = PORTERS_FORCE_LABELS[f.force] ?? f.force;
+  addSectionHeader(slide, `Porter's — ${forceLabel}`, `Industry: ${industry}`);
+
+  const intensityColor = portersIntensityColor(f.intensity);
+
+  // Intensity badge (top-right corner of header row)
+  slide.addShape("rect", {
+    x: SLIDE_W - 1.7, y: 0.45, w: 1.3, h: 0.4,
+    fill: { color: intensityColor }, line: { color: intensityColor, width: 0 },
+  });
+  slide.addText(f.intensity.toUpperCase(), {
+    x: SLIDE_W - 1.7, y: 0.45, w: 1.3, h: 0.4,
+    fontSize: 12, fontFace: "Arial", bold: true, color: "FFFFFF",
+    align: "center", charSpacing: 2, valign: "middle",
+  });
+
+  // Two-column layout: rationale on left, drivers list on right
+  const bodyY = 1.4;
+  const bodyH = SLIDE_H - bodyY - 0.5; // 3.725"
+  const colGap = 0.3;
+  const leftW = 5.2;
+  const rightW = SLIDE_W - 0.8 - leftW - colGap;
+
+  // Reserve the bottom source pill area so body content never overlaps it.
+  const sourceReserve = f.sources && f.sources.length > 0 ? 0.32 : 0.0;
+  const usableBodyH = bodyH - sourceReserve;
+
+  // Left: RATIONALE
+  slide.addText("RATIONALE", {
+    x: 0.4, y: bodyY, w: leftW, h: 0.28,
+    fontSize: 9.5, fontFace: "Arial", bold: true, color: BRAND.accent, charSpacing: 2,
+  });
+  slide.addText(safe(f.rationale), {
+    x: 0.4, y: bodyY + 0.32, w: leftW, h: usableBodyH - 0.32,
+    fontSize: 10.5, fontFace: "Arial", color: BRAND.text, valign: "top",
+  });
+
+  // Right: DRIVERS
+  const rightX = 0.4 + leftW + colGap;
+  slide.addText("KEY DRIVERS", {
+    x: rightX, y: bodyY, w: rightW, h: 0.28,
+    fontSize: 9.5, fontFace: "Arial", bold: true, color: BRAND.accent, charSpacing: 2,
+  });
+  const drivers = Array.isArray(f.drivers) ? f.drivers : [];
+  if (drivers.length > 0) {
+    const shown = drivers.slice(0, 4);
+    const bulletItems = shown.map((d) => ({
+      text: safe(d),
+      options: { bullet: { indent: 15 } },
+    }));
+    if (drivers.length > 4) {
+      bulletItems.push({
+        text: `+ ${drivers.length - 4} more driver${drivers.length - 4 === 1 ? "" : "s"} in full report`,
+        options: { bullet: { indent: 15 } },
       });
     }
-  });
+    slide.addText(bulletItems, {
+      x: rightX, y: bodyY + 0.32, w: rightW, h: usableBodyH - 0.32,
+      fontSize: 9.5, fontFace: "Arial", color: BRAND.text, valign: "top",
+      paraSpaceAfter: 4,
+    });
+  } else {
+    slide.addText("No drivers listed.", {
+      x: rightX, y: bodyY + 0.32, w: rightW, h: 0.4,
+      fontSize: 10, fontFace: "Arial", italic: true, color: BRAND.muted,
+    });
+  }
+
+  // Source pill (bottom-right, in the reserved band)
+  if (f.sources && f.sources.length > 0) {
+    const s = f.sources[0];
+    const label = s.publisher || domainFromPptxUrl(s.url);
+    slide.addText(`› Source: ${label}`, {
+      x: SLIDE_W - 4.0, y: SLIDE_H - 0.36, w: 3.6, h: 0.24,
+      fontSize: 9, fontFace: "Arial", bold: true, color: "0F766E",
+      hyperlink: { url: s.url }, align: "right",
+    });
+  }
 }
 
 function horizonLabelPptx(h: string): string {
