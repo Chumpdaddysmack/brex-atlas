@@ -242,6 +242,22 @@ function parseIfString<T>(v: T | string | null | undefined): T | null {
   return v as T;
 }
 
+// Some analysis fields have been observed stored as JSON-encoded strings
+// nested inside their parent object (e.g. strategy.contentPillars was a
+// string containing an array). Also tolerate malformed JSON by returning [].
+function parseArrayField(v: unknown): any[] {
+  if (Array.isArray(v)) return v;
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function buildStrategyContext(params: {
   extraction: Extraction;
   strategy: Strategy;
@@ -309,7 +325,7 @@ Messaging recommendations: ${(strategy.messagingRecommendations ?? []).join(" | 
 AEO/GEO recommendations: ${(strategy.aeoRecommendations ?? []).join(" | ")}
 
 # CONTENT PILLARS
-${(strategy.contentPillars ?? []).map((p: any) => `- ${p.name}: ${p.description}`).join("\n")}
+${parseArrayField(strategy.contentPillars).map((p: any) => `- ${p?.name ?? "(unnamed)"}: ${p?.description ?? ""}`).join("\n")}
 
 # SWOT \u2014 STRENGTHS
 ${strengths || "(none)"}

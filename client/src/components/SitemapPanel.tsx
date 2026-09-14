@@ -88,9 +88,10 @@ export interface SitemapPanelProps {
   planId: string;
   planPayload: ContentPlanPayload;
   planStatus: string; // ContentPlan['status']
+  planErrorMessage?: string | null;
 }
 
-export function SitemapPanel({ planId, planPayload, planStatus }: SitemapPanelProps) {
+export function SitemapPanel({ planId, planPayload, planStatus, planErrorMessage }: SitemapPanelProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const sitemap = planPayload.sitemap;
@@ -156,18 +157,32 @@ export function SitemapPanel({ planId, planPayload, planStatus }: SitemapPanelPr
 
   // ----- Empty state: no sitemap yet -----
   if (!sitemap) {
+    const showFailure =
+      !!planErrorMessage && planErrorMessage.toLowerCase().includes("sitemap") && !isGenerating;
     return (
       <Card className="p-8">
         <div className="flex flex-col items-center text-center gap-4">
-          <div className="rounded-full bg-primary/10 p-4">
-            <Search className="h-8 w-8 text-primary" />
+          <div className={`rounded-full p-4 ${showFailure ? "bg-destructive/10" : "bg-primary/10"}`}>
+            {showFailure ? (
+              <AlertTriangle className="h-8 w-8 text-destructive" />
+            ) : (
+              <Search className="h-8 w-8 text-primary" />
+            )}
           </div>
           <div>
-            <h3 className="text-lg font-semibold">No site architecture yet</h3>
-            <p className="text-sm text-muted-foreground max-w-md mt-2">
-              Generate a 15-25 page SEO/GEO sitemap with meta tags, H1/H2 outlines, 300-500 word
-              draft copy, and FAQ blocks optimized for AI search engines. Runs in about 10 minutes.
-            </p>
+            <h3 className="text-lg font-semibold">
+              {showFailure ? "Site architecture generation failed" : "No site architecture yet"}
+            </h3>
+            {showFailure ? (
+              <p className="text-sm text-destructive/90 max-w-md mt-2">
+                {planErrorMessage}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground max-w-md mt-2">
+                Generate a 15-25 page SEO/GEO sitemap with meta tags, H1/H2 outlines, 300-500 word
+                draft copy, and FAQ blocks optimized for AI search engines. Runs in about 10 minutes.
+              </p>
+            )}
           </div>
           <Button
             onClick={() => regenMut.mutate()}
@@ -182,7 +197,7 @@ export function SitemapPanel({ planId, planPayload, planStatus }: SitemapPanelPr
             ) : (
               <>
                 <Sparkles className="h-4 w-4 mr-2" />
-                Generate Site Architecture
+                {showFailure ? "Try again" : "Generate Site Architecture"}
               </>
             )}
           </Button>

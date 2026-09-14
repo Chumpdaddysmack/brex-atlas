@@ -410,6 +410,7 @@ export default function ContentStudio() {
                   planId={plan!.id}
                   planPayload={planPayload}
                   planStatus={plan!.status}
+                  planErrorMessage={plan!.errorMessage}
                 />
               </TabsContent>
 
