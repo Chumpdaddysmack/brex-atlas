@@ -1300,18 +1300,28 @@ function buildSwotSlide(pptx: PptxGenJS, swot: SwotAnalysis) {
   const slide = pptx.addSlide();
   addSectionHeader(slide, "SWOT Analysis", swot.summary || `Industry: ${swot.industry}`);
 
+  // Layout: 2×2 grid. Each cell is tall enough for 3 items with full-sentence
+  // evidence wrapped to 3 lines. Item height budget: title (0.28") + evidence
+  // block (0.75") = 1.03" per item. 3 items × 1.03 + 0.4 (label bar + pad) = ~3.5".
   const startY = 1.4;
   const cellW = 4.5;
-  const cellH = 1.85;
+  const cellH = 3.5;
   const col1X = 0.4;
   const col2X = 5.1;
+  const rowGap = 0.15;
 
   const cells = [
     { x: col1X, y: startY, label: "STRENGTHS", color: "059669", items: swot.strengths },
     { x: col2X, y: startY, label: "WEAKNESSES", color: "DC2626", items: swot.weaknesses },
-    { x: col1X, y: startY + cellH + 0.15, label: "OPPORTUNITIES", color: "0284C7", items: swot.opportunities },
-    { x: col2X, y: startY + cellH + 0.15, label: "THREATS", color: "B45309", items: swot.threats },
+    { x: col1X, y: startY + cellH + rowGap, label: "OPPORTUNITIES", color: "0284C7", items: swot.opportunities },
+    { x: col2X, y: startY + cellH + rowGap, label: "THREATS", color: "B45309", items: swot.threats },
   ];
+
+  // Item slot budgets (inside cell)
+  const titleH = 0.24;
+  const evidenceH = 0.72;
+  const itemGap = 0.08;
+  const itemH = titleH + evidenceH + itemGap;
 
   cells.forEach((c) => {
     // Cell border
@@ -1321,28 +1331,29 @@ function buildSwotSlide(pptx: PptxGenJS, swot: SwotAnalysis) {
     });
     // Label bar
     slide.addShape("rect", {
-      x: c.x, y: c.y, w: cellW, h: 0.28,
+      x: c.x, y: c.y, w: cellW, h: 0.32,
       fill: { color: c.color }, line: { color: c.color, width: 0 },
     });
     slide.addText(c.label, {
-      x: c.x + 0.1, y: c.y + 0.03, w: cellW - 0.2, h: 0.22,
-      fontSize: 9, fontFace: "Arial", bold: true, color: "FFFFFF", charSpacing: 2, valign: "middle",
+      x: c.x + 0.1, y: c.y + 0.03, w: cellW - 0.2, h: 0.26,
+      fontSize: 10, fontFace: "Arial", bold: true, color: "FFFFFF", charSpacing: 2, valign: "middle",
     });
 
-    // Items (top 4 max, truncate long titles)
-    const items = (c.items ?? []).slice(0, 4);
-    let ty = c.y + 0.35;
+    // Items (top 3 max; each item gets a title row and 3-line evidence block)
+    const items = (c.items ?? []).slice(0, 3);
+    let ty = c.y + 0.42;
     items.forEach((it) => {
+      // Title row
       slide.addText(`${it.id}  ${it.title}`, {
-        x: c.x + 0.1, y: ty, w: cellW - 0.2, h: 0.22,
-        fontSize: 8.5, fontFace: "Arial", bold: true, color: BRAND.navy, valign: "middle",
+        x: c.x + 0.14, y: ty, w: cellW - 0.28, h: titleH,
+        fontSize: 9.5, fontFace: "Arial", bold: true, color: BRAND.navy, valign: "top",
       });
-      ty += 0.22;
-      slide.addText(safe(it.evidence).slice(0, 130), {
-        x: c.x + 0.25, y: ty, w: cellW - 0.35, h: 0.22,
-        fontSize: 7.5, fontFace: "Arial", color: BRAND.muted, valign: "middle",
+      // Evidence — no slice, let PPTX wrap. Height budget fits ~3 lines of 8pt.
+      slide.addText(safe(it.evidence), {
+        x: c.x + 0.26, y: ty + titleH, w: cellW - 0.4, h: evidenceH,
+        fontSize: 8, fontFace: "Arial", color: BRAND.muted, valign: "top",
       });
-      ty += 0.16;
+      ty += itemH;
     });
   });
 }
@@ -1440,12 +1451,16 @@ function buildPortersSlide(pptx: PptxGenJS, porters: PortersFiveForces) {
     supplierPower: "Supplier Power",
   };
 
+  // Each row must fit: header (0.3") + rationale wrapped to 3 lines (0.6") +
+  // source pill (0.2") + bottom pad (0.1") = 1.2". 5 rows × 1.2 + 4 gaps = 6.4",
+  // fits comfortably above the 7.5" slide floor from startY 1.35.
   const startY = 1.35;
-  const rowH = 0.75;
+  const rowH = 1.15;
+  const rowGap = 0.08;
   const rowW = SLIDE_W - 0.8;
 
   porters.forces.forEach((f, idx) => {
-    const y = startY + idx * (rowH + 0.05);
+    const y = startY + idx * (rowH + rowGap);
     const intensityColor =
       f.intensity === "high" ? "DC2626" : f.intensity === "medium" ? "B45309" : "059669";
 
@@ -1464,20 +1479,20 @@ function buildPortersSlide(pptx: PptxGenJS, porters: PortersFiveForces) {
 
     // Force label
     slide.addText(`${f.id}  ·  ${forceLabels[f.force] ?? f.force}`, {
-      x: 0.6, y: y + 0.05, w: 3.5, h: 0.25,
-      fontSize: 10.5, fontFace: "Arial", bold: true, color: BRAND.navy,
+      x: 0.6, y: y + 0.08, w: 4.5, h: 0.25,
+      fontSize: 10.5, fontFace: "Arial", bold: true, color: BRAND.navy, valign: "middle",
     });
 
     // Intensity badge (top-right)
     slide.addText(f.intensity.toUpperCase(), {
-      x: SLIDE_W - 1.4, y: y + 0.05, w: 1.0, h: 0.22,
+      x: SLIDE_W - 1.4, y: y + 0.08, w: 1.0, h: 0.22,
       fontSize: 9, fontFace: "Arial", bold: true, color: intensityColor,
-      align: "right", charSpacing: 1,
+      align: "right", charSpacing: 1, valign: "middle",
     });
 
-    // Rationale
-    slide.addText(safe(f.rationale).slice(0, 260), {
-      x: 0.6, y: y + 0.3, w: rowW - 0.3, h: rowH - 0.35,
+    // Rationale — no slice, let PPTX wrap into the taller row
+    slide.addText(safe(f.rationale), {
+      x: 0.6, y: y + 0.38, w: rowW - 0.3, h: 0.55,
       fontSize: 8.5, fontFace: "Arial", color: BRAND.text, valign: "top",
     });
 
