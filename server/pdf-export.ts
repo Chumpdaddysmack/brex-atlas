@@ -1389,7 +1389,7 @@ function renderRoiSection(
   const roi = p.roiProjections;
   if (!roi) return;
 
-  const { assumptions, outcomes, monthlyProjection, sensitivity } = roi;
+  const { assumptions, outcomes, monthlyProjection } = roi;
 
   // Always start ROI on a fresh page for a clean spread
   doc.addPage();
@@ -1411,42 +1411,12 @@ function renderRoiSection(
     .font(FONTS.sansOblique)
     .fontSize(9)
     .text(
-      "Modeling, not measurement. Numbers below are derived from stated assumptions — every assumption is listed and defensible on the following pages.",
+      "Conservative projections modeled from client-specific assumptions inferred by our analysis.",
       leftMargin,
       doc.y,
       { width: pageWidth },
     );
-  doc.moveDown(0.6);
-
-  // ---- How to read this projection (framing box) ----
-  // Only shown in FULL PDF (not compact/executive summary) to keep the summary tight.
-  if (!opts.compact) {
-    const framingY = doc.y;
-    const framingH = 62;
-    doc.rect(leftMargin, framingY, pageWidth, framingH).fillColor("#F7FAFC").fill();
-    doc.rect(leftMargin, framingY, 3, framingH).fillColor(BRAND.navy).fill();
-    doc
-      .fillColor(BRAND.navy)
-      .font(FONTS.sansBold)
-      .fontSize(9)
-      .text("HOW TO READ THIS PROJECTION", leftMargin + 12, framingY + 8, {
-        characterSpacing: 0.6,
-        lineBreak: false,
-      });
-    doc
-      .fillColor(BRAND.text)
-      .font(FONTS.sans)
-      .fontSize(8.5)
-      .text(
-        "This is a defensible business case, not a forecast. Deal size and program cost are anchored to your SOW. Traffic and conversion rates are inferred from B2B benchmarks for a business of your profile. The sensitivity analysis on the final page shows how outcomes shift when the highest-leverage assumptions move ±20%.",
-        leftMargin + 12,
-        framingY + 22,
-        { width: pageWidth - 24, align: "left" },
-      );
-    doc.y = framingY + framingH + 14;
-  } else {
-    doc.moveDown(0.4);
-  }
+  doc.moveDown(1.0);
 
   // ---- Headline stat cards (2x2 grid) ----
   const cardW = (pageWidth - 12) / 2;
@@ -1461,15 +1431,9 @@ function renderRoiSection(
       color: BRAND.navy,
     },
     {
-      // If sensitivity is present, show ROI as a RANGE with central highlighted.
-      // Otherwise fall back to the single point estimate (backward compat).
       label: "ROI Multiple",
-      value: sensitivity
-        ? `${sensitivity.scenarios[0].roiMultiple}–${sensitivity.scenarios[2].roiMultiple}x`
-        : `${outcomes.roiMultiple}x`,
-      sub: sensitivity
-        ? `Central: ${outcomes.roiMultiple}x • gross profit / program cost`
-        : "Gross profit / program cost",
+      value: `${outcomes.roiMultiple}x`,
+      sub: "Gross profit / program cost",
       color: BRAND.accent,
       highlight: true,
     },
@@ -1573,22 +1537,18 @@ function renderRoiSection(
   );
   doc.y += 155;
 
-  // ---- Chart 2: 12-Month Contract Payback ----
+  // ---- Chart 2: Payback timeline ----
   ensureSpace(doc, 190);
   doc
     .fillColor(BRAND.text)
     .font(FONTS.sansBold)
     .fontSize(11)
-    .text("12-Month Contract Payback", leftMargin, doc.y);
+    .text("Payback Timeline", leftMargin, doc.y);
   doc
     .fillColor(BRAND.muted)
     .font(FONTS.sans)
     .fontSize(8)
-    .text(
-      "Cumulative gross profit vs cumulative program cost across the full contract term",
-      leftMargin,
-      doc.y + 2,
-    );
+    .text("Cumulative gross profit vs cumulative program cost", leftMargin, doc.y + 2);
   doc.moveDown(1.0);
 
   const monthlyProgramCost = assumptions.programCost12Mo / 12;
@@ -1603,88 +1563,19 @@ function renderRoiSection(
     values: monthlyProjection.map((m) => monthlyProgramCost * m.month),
     dashed: true,
   };
-
-  // Split the row: chart on the left (72%), 12-month callout on the right (28%)
-  const calloutW = 150;
-  const gutter = 12;
-  const chartW = pageWidth - calloutW - gutter;
-  const chartY = doc.y;
-
-  const paybackMonth = outcomes.paybackMonth ?? undefined;
-  const monthsRemaining = paybackMonth ? Math.max(0, 12 - paybackMonth) : 0;
-  const breakevenSubLabel = paybackMonth && monthsRemaining > 0
-    ? `+ ${monthsRemaining} more months of compounding return`
-    : undefined;
-
   drawTwoSeriesLine(
     doc,
     leftMargin,
-    chartY,
-    chartW,
+    doc.y,
+    pageWidth,
     140,
     profitSeries,
     costSeries,
     "usd",
     xLabels,
-    paybackMonth,
-    breakevenSubLabel,
+    outcomes.paybackMonth ?? undefined,
   );
-
-  // Right-side 12-month contract callout
-  const calloutX = leftMargin + chartW + gutter;
-  const totalProfit = outcomes.totalGrossProfit;
-  const totalCost = assumptions.programCost12Mo;
-  const netGain = totalProfit - totalCost;
-  doc
-    .rect(calloutX, chartY, calloutW, 140)
-    .fillColor("#F0F9FF")
-    .fill()
-    .strokeColor(BRAND.accent)
-    .lineWidth(1)
-    .rect(calloutX, chartY, calloutW, 140)
-    .stroke();
-  doc
-    .fillColor(BRAND.muted)
-    .font(FONTS.sansBold)
-    .fontSize(7.5)
-    .text("12-MONTH CONTRACT VALUE", calloutX + 10, chartY + 10, {
-      width: calloutW - 20,
-      lineBreak: false,
-    });
-  doc
-    .fillColor(BRAND.text)
-    .font(FONTS.sansBold)
-    .fontSize(20)
-    .text(formatUsdForPdf(netGain), calloutX + 10, chartY + 26, { width: calloutW - 20 });
-  doc
-    .fillColor(BRAND.muted)
-    .font(FONTS.sans)
-    .fontSize(7.5)
-    .text("net gain over full contract", calloutX + 10, chartY + 50, { width: calloutW - 20 });
-  doc
-    .fillColor(BRAND.text)
-    .font(FONTS.sans)
-    .fontSize(8.5)
-    .text(
-      `${formatUsdForPdf(totalProfit)} gross profit\n- ${formatUsdForPdf(totalCost)} program cost`,
-      calloutX + 10,
-      chartY + 72,
-      { width: calloutW - 20, lineGap: 2 },
-    );
-  if (paybackMonth && monthsRemaining > 0) {
-    doc
-      .fillColor("#065F46")
-      .font(FONTS.sansBold)
-      .fontSize(7.5)
-      .text(
-        `${monthsRemaining} of 12 months are pure return after payback`,
-        calloutX + 10,
-        chartY + 112,
-        { width: calloutW - 20, lineGap: 1 },
-      );
-  }
-
-  doc.y = chartY + 155;
+  doc.y += 155;
 
   // For compact (executive summary), stop here after headline + two charts
   if (opts.compact) {
@@ -1863,170 +1754,6 @@ function renderRoiSection(
   });
 
   doc.moveDown(0.8);
-
-  // ---- Sensitivity analysis (full PDF only) ----
-  // Renders after the assumptions/rationale block so the reader has already
-  // seen the AI-inferred central case. Sensitivity puts that case in context
-  // by flexing the 5 highest-leverage variables ±20% each direction.
-  if (sensitivity && sensitivity.scenarios.length === 3) {
-    doc.addPage();
-
-    // Section header (matches ROI section styling but smaller — sub-section)
-    const sensHeaderY = doc.y;
-    doc.rect(leftMargin, sensHeaderY, 4, 22).fill(BRAND.accent);
-    doc
-      .fillColor(BRAND.navy)
-      .font(FONTS.sansBold)
-      .fontSize(16)
-      .text("Sensitivity Analysis", leftMargin + 14, sensHeaderY, {
-        characterSpacing: 0.4,
-        lineBreak: false,
-      });
-    doc.y = sensHeaderY + 26;
-    doc
-      .fillColor(BRAND.muted)
-      .font(FONTS.sansOblique)
-      .fontSize(9)
-      .text(
-        `Same math, three scenarios. Each of ${sensitivity.flexedVariables.length} demand-side variables (${sensitivity.flexedVariables.join(", ")}) flexed by ±${sensitivity.flexPercent}% simultaneously. Deal size, gross margin, and program cost held constant — those are SOW facts, not inferred.`,
-        leftMargin,
-        doc.y,
-        { width: pageWidth },
-      );
-    doc.moveDown(1.2);
-
-    // ---- Scenario cards (3 side-by-side) ----
-    const scenCardW = (pageWidth - 20) / 3;
-    const scenCardH = 148;
-    const scenBaseY = doc.y;
-    const scenarioColors = [
-      { border: BRAND.border, bg: "#FAFAFA", accent: "#94A3B8" },      // Pessimistic — muted
-      { border: BRAND.accent, bg: "#FFFBEB", accent: BRAND.accent },   // Central     — highlighted
-      { border: BRAND.border, bg: "#FAFAFA", accent: "#94A3B8" },      // Optimistic  — muted
-    ];
-
-    sensitivity.scenarios.forEach((scen, i) => {
-      const c = scenarioColors[i];
-      const cx = leftMargin + i * (scenCardW + 10);
-      const cy = scenBaseY;
-
-      // Card bg + border (highlighted for central)
-      doc.rect(cx, cy, scenCardW, scenCardH).fillColor(c.bg).fill();
-      doc
-        .rect(cx, cy, scenCardW, scenCardH)
-        .strokeColor(c.border)
-        .lineWidth(i === 1 ? 1.5 : 0.5)
-        .stroke();
-
-      // Scenario label + flex
-      doc
-        .fillColor(c.accent)
-        .font(FONTS.sansBold)
-        .fontSize(8)
-        .text(scen.label.toUpperCase(), cx + 10, cy + 10, {
-          width: scenCardW - 20,
-          characterSpacing: 0.6,
-          lineBreak: false,
-        });
-      const flexLabel =
-        scen.flexPercent === 0
-          ? "AI-inferred baseline"
-          : `${scen.flexPercent > 0 ? "+" : ""}${scen.flexPercent}% on each driver`;
-      doc
-        .fillColor(BRAND.muted)
-        .font(FONTS.sansOblique)
-        .fontSize(7.5)
-        .text(flexLabel, cx + 10, cy + 22, { width: scenCardW - 20, lineBreak: false });
-
-      // ROI Multiple — dominant metric
-      doc
-        .fillColor(i === 1 ? BRAND.accent : BRAND.text)
-        .font(FONTS.serif)
-        .fontSize(26)
-        .text(`${scen.roiMultiple}x`, cx + 10, cy + 38, {
-          width: scenCardW - 20,
-          lineBreak: false,
-        });
-      doc
-        .fillColor(BRAND.muted)
-        .font(FONTS.sans)
-        .fontSize(7)
-        .text("ROI multiple", cx + 10, cy + 66, {
-          width: scenCardW - 20,
-          characterSpacing: 0.4,
-          lineBreak: false,
-        });
-
-      // Secondary metrics stacked
-      const secondaryY = cy + 82;
-      const rows: [string, string][] = [
-        ["Revenue", formatUsdForPdf(scen.totalRevenue)],
-        ["Gross profit", formatUsdForPdf(scen.totalGrossProfit)],
-        ["Closed won", `${scen.totalClosedWon}`],
-        ["Payback", scen.paybackMonth ? `Month ${scen.paybackMonth}` : ">12 mo"],
-      ];
-      rows.forEach((r, ri) => {
-        const ry = secondaryY + ri * 14;
-        doc
-          .fillColor(BRAND.muted)
-          .font(FONTS.sans)
-          .fontSize(7.5)
-          .text(r[0], cx + 10, ry, { width: (scenCardW - 20) * 0.55, lineBreak: false });
-        doc
-          .fillColor(BRAND.text)
-          .font(FONTS.sansBold)
-          .fontSize(8)
-          .text(r[1], cx + 10 + (scenCardW - 20) * 0.55, ry, {
-            width: (scenCardW - 20) * 0.45,
-            align: "right",
-            lineBreak: false,
-          });
-      });
-    });
-
-    doc.y = scenBaseY + scenCardH + 20;
-
-    // ---- Interpretation guidance ----
-    ensureSpace(doc, 120);
-    doc
-      .fillColor(BRAND.text)
-      .font(FONTS.sansBold)
-      .fontSize(10)
-      .text("How to interpret the range", leftMargin, doc.y);
-    doc.moveDown(0.4);
-
-    const guidance = [
-      [
-        "Compound uncertainty is real",
-        `Because the funnel cascades through 5 stages, a ±${sensitivity.flexPercent}% flex on each stage produces a wider outcome range than any single variable would suggest. Use the range, not the midpoint, when setting expectations.`,
-      ],
-      [
-        "Pessimistic still models a positive outcome",
-        `Even with every demand-side driver at ${sensitivity.flexPercent}% below the central case, the program produces ${formatUsdForPdf(sensitivity.scenarios[0].totalGrossProfit)} in gross profit — ${sensitivity.scenarios[0].roiMultiple}x return on the ${formatUsdForPdf(assumptions.programCost12Mo)} program cost.`,
-      ],
-      [
-        "What tightens the range",
-        "Historical funnel data from a prior engagement, a running baseline of the client's current traffic and conversion, or a paid diagnostic that measures visitor-to-lead rate on the actual site. This is what the Outcome Ledger is designed to capture.",
-      ],
-    ];
-    guidance.forEach(([label, text]) => {
-      ensureSpace(doc, 32);
-      doc
-        .fillColor(BRAND.text)
-        .font(FONTS.sansBold)
-        .fontSize(8.5)
-        .text(`${label}: `, leftMargin, doc.y, { continued: true });
-      doc
-        .fillColor(BRAND.muted)
-        .font(FONTS.sans)
-        .fontSize(8.5)
-        .text(text, { width: pageWidth });
-      doc.moveDown(0.35);
-    });
-
-    doc.moveDown(0.6);
-  }
-
   doc
     .fillColor(BRAND.muted)
     .font(FONTS.sansOblique)
