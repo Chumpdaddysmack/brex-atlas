@@ -9,40 +9,42 @@
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(0, 0, 0, 0.03);
   --elevate-2: rgba(0, 0, 0, 0.08);
-  --background: 40 20% 97%;
-  --foreground: 215 30% 12%;
-  --border: 40 15% 88%;
-  --card: 40 25% 99%;
-  --card-foreground: 215 30% 12%;
-  --card-border: 40 15% 90%;
-  --sidebar: 215 30% 12%;
-  --sidebar-foreground: 40 20% 96%;
-  --sidebar-border: 215 25% 20%;
-  --sidebar-primary: 22 78% 52%;
-  --sidebar-primary-foreground: 40 20% 97%;
-  --sidebar-accent: 215 22% 18%;
-  --sidebar-accent-foreground: 40 20% 96%;
-  --sidebar-ring: 22 78% 52%;
-  --popover: 40 25% 98%;
-  --popover-foreground: 215 30% 12%;
-  --popover-border: 40 15% 88%;
-  --primary: 215 40% 16%;
-  --primary-foreground: 40 20% 97%;
-  --secondary: 40 18% 92%;
-  --secondary-foreground: 215 30% 12%;
-  --muted: 40 15% 93%;
-  --muted-foreground: 215 12% 38%;
-  --accent: 22 78% 52%;
-  --accent-foreground: 40 20% 97%;
-  --destructive: 0 72% 40%;
-  --destructive-foreground: 40 20% 97%;
-  --input: 40 15% 80%;
-  --ring: 22 78% 52%;
-  --chart-1: 22 78% 52%;
-  --chart-2: 215 40% 30%;
-  --chart-3: 173 45% 38%;
-  --chart-4: 43 74% 49%;
-  --chart-5: 215 30% 55%;
+  /* Brex brand palette (brexconsulting.com):
+     Primary Navy #2A4365, Sky Blue #00A6FB, Teal #1B998B, Marigold #F4BD11, Muted #607382 */
+  --background: 210 38% 98%;              /* near-white on chip surface */
+  --foreground: 214 41% 10%;              /* deep navy text */
+  --border: 201 33% 88%;                  /* blue light */
+  --card: 0 0% 100%;
+  --card-foreground: 214 41% 10%;
+  --card-border: 201 33% 90%;
+  --sidebar: 214 41% 10%;                 /* deep navy */
+  --sidebar-foreground: 210 38% 95%;
+  --sidebar-border: 215 41% 20%;
+  --sidebar-primary: 200 100% 49%;        /* sky blue */
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 215 41% 16%;
+  --sidebar-accent-foreground: 210 38% 95%;
+  --sidebar-ring: 200 100% 49%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 214 41% 10%;
+  --popover-border: 201 33% 88%;
+  --primary: 215 41% 28%;                 /* Brex Primary Navy #2A4365 */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 38% 95%;               /* chip surface */
+  --secondary-foreground: 215 41% 28%;
+  --muted: 210 38% 95%;
+  --muted-foreground: 206 15% 44%;        /* Brex Muted #607382 */
+  --accent: 200 100% 49%;                 /* Brex Sky Blue #00A6FB */
+  --accent-foreground: 0 0% 100%;
+  --destructive: 11 90% 40%;              /* Brex Rust #C02B0A */
+  --destructive-foreground: 0 0% 100%;
+  --input: 201 33% 85%;
+  --ring: 200 100% 49%;
+  --chart-1: 200 100% 49%;                /* sky blue */
+  --chart-2: 215 41% 28%;                 /* primary navy */
+  --chart-3: 173 70% 35%;                 /* teal */
+  --chart-4: 45 91% 51%;                  /* marigold */
+  --chart-5: 206 15% 44%;                 /* muted */
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-serif: 'Fraunces', Georgia, serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
@@ -107,40 +109,41 @@
   --opaque-button-border-intensity: 9;
   --elevate-1: rgba(255, 255, 255, 0.04);
   --elevate-2: rgba(255, 255, 255, 0.09);
-  --background: 215 35% 8%;
-  --foreground: 40 20% 96%;
-  --border: 215 25% 18%;
-  --card: 215 32% 11%;
-  --card-foreground: 40 20% 96%;
-  --card-border: 215 25% 17%;
-  --sidebar: 215 40% 6%;
-  --sidebar-foreground: 40 20% 96%;
-  --sidebar-border: 215 25% 15%;
-  --sidebar-primary: 22 78% 55%;
-  --sidebar-primary-foreground: 40 20% 97%;
-  --sidebar-accent: 215 25% 16%;
-  --sidebar-accent-foreground: 40 20% 96%;
-  --sidebar-ring: 22 78% 55%;
-  --popover: 215 32% 12%;
-  --popover-foreground: 40 20% 96%;
-  --popover-border: 215 25% 18%;
-  --primary: 22 78% 55%;
-  --primary-foreground: 40 20% 97%;
-  --secondary: 215 25% 18%;
-  --secondary-foreground: 40 20% 96%;
-  --muted: 215 22% 16%;
-  --muted-foreground: 40 10% 65%;
-  --accent: 22 78% 55%;
-  --accent-foreground: 40 20% 97%;
-  --destructive: 0 72% 45%;
-  --destructive-foreground: 40 20% 97%;
-  --input: 215 22% 24%;
-  --ring: 22 78% 55%;
-  --chart-1: 22 78% 60%;
-  --chart-2: 40 20% 80%;
-  --chart-3: 173 45% 55%;
-  --chart-4: 43 74% 60%;
-  --chart-5: 215 30% 65%;
+  /* Brex brand palette dark mode */
+  --background: 214 41% 8%;               /* Brex Deep Navy #0F1824 */
+  --foreground: 210 38% 95%;
+  --border: 215 41% 20%;
+  --card: 215 41% 12%;
+  --card-foreground: 210 38% 95%;
+  --card-border: 215 41% 20%;
+  --sidebar: 214 41% 6%;
+  --sidebar-foreground: 210 38% 95%;
+  --sidebar-border: 215 41% 18%;
+  --sidebar-primary: 200 100% 55%;
+  --sidebar-primary-foreground: 214 41% 8%;
+  --sidebar-accent: 215 41% 18%;
+  --sidebar-accent-foreground: 210 38% 95%;
+  --sidebar-ring: 200 100% 55%;
+  --popover: 215 41% 12%;
+  --popover-foreground: 210 38% 95%;
+  --popover-border: 215 41% 20%;
+  --primary: 200 100% 55%;                /* sky blue lifted for dark bg */
+  --primary-foreground: 214 41% 8%;
+  --secondary: 215 41% 18%;
+  --secondary-foreground: 210 38% 95%;
+  --muted: 215 41% 15%;
+  --muted-foreground: 206 15% 65%;
+  --accent: 200 100% 55%;
+  --accent-foreground: 214 41% 8%;
+  --destructive: 11 80% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 215 41% 22%;
+  --ring: 200 100% 55%;
+  --chart-1: 200 100% 55%;                /* sky blue */
+  --chart-2: 45 91% 51%;                  /* marigold */
+  --chart-3: 173 70% 45%;                 /* teal */
+  --chart-4: 215 41% 55%;                 /* navy tint */
+  --chart-5: 206 15% 65%;                 /* muted */
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
   --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0), 0px 1px 2px -1px hsl(0 0% 0% / 0);

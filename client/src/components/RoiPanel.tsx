@@ -24,13 +24,14 @@ import {
 } from "recharts";
 import type { RoiProjections } from "@shared/schema";
 
+// Brex brand palette (brexconsulting.com)
 const BRAND = {
-  navy: "#0B1929",
-  accent: "#D97706",
-  emerald: "#065F46",
-  muted: "#6B7280",
-  light: "#F3F4F6",
-  border: "#E5E7EB",
+  navy: "#2A4365",       // Brex Primary Navy
+  accent: "#00A6FB",     // Brex Sky Blue
+  emerald: "#1B998B",    // Brex Teal (positive/growth)
+  muted: "#607382",      // Brex Muted
+  light: "#EDF2F7",      // Brex Chip Surface
+  border: "#DDE8EE",     // Brex Blue Light
 };
 
 function formatUsd(n: number): string {

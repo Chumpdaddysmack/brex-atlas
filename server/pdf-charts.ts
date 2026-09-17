@@ -7,14 +7,15 @@ import type { Benchmark } from "./pricing-benchmarks";
 import { formatMoney } from "./pricing-benchmarks";
 
 const CHART_COLORS = {
-  navy: "#0B1929",
-  accent: "#D97706",
-  text: "#1F2937",
-  muted: "#6B7280",
-  light: "#F3F4F6",
-  border: "#E5E7EB",
+  // Brex brand palette (brexconsulting.com)
+  navy: "#2A4365",       // Brex Primary Navy
+  accent: "#00A6FB",     // Brex Sky Blue
+  text: "#0F1824",       // Brex Deep Navy text
+  muted: "#607382",      // Brex Muted
+  light: "#EDF2F7",      // Brex Chip Surface
+  border: "#DDE8EE",     // Brex Blue Light
   // Pillar palette (cycled)
-  pillar: ["#0B1929", "#D97706", "#065F46", "#7C3AED", "#DC2626", "#0891B2"],
+  pillar: ["#00A6FB", "#2A4365", "#1B998B", "#F4BD11", "#607382", "#0F1824"],
 };
 
 // =============================================================

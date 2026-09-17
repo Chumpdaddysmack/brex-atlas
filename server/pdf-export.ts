@@ -37,12 +37,13 @@ export type PdfScope = "full" | "strategy" | "summary";
 
 // Brex Consulting brand colors
 const BRAND = {
-  navy: "#0B1929",
-  accent: "#D97706", // warm amber accent
-  text: "#1F2937",
-  muted: "#6B7280",
-  light: "#F3F4F6",
-  border: "#E5E7EB",
+  // Brex brand palette (brexconsulting.com)
+  navy: "#2A4365",       // Brex Primary Navy
+  accent: "#00A6FB",     // Brex Sky Blue
+  text: "#0F1824",       // Brex Deep Navy text
+  muted: "#607382",      // Brex Muted
+  light: "#EDF2F7",      // Brex Chip Surface
+  border: "#DDE8EE",     // Brex Blue Light
 };
 
 const FONTS = {
