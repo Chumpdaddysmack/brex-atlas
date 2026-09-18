@@ -371,7 +371,10 @@ function renderExecutiveSummary(doc: PDFKit.PDFDocument, p: ContentPlanPayload) 
 // =============================================================
 // Strategy Only (thesis + pillars + blog calendar + organic social)
 // =============================================================
-function renderStrategyOnly(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+// Shared strategy backbone: thesis, pillars, charts. Reused by both
+// the standalone "strategy" scope and by full-plan (where the per-
+// channel calendars are rendered as their own tab sections below).
+function renderStrategyCore(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
   // ---- At-a-glance stat block ----
   try {
     renderAtAGlance(doc, p);
@@ -407,6 +410,13 @@ function renderStrategyOnly(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
   } catch (err) {
     console.error("[pdf-export] cadence chart failed", err);
   }
+}
+
+// Standalone strategy-scope export: strategy backbone + inline blog
+// calendar / social cadence / landing page briefs (no per-tab designed
+// sections — that mode is for full-plan only).
+function renderStrategyOnly(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  renderStrategyCore(doc, p);
 
   sectionHeader(doc, "12-Week Blog Calendar");
   for (const week of p.blogCalendar ?? []) {
@@ -444,72 +454,62 @@ function renderStrategyOnly(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
 // Full Plan (everything)
 // =============================================================
 function renderFullPlan(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
-  renderStrategyOnly(doc, p);
+  // ---- Overview + Strategy (Overview + Strategy tabs) ----
+  renderStrategyCore(doc, p);
 
-  // ---- ROI Projections (full version with all four charts) ----
+  // ---- ROI Projections tab ----
   try {
     renderRoiSection(doc, p, { compact: false });
   } catch (err) {
     console.error("[pdf-export] ROI section (full) failed", err);
   }
 
-  // ---- Brex vs. Market pricing matrix (full tier + line-item) ----
+  // ---- Brex vs. Market pricing matrix (SOW context) ----
   try {
     renderBrexPricingMatrix(doc, { compact: false });
   } catch (err) {
     console.error("[pdf-export] brex pricing matrix (full) failed", err);
   }
 
-  // ---- Investment benchmarks (full) ----
+  // ---- Investment benchmarks ----
   try {
     renderInvestmentBenchmarks(doc, { compact: false });
   } catch (err) {
     console.error("[pdf-export] investment benchmarks failed", err);
   }
 
-  // ---- SEO/GEO Site Architecture (full per-page briefs) ----
+  // ---- Site Architecture tab ----
   try {
     renderSitemapSection(doc, p, { compact: false });
   } catch (err) {
     console.error("[pdf-export] sitemap section (full) failed", err);
   }
 
-  if (p.heroMetaAd) {
-    sectionHeader(doc, "Hero Meta Ad");
-    labeled(doc, "Headline", p.heroMetaAd.headline);
-    labeled(doc, "Primary Text", p.heroMetaAd.primaryText);
-    labeled(doc, "Description", p.heroMetaAd.description);
-    labeled(doc, "CTA", p.heroMetaAd.cta);
-    labeled(doc, "Visual Concept", p.heroMetaAd.visualConcept);
+  // ---- Content Studio channel tabs, one designed section each ----
+  try { renderBlogCalendarTab(doc, p); } catch (err) {
+    console.error("[pdf-export] blog calendar tab failed", err);
   }
-
-  if (p.heroLinkedInAd) {
-    sectionHeader(doc, "Hero LinkedIn Ad");
-    labeled(doc, "Intro Text", p.heroLinkedInAd.introText);
-    labeled(doc, "Headline", p.heroLinkedInAd.headline);
-    labeled(doc, "Description", p.heroLinkedInAd.description);
-    labeled(doc, "CTA", p.heroLinkedInAd.cta);
-    labeled(doc, "Visual Concept", p.heroLinkedInAd.visualConcept);
+  try { renderChannelCalendarTab(doc, p, "linkedin"); } catch (err) {
+    console.error("[pdf-export] linkedin tab failed", err);
   }
-
-  if (p.heroColdEmail) {
-    sectionHeader(doc, "Hero Cold Email Sequence");
-    labeled(doc, "ICP Target", p.heroColdEmail.icpTarget);
-    labeled(doc, "Subject Line (A)", p.heroColdEmail.subjectLineA);
-    labeled(doc, "Subject Line (B)", p.heroColdEmail.subjectLineB);
-
-    emailTouch(doc, "Touch 1", p.heroColdEmail.touch1);
-    emailTouch(doc, "Touch 2", p.heroColdEmail.touch2);
-    emailTouch(doc, "Touch 3 (Breakup)", p.heroColdEmail.touch3);
+  try { renderChannelCalendarTab(doc, p, "instagram"); } catch (err) {
+    console.error("[pdf-export] instagram tab failed", err);
   }
-
-  if (p.adBrief?.length) {
-    sectionHeader(doc, "Paid Ad Briefs");
-    for (const brief of p.adBrief) {
-      renderAdBrief(doc, brief);
-    }
+  try { renderChannelCalendarTab(doc, p, "x"); } catch (err) {
+    console.error("[pdf-export] x tab failed", err);
   }
-
+  try { renderAdsGalleryTab(doc, p, "meta_ad"); } catch (err) {
+    console.error("[pdf-export] meta ads tab failed", err);
+  }
+  try { renderAdsGalleryTab(doc, p, "linkedin_ad"); } catch (err) {
+    console.error("[pdf-export] linkedin ads tab failed", err);
+  }
+  try { renderColdEmailTab(doc, p); } catch (err) {
+    console.error("[pdf-export] cold email tab failed", err);
+  }
+  try { renderLandingPagesTab(doc, p); } catch (err) {
+    console.error("[pdf-export] landing pages tab failed", err);
+  }
 }
 
 // =============================================================
@@ -1084,6 +1084,143 @@ function sectionHeader(doc: PDFKit.PDFDocument, title: string) {
   doc.moveDown(0.5);
 }
 
+// -------- Tab-style section header (Content Studio parity) --------
+// Renders a section header that visually mirrors a Content Studio tab:
+// small uppercase "kind" chip on the left, big title next to it, and
+// optional single-line subtitle below in muted color. Used for the
+// per-tab sections (Blog / LinkedIn / Instagram / X / Meta ads / etc.)
+// so the PDF reads like a tour of the on-screen tabs.
+function tabHeader(
+  doc: PDFKit.PDFDocument,
+  title: string,
+  opts: { kind?: string; subtitle?: string; newPage?: boolean } = {},
+) {
+  if (opts.newPage) doc.addPage();
+  ensureSpace(doc, 110);
+  doc.moveDown(0.5);
+
+  const leftX = 72;
+  const rightX = 540;
+  const contentW = rightX - leftX;
+  let cursorY = doc.y;
+
+  // 1) Kind chip on its own line (uppercase label pill on the left, e.g. "CHANNEL", "CALENDAR", "ADS")
+  if (opts.kind) {
+    const kind = opts.kind.toUpperCase();
+    doc.font(FONTS.sansBold).fontSize(8);
+    const chipTextWidth = doc.widthOfString(kind, { characterSpacing: 1.5 });
+    const chipWidth = chipTextWidth + 16;
+    const chipHeight = 16;
+    doc.roundedRect(leftX, cursorY, chipWidth, chipHeight, 3).fill(BRAND.accent);
+    doc
+      .fillColor("#FFFFFF")
+      .font(FONTS.sansBold)
+      .fontSize(8)
+      .text(kind, leftX + 8, cursorY + 4, { characterSpacing: 1.5, lineBreak: false });
+    cursorY += chipHeight + 6; // gap between chip and title
+  }
+
+  // 2) Big title on the next line (allow wrap, capture natural end)
+  doc
+    .fillColor(BRAND.navy)
+    .font(FONTS.sansBold)
+    .fontSize(22)
+    .text(title, leftX, cursorY, { width: contentW, lineGap: 2 });
+  cursorY = doc.y;
+
+  // 3) Optional subtitle in muted body
+  if (opts.subtitle) {
+    cursorY += 2;
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sans)
+      .fontSize(10.5)
+      .text(opts.subtitle, leftX, cursorY, { width: contentW, lineGap: 2 });
+    cursorY = doc.y;
+  }
+
+  // 4) Underline rule
+  const ruleY = cursorY + 8;
+  doc
+    .moveTo(leftX, ruleY)
+    .lineTo(rightX, ruleY)
+    .lineWidth(0.75)
+    .strokeColor(BRAND.border)
+    .stroke();
+
+  doc.y = ruleY + 14;
+  doc.x = leftX;
+}
+
+// -------- Card box (bordered container for a piece of content) --------
+// Draws a light-bordered card at the current cursor position. The caller
+// passes a `body(y)` callback that renders inside the card; `cardBox`
+// measures the final height by tracking doc.y and closes the border.
+function cardBox(
+  doc: PDFKit.PDFDocument,
+  body: () => void,
+  opts: { padTop?: number; padBottom?: number; minHeight?: number; ensure?: number } = {},
+) {
+  const padTop = opts.padTop ?? 10;
+  const padBottom = opts.padBottom ?? 12;
+  ensureSpace(doc, opts.ensure ?? 80);
+
+  const leftX = 72;
+  const rightX = 540;
+  const width = rightX - leftX;
+  const startY = doc.y;
+  const innerX = leftX + 14;
+  const innerWidth = width - 28;
+
+  // Move cursor inside the card for the body
+  doc.x = innerX;
+  doc.y = startY + padTop;
+
+  // Constrain wrap width for the body via a temporary text width closure
+  const origWidth = (doc as any)._fontSize; // no-op sentinel
+  void origWidth;
+
+  // Render body
+  body();
+
+  const endY = Math.max(doc.y + padBottom, startY + (opts.minHeight ?? 40));
+
+  // Draw the border around what we just wrote
+  doc
+    .roundedRect(leftX, startY, width, endY - startY, 6)
+    .lineWidth(0.75)
+    .strokeColor(BRAND.border)
+    .stroke();
+
+  // Reset cursor below the card
+  doc.x = leftX;
+  doc.y = endY + 8;
+
+  return { innerX, innerWidth };
+}
+
+// -------- Small chip (inline label pill) --------
+function chip(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  x: number,
+  y: number,
+  opts: { fill?: string; textColor?: string } = {},
+): number {
+  const fill = opts.fill ?? BRAND.light;
+  const textColor = opts.textColor ?? BRAND.navy;
+  doc.font(FONTS.sansBold).fontSize(8);
+  const w = doc.widthOfString(text, { characterSpacing: 0.8 }) + 12;
+  const h = 14;
+  doc.roundedRect(x, y, w, h, 3).fill(fill);
+  doc
+    .fillColor(textColor)
+    .font(FONTS.sansBold)
+    .fontSize(8)
+    .text(text, x + 6, y + 4, { characterSpacing: 0.8, lineBreak: false });
+  return x + w + 6; // return next x cursor
+}
+
 function bodyParagraph(doc: PDFKit.PDFDocument, text: string) {
   ensureSpace(doc, 40);
   doc
@@ -1336,6 +1473,465 @@ function renderLandingPage(
       .text(`  • ${item}`, { lineGap: 1 });
   }
   doc.moveDown(0.4);
+}
+
+// ============================================================
+// Tab-parity section renderers — one per Content Studio tab
+// ============================================================
+
+// -------- Blog calendar tab --------
+function renderBlogCalendarTab(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  const totalWeeks = p.blogCalendar?.length ?? 0;
+  const totalPosts = (p.blogCalendar ?? []).reduce(
+    (sum, w) => sum + (w.posts?.length ?? 0),
+    0,
+  );
+  const pillars = new Set<string>();
+  for (const w of p.blogCalendar ?? []) {
+    for (const post of w.posts ?? []) if (post.pillar) pillars.add(post.pillar);
+  }
+
+  tabHeader(doc, "Blog calendar", {
+    kind: "Calendar",
+    subtitle: `${totalWeeks}-week publishing schedule · ${totalPosts} posts · ${pillars.size} content pillars`,
+    newPage: true,
+  });
+
+  for (const week of p.blogCalendar ?? []) {
+    try {
+      renderWeek(doc, week);
+    } catch (err) {
+      console.error("[pdf-export] blog week render failed, skipping", err);
+    }
+  }
+}
+
+// -------- Channel calendar tab (LinkedIn / Instagram / X) --------
+function renderChannelCalendarTab(
+  doc: PDFKit.PDFDocument,
+  p: ContentPlanPayload,
+  channel: "linkedin" | "instagram" | "x",
+) {
+  const social = (p.socialCadence ?? []).find((s) => s.channel === channel);
+  if (!social) return;
+
+  const labelMap = {
+    linkedin: { title: "LinkedIn", kind: "Channel" },
+    instagram: { title: "Instagram", kind: "Channel" },
+    x: { title: "X (Twitter)", kind: "Channel" },
+  };
+  const meta = labelMap[channel];
+  const postCount = social.starterPosts?.length ?? 0;
+
+  tabHeader(doc, meta.title, {
+    kind: meta.kind,
+    subtitle: `${social.postsPerWeek} posts/week cadence · ${postCount} starter posts ready to schedule`,
+    newPage: true,
+  });
+
+  for (const post of social.starterPosts ?? []) {
+    try {
+      cardBox(doc, () => {
+        const innerX = 86;
+        const innerWidth = 440;
+
+        // Meta row (chips)
+        let chipX = innerX;
+        const chipY = doc.y;
+        if (post.targetPageTitle) {
+          chipX = chip(doc, `› ${post.targetPageTitle}`, chipX, chipY, {
+            fill: BRAND.light,
+            textColor: BRAND.navy,
+          });
+        }
+        chip(doc, meta.title.toUpperCase(), chipX, chipY, {
+          fill: BRAND.accent,
+          textColor: "#FFFFFF",
+        });
+        doc.x = innerX;
+        doc.y = chipY + 22;
+
+        // Title
+        doc
+          .fillColor(BRAND.navy)
+          .font(FONTS.sansBold)
+          .fontSize(12)
+          .text(safe(post.title, "Untitled post"), innerX, doc.y, {
+            width: innerWidth,
+            lineGap: 1,
+          });
+
+        // Hook (main body copy)
+        if (post.hook) {
+          doc
+            .fillColor(BRAND.text)
+            .font(FONTS.sans)
+            .fontSize(10)
+            .text(safe(post.hook), innerX, doc.y + 2, {
+              width: innerWidth,
+              lineGap: 2,
+            });
+        }
+
+        // Target query line
+        if (post.targetQuery) {
+          doc
+            .fillColor(BRAND.muted)
+            .font(FONTS.sansOblique)
+            .fontSize(9)
+            .text(`Answers: “${safe(post.targetQuery)}”`, innerX, doc.y + 4, {
+              width: innerWidth,
+              lineGap: 1,
+            });
+        }
+      }, { ensure: 100 });
+    } catch (err) {
+      console.error(`[pdf-export] ${channel} card render failed, skipping`, err);
+    }
+  }
+}
+
+// -------- Ads gallery tab (Meta / LinkedIn) --------
+function renderAdsGalleryTab(
+  doc: PDFKit.PDFDocument,
+  p: ContentPlanPayload,
+  channel: "meta_ad" | "linkedin_ad",
+) {
+  const brief = (p.adBrief ?? []).find((b) => b.channel === channel);
+  const heroAd = channel === "meta_ad" ? p.heroMetaAd : p.heroLinkedInAd;
+
+  if (!brief && !heroAd) return;
+
+  const meta =
+    channel === "meta_ad"
+      ? { title: "Meta ads", kind: "Paid", tag: "META" }
+      : { title: "LinkedIn ads", kind: "Paid", tag: "LINKEDIN" };
+
+  const creativeCount = brief?.creatives?.length ?? 0;
+  const subtitle = brief?.audience
+    ? `Audience: ${brief.audience} · ${creativeCount} creative concepts · 1 hero ad`
+    : `${creativeCount} creative concepts`;
+
+  tabHeader(doc, meta.title, { kind: meta.kind, subtitle, newPage: true });
+
+  // ---- Hero ad card (full example) ----
+  if (heroAd) {
+    cardBox(doc, () => {
+      const innerX = 86;
+      const innerWidth = 440;
+
+      // HERO badge
+      const chipY = doc.y;
+      let chipX = chip(doc, "HERO EXAMPLE", innerX, chipY, {
+        fill: BRAND.navy,
+        textColor: "#FFFFFF",
+      });
+      chip(doc, meta.tag, chipX, chipY, { fill: BRAND.accent, textColor: "#FFFFFF" });
+      doc.x = innerX;
+      doc.y = chipY + 22;
+
+      const isMeta = channel === "meta_ad";
+      const primaryLabel = isMeta ? "PRIMARY TEXT (125 CHAR)" : "INTRO TEXT (150 CHAR)";
+      const primaryValue = isMeta
+        ? (heroAd as any).primaryText
+        : (heroAd as any).introText;
+
+      // Headline
+      doc
+        .fillColor(BRAND.navy)
+        .font(FONTS.sansBold)
+        .fontSize(13)
+        .text(safe((heroAd as any).headline), innerX, doc.y, {
+          width: innerWidth,
+          lineGap: 1,
+        });
+
+      // Primary/intro text
+      doc
+        .fillColor(BRAND.muted)
+        .font(FONTS.sansBold)
+        .fontSize(8)
+        .text(primaryLabel, innerX, doc.y + 6, { characterSpacing: 1.2 });
+      doc
+        .fillColor(BRAND.text)
+        .font(FONTS.sans)
+        .fontSize(10)
+        .text(safe(primaryValue), innerX, doc.y + 2, {
+          width: innerWidth,
+          lineGap: 2,
+        });
+
+      // Description
+      doc
+        .fillColor(BRAND.muted)
+        .font(FONTS.sansBold)
+        .fontSize(8)
+        .text("DESCRIPTION", innerX, doc.y + 6, { characterSpacing: 1.2 });
+      doc
+        .fillColor(BRAND.text)
+        .font(FONTS.sans)
+        .fontSize(10)
+        .text(safe((heroAd as any).description), innerX, doc.y + 2, {
+          width: innerWidth,
+          lineGap: 2,
+        });
+
+      // CTA + visual concept in one row
+      const rowY = doc.y + 8;
+      doc
+        .fillColor(BRAND.muted)
+        .font(FONTS.sansBold)
+        .fontSize(8)
+        .text("CTA", innerX, rowY, { characterSpacing: 1.2 });
+      doc
+        .fillColor(BRAND.accent)
+        .font(FONTS.sansBold)
+        .fontSize(11)
+        .text(safe((heroAd as any).cta), innerX, doc.y + 1);
+
+      // Visual concept
+      doc
+        .fillColor(BRAND.muted)
+        .font(FONTS.sansBold)
+        .fontSize(8)
+        .text("VISUAL CONCEPT", innerX, doc.y + 6, { characterSpacing: 1.2 });
+      doc
+        .fillColor(BRAND.text)
+        .font(FONTS.sansOblique)
+        .fontSize(10)
+        .text(safe((heroAd as any).visualConcept), innerX, doc.y + 2, {
+          width: innerWidth,
+          lineGap: 2,
+        });
+    }, { ensure: 260 });
+  }
+
+  // ---- Additional creatives (compact cards) ----
+  if (brief?.creatives?.length) {
+    doc.moveDown(0.4);
+    doc
+      .fillColor(BRAND.navy)
+      .font(FONTS.sansBold)
+      .fontSize(12)
+      .text("Additional creative concepts", 72, doc.y);
+    doc.moveDown(0.4);
+
+    for (const c of brief.creatives) {
+      try {
+        cardBox(doc, () => {
+          const innerX = 86;
+          const innerWidth = 440;
+
+          doc
+            .fillColor(BRAND.navy)
+            .font(FONTS.sansBold)
+            .fontSize(11)
+            .text(safe(c.title), innerX, doc.y, { width: innerWidth, lineGap: 1 });
+
+          doc
+            .fillColor(BRAND.muted)
+            .font(FONTS.sansBold)
+            .fontSize(8)
+            .text("ANGLE", innerX, doc.y + 4, { characterSpacing: 1.2 });
+          doc
+            .fillColor(BRAND.text)
+            .font(FONTS.sans)
+            .fontSize(9.5)
+            .text(safe(c.angle), innerX, doc.y + 1, { width: innerWidth, lineGap: 2 });
+
+          doc
+            .fillColor(BRAND.muted)
+            .font(FONTS.sansBold)
+            .fontSize(8)
+            .text("PRIMARY CLAIM", innerX, doc.y + 4, { characterSpacing: 1.2 });
+          doc
+            .fillColor(BRAND.text)
+            .font(FONTS.sans)
+            .fontSize(9.5)
+            .text(safe(c.primaryClaim), innerX, doc.y + 1, {
+              width: innerWidth,
+              lineGap: 2,
+            });
+
+          doc
+            .fillColor(BRAND.accent)
+            .font(FONTS.sansBold)
+            .fontSize(10)
+            .text(`CTA  ›  ${safe(c.cta)}`, innerX, doc.y + 4);
+        }, { ensure: 120 });
+      } catch (err) {
+        console.error(`[pdf-export] ${channel} creative render failed, skipping`, err);
+      }
+    }
+  }
+}
+
+// -------- Cold email tab --------
+function renderColdEmailTab(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  const email = p.heroColdEmail;
+  if (!email) return;
+
+  tabHeader(doc, "Cold email", {
+    kind: "Sequence",
+    subtitle: `3-touch sequence · ICP: ${safe(email.icpTarget)}`,
+    newPage: true,
+  });
+
+  // ---- Subject line A/B test card ----
+  cardBox(doc, () => {
+    const innerX = 86;
+    const innerWidth = 440;
+
+    const chipY = doc.y;
+    chip(doc, "SUBJECT LINE A/B TEST", innerX, chipY, {
+      fill: BRAND.navy,
+      textColor: "#FFFFFF",
+    });
+    doc.x = innerX;
+    doc.y = chipY + 22;
+
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sansBold)
+      .fontSize(8)
+      .text("VARIANT A", innerX, doc.y, { characterSpacing: 1.2 });
+    doc
+      .fillColor(BRAND.navy)
+      .font(FONTS.sansBold)
+      .fontSize(12)
+      .text(safe(email.subjectLineA), innerX, doc.y + 2, {
+        width: innerWidth,
+        lineGap: 1,
+      });
+
+    doc
+      .fillColor(BRAND.muted)
+      .font(FONTS.sansBold)
+      .fontSize(8)
+      .text("VARIANT B", innerX, doc.y + 8, { characterSpacing: 1.2 });
+    doc
+      .fillColor(BRAND.navy)
+      .font(FONTS.sansBold)
+      .fontSize(12)
+      .text(safe(email.subjectLineB), innerX, doc.y + 2, {
+        width: innerWidth,
+        lineGap: 1,
+      });
+  }, { ensure: 140 });
+
+  // ---- 3 touch cards ----
+  const touches: Array<{ label: string; touch: { day: number; body: string } }> = [
+    { label: "Touch 1 — opener", touch: email.touch1 },
+    { label: "Touch 2 — value follow-up", touch: email.touch2 },
+    { label: "Touch 3 — breakup", touch: email.touch3 },
+  ];
+
+  for (const { label, touch } of touches) {
+    if (!touch) continue;
+    try {
+      cardBox(doc, () => {
+        const innerX = 86;
+        const innerWidth = 440;
+
+        const chipY = doc.y;
+        let chipX = chip(doc, `DAY ${touch.day}`, innerX, chipY, {
+          fill: BRAND.accent,
+          textColor: "#FFFFFF",
+        });
+        chip(doc, label.toUpperCase(), chipX, chipY, {
+          fill: BRAND.light,
+          textColor: BRAND.navy,
+        });
+        doc.x = innerX;
+        doc.y = chipY + 22;
+
+        doc
+          .fillColor(BRAND.text)
+          .font(FONTS.sans)
+          .fontSize(10)
+          .text(safe(touch.body), innerX, doc.y, {
+            width: innerWidth,
+            lineGap: 3,
+          });
+      }, { ensure: 140 });
+    } catch (err) {
+      console.error(`[pdf-export] cold email ${label} render failed`, err);
+    }
+  }
+}
+
+// -------- Landing pages tab --------
+function renderLandingPagesTab(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
+  const pages = p.landingPages ?? [];
+  if (!pages.length) return;
+
+  tabHeader(doc, "Landing pages", {
+    kind: "AEO Pages",
+    subtitle: `${pages.length} AEO-optimized landing page briefs — built to answer buyer questions and rank`,
+    newPage: true,
+  });
+
+  for (const lp of pages) {
+    try {
+      cardBox(doc, () => {
+        const innerX = 86;
+        const innerWidth = 440;
+
+        const chipY = doc.y;
+        let chipX = chip(doc, `/${safe(lp.slug)}`, innerX, chipY, {
+          fill: BRAND.navy,
+          textColor: "#FFFFFF",
+        });
+        chip(doc, safe(lp.serviceOrProduct).toUpperCase(), chipX, chipY, {
+          fill: BRAND.light,
+          textColor: BRAND.navy,
+        });
+        doc.x = innerX;
+        doc.y = chipY + 22;
+
+        // Title
+        doc
+          .fillColor(BRAND.navy)
+          .font(FONTS.sansBold)
+          .fontSize(14)
+          .text(safe(lp.title), innerX, doc.y, { width: innerWidth, lineGap: 1 });
+
+        // Target query
+        doc
+          .fillColor(BRAND.muted)
+          .font(FONTS.sansBold)
+          .fontSize(8)
+          .text("TARGET AEO QUERY", innerX, doc.y + 6, { characterSpacing: 1.2 });
+        doc
+          .fillColor(BRAND.text)
+          .font(FONTS.sansOblique)
+          .fontSize(10)
+          .text(`“${safe(lp.targetQuery)}”`, innerX, doc.y + 1, {
+            width: innerWidth,
+            lineGap: 2,
+          });
+
+        // Outline
+        doc
+          .fillColor(BRAND.muted)
+          .font(FONTS.sansBold)
+          .fontSize(8)
+          .text("PAGE OUTLINE", innerX, doc.y + 6, { characterSpacing: 1.2 });
+        for (const item of lp.outline ?? []) {
+          doc
+            .fillColor(BRAND.text)
+            .font(FONTS.sans)
+            .fontSize(10)
+            .text(`• ${safe(item)}`, innerX, doc.y + 1, {
+              width: innerWidth,
+              lineGap: 2,
+            });
+        }
+      }, { ensure: 180 });
+    } catch (err) {
+      console.error("[pdf-export] landing page card render failed", err);
+    }
+  }
 }
 
 function renderFooter(
