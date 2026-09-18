@@ -32,19 +32,71 @@ function formatAssumptions(raw: unknown): string {
 
 // ------------ Utilities ------------
 
-async function fetchSite(url: string): Promise<{ url: string; html: string; textSummary: string; }> {
+// URL candidate expansion: try user-provided form first, then www./naked variants.
+// Handles the common case where a user pastes example.com but only www.example.com
+// resolves (or vice versa), and cheaply protects against protocol-less input.
+function siteCandidates(raw: string): string[] {
+  let base = (raw || "").trim();
+  if (!base) return [];
+  if (!/^https?:\/\//i.test(base)) base = `https://${base}`;
+  const out = new Set<string>([base]);
+  try {
+    const u = new URL(base);
+    const host = u.hostname;
+    const swap = host.startsWith("www.") ? host.slice(4) : `www.${host}`;
+    const alt = new URL(base);
+    alt.hostname = swap;
+    out.add(alt.toString());
+    // Also try http:// as a last resort — some legacy sites redirect only on http
+    if (u.protocol === "https:") {
+      const httpAlt = new URL(base);
+      httpAlt.protocol = "http:";
+      out.add(httpAlt.toString());
+    }
+  } catch {
+    // fall through — the single candidate will still be tried
+  }
+  return Array.from(out);
+}
+
+async function fetchSiteOnce(url: string, timeoutMs: number): Promise<{ url: string; html: string }> {
   const res = await fetch(url, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
       Accept: "text/html,application/xhtml+xml",
+      "Accept-Language": "en-US,en;q=0.9",
     },
-    // 15s soft timeout via AbortSignal
-    signal: AbortSignal.timeout(15000),
+    redirect: "follow",
+    signal: AbortSignal.timeout(timeoutMs),
   });
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
   const html = await res.text();
-  const textSummary = htmlToText(html).slice(0, 18000);
-  return { url, html, textSummary };
+  return { url: res.url || url, html };
+}
+
+async function fetchSite(url: string): Promise<{ url: string; html: string; textSummary: string; }> {
+  const candidates = siteCandidates(url);
+  const errors: string[] = [];
+  // Try each candidate up to 2 times with a small backoff and a 25s timeout.
+  // International hops (e.g., US Railway → TW Apache) occasionally drop the
+  // first SYN; one retry with a fresh connection almost always succeeds.
+  for (const candidate of candidates) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const { url: finalUrl, html } = await fetchSiteOnce(candidate, 25000);
+        const textSummary = htmlToText(html).slice(0, 18000);
+        return { url: finalUrl, html, textSummary };
+      } catch (err: any) {
+        const label = `${candidate} (attempt ${attempt + 1})`;
+        const msg = err?.message || String(err);
+        errors.push(`${label}: ${msg}`);
+        console.warn(`[fetchSite] ${label} failed: ${msg}`);
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 1200));
+      }
+    }
+  }
+  throw new Error(`Website fetch failed for ${url}. Tried: ${errors.join(" | ")}`);
 }
 
 function htmlToText(html: string): string {
