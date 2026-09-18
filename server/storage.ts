@@ -325,6 +325,7 @@ function analysisFromRow(r: AnalysisRow): Analysis {
     notes: r.notes,
     includePestel: r.include_pestel ? 1 : 0,
     includePorters: r.include_porters ? 1 : 0,
+    includeCustomerInsights: r.include_customer_insights ? 1 : 0,
     assumptions: r.assumptions == null ? null : (typeof r.assumptions === "string" ? r.assumptions : JSON.stringify(r.assumptions)),
     status: r.status,
     progress: r.progress,
@@ -337,6 +338,7 @@ function analysisFromRow(r: AnalysisRow): Analysis {
     swot: r.swot == null ? null : (typeof r.swot === "string" ? r.swot : JSON.stringify(r.swot)),
     pestel: r.pestel == null ? null : (typeof r.pestel === "string" ? r.pestel : JSON.stringify(r.pestel)),
     porters: r.porters == null ? null : (typeof r.porters === "string" ? r.porters : JSON.stringify(r.porters)),
+    customerInsights: r.customer_insights == null ? null : (typeof r.customer_insights === "string" ? r.customer_insights : JSON.stringify(r.customer_insights)),
     createdAt: r.created_at,
   } as Analysis;
 }
@@ -353,6 +355,7 @@ function analysisToRow(patch: Partial<Analysis>): Partial<AnalysisRow> {
   if (patch.notes !== undefined) out.notes = patch.notes;
   if ((patch as any).includePestel !== undefined) out.include_pestel = !!(patch as any).includePestel;
   if ((patch as any).includePorters !== undefined) out.include_porters = !!(patch as any).includePorters;
+  if ((patch as any).includeCustomerInsights !== undefined) out.include_customer_insights = !!(patch as any).includeCustomerInsights;
   if ((patch as any).assumptions !== undefined) {
     const a = (patch as any).assumptions;
     out.assumptions = a == null ? null : (typeof a === "string" ? JSON.parse(a) : a);
@@ -368,6 +371,10 @@ function analysisToRow(patch: Partial<Analysis>): Partial<AnalysisRow> {
   if ((patch as any).swot !== undefined) out.swot = (patch as any).swot == null ? null : JSON.parse((patch as any).swot);
   if ((patch as any).pestel !== undefined) out.pestel = (patch as any).pestel == null ? null : JSON.parse((patch as any).pestel);
   if ((patch as any).porters !== undefined) out.porters = (patch as any).porters == null ? null : JSON.parse((patch as any).porters);
+  if ((patch as any).customerInsights !== undefined) {
+    const ci = (patch as any).customerInsights;
+    out.customer_insights = ci == null ? null : (typeof ci === "string" ? JSON.parse(ci) : ci);
+  }
   if (patch.createdAt !== undefined) out.created_at = patch.createdAt;
   return out;
 }
