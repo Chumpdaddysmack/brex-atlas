@@ -169,7 +169,7 @@ Return ONLY valid JSON matching this exact schema — no prose, no markdown, no 
     }
     // exactly 5 in order: unaware, aware, considering, deciding, deciding-with-us
   ],
-  "summary": "2-3 sentence executive read — feeds strategy.icp.summary"
+  "summary": "2-3 sentence executive read — feeds strategy.icp.summary. REQUIRED. Never leave empty. Name the primary buyer, the top pain they are stuck on, and the trigger that opens the buying window."
 }
 
 SHAPE ENFORCEMENT:
@@ -612,5 +612,46 @@ ${JSON.stringify(competitors).slice(0, 4000)}`;
     vocEvidenceMode: voc.mode,
   };
 
+  // Guarantee a summary: LLMs sometimes drop this field silently even when
+  // the schema requires it. If empty, synthesize a 2-3 sentence executive read
+  // from the top persona + top pain + top JTBD + top buying signal so downstream
+  // consumers (strategy.icp.summary via Option A merge, PDF cover, PPTX overview)
+  // never render blank.
+  if (!insights.summary || insights.summary.length < 20) {
+    insights.summary = synthesizeSummary(insights);
+  }
+
   return insights;
+}
+
+/**
+ * Fallback executive read built from the pack's own top-ranked items when the
+ * generator returns an empty summary. Two sentences: who + what they're stuck on,
+ * then what triggers a buy.
+ */
+function synthesizeSummary(ci: CustomerInsights): string {
+  const topPersona = ci.personas?.[0];
+  const topPain = ci.painPoints?.[0];
+  const topJTBD = ci.jtbd?.[0];
+  const topSignal = ci.buyingSignals?.find((b) => b.urgency === "hot" || b.urgency === "in-market") ?? ci.buyingSignals?.[0];
+
+  const who = topPersona
+    ? `${topPersona.role || "The primary buyer"}${topPersona.orgSize ? ` at a ${topPersona.orgSize} ${topPersona.industry || ""}`.trim().replace(/\s+$/, "") + " firm" : ""}`
+    : "The primary buyer";
+
+  const painClause = topPain?.label
+    ? ` is stuck on ${topPain.label.replace(/\.$/, "").toLowerCase()}`
+    : " faces friction that keeps deals from closing";
+
+  const jtbdClause = topJTBD?.motivation
+    ? ` — they want to ${String(topJTBD.motivation).replace(/^i want to\s+/i, "").replace(/\.$/, "").toLowerCase()}`
+    : "";
+
+  const s1 = `${who}${painClause}${jtbdClause}.`;
+
+  const s2 = topSignal?.trigger
+    ? `The buying window opens when ${String(topSignal.trigger).replace(/\.$/, "").toLowerCase()} — that is where outreach and content should land.`
+    : `Outreach that names their specific pain and shows a fast, low-risk first step consistently outperforms broad brand plays.`;
+
+  return `${s1} ${s2}`;
 }
