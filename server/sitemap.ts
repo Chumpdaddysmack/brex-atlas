@@ -352,6 +352,7 @@ export async function generateSitemap(params: {
   swot?: SwotAnalysis | null;
   porters?: PortersFiveForces | null;
   pestel?: PestelAnalysis | null;
+  customerInsights?: string | null;  // stored JSON — sitemap does not need to parse it yet
   competitors: Competitor[];
 }): Promise<SitemapPayload> {
   const context = buildStrategyContext(params);

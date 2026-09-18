@@ -4,6 +4,7 @@ import type {
   SwotAnalysis,
   PestelAnalysis,
   PortersFiveForces,
+  CustomerInsights,
   SitemapPageBrief,
   SitemapPageType,
 } from "@shared/schema";
@@ -62,6 +63,7 @@ interface StreamPdfArgs {
   swot?: SwotAnalysis | null;
   pestel?: PestelAnalysis | null;
   porters?: PortersFiveForces | null;
+  customerInsights?: CustomerInsights | null;
 }
 
 export function streamContentPlanPdf({
@@ -73,6 +75,7 @@ export function streamContentPlanPdf({
   swot,
   pestel,
   porters,
+  customerInsights,
 }: StreamPdfArgs) {
   const safeName = (clientName || "client").replace(/[^a-z0-9-_]/gi, "_");
   const scopeLabel =
@@ -123,6 +126,15 @@ export function streamContentPlanPdf({
         renderFrameworksSection(doc, { swot, pestel, porters });
       } catch (err) {
         console.error("[pdf-export] frameworks failed", err);
+      }
+    }
+
+    // -------- Customer Insights (opt-in, before sources appendix) --------
+    if (scope !== "summary" && customerInsights) {
+      try {
+        renderCustomerInsightsSection(doc, customerInsights);
+      } catch (err) {
+        console.error("[pdf-export] customer insights failed", err);
       }
     }
 
@@ -2514,4 +2526,307 @@ function renderSitemapPageFull(
     .lineTo(leftMargin + pageWidth, doc.y)
     .stroke();
   doc.moveDown(0.5);
+}
+
+// =============================================================
+// Customer Insights section — deep buyer intelligence pack
+// Added Sep 2026. 12 sub-analyses across 4 panels. Roughly 6-8 pages.
+// =============================================================
+
+function ciSectionHeader(doc: PDFKit.PDFDocument, title: string, subtitle?: string) {
+  if (doc.y > 650) doc.addPage();
+  doc.moveDown(1);
+  doc.fillColor(BRAND.navy).font(FONTS.serif).fontSize(18).text(title, 72, doc.y);
+  doc.moveTo(72, doc.y + 4).lineTo(150, doc.y + 4).lineWidth(2).strokeColor(BRAND.accent).stroke();
+  doc.moveDown(0.5);
+  if (subtitle) {
+    doc.fillColor(BRAND.muted).font(FONTS.sansOblique).fontSize(10).text(subtitle, 72, doc.y, { width: 470 });
+    doc.moveDown(0.5);
+  }
+}
+
+function ciKeyValueRow(doc: PDFKit.PDFDocument, label: string, value: string, width = 470) {
+  if (!value) return;
+  const startY = doc.y;
+  doc.fillColor(BRAND.muted).font(FONTS.sansBold).fontSize(9).text(label.toUpperCase(), 72, startY, { continued: false });
+  doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(11).text(value, 72, doc.y, { width, lineGap: 2 });
+  doc.moveDown(0.3);
+}
+
+function ciChip(doc: PDFKit.PDFDocument, label: string, x: number, y: number, color = BRAND.accent): number {
+  const padding = 6;
+  doc.font(FONTS.sansBold).fontSize(8);
+  const w = doc.widthOfString(label) + padding * 2;
+  doc.roundedRect(x, y - 2, w, 14, 3).fill(color);
+  doc.fillColor("#FFFFFF").text(label, x + padding, y);
+  return x + w + 6;
+}
+
+function renderCustomerInsightsSection(doc: PDFKit.PDFDocument, ci: CustomerInsights) {
+  // Cover page for the section
+  doc.addPage();
+  doc.fillColor(BRAND.navy).font(FONTS.serif).fontSize(28).text("Customer Insights", 72, 100);
+  doc.moveTo(72, doc.y + 8).lineTo(240, doc.y + 8).lineWidth(2).strokeColor(BRAND.accent).stroke();
+  doc.moveDown(1);
+  doc.fillColor(BRAND.muted).font(FONTS.sans).fontSize(11).text(
+    "Deep buyer intelligence — 12 sub-analyses across four panels. This section is the authoritative source for how we understand, qualify, and close this buyer.",
+    72,
+    doc.y,
+    { width: 470, lineGap: 3 },
+  );
+  doc.moveDown(1);
+
+  // Evidence mode badge
+  const mode = ci.vocEvidenceMode ?? "paraphrased";
+  const modeColor = mode === "real" ? "#437A22" : mode === "mixed" ? "#F4BD11" : "#607382";
+  const modeLabel = mode === "real" ? "VoC: Real Research" : mode === "mixed" ? "VoC: Mixed" : "VoC: Representative Language";
+  ciChip(doc, modeLabel, 72, doc.y, modeColor);
+  doc.moveDown(1.5);
+
+  if (ci.summary) {
+    doc.fillColor(BRAND.text).font(FONTS.sansBold).fontSize(11).text("Executive Read", 72, doc.y);
+    doc.moveDown(0.3);
+    doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(11).text(ci.summary, 72, doc.y, { width: 470, lineGap: 3 });
+    doc.moveDown(1);
+  }
+
+  // ===== Panel A: Persona core =====
+  ciSectionHeader(doc, "Panel A — Who they are", "Persona, psychographics, sociotype");
+  (ci.personas ?? []).forEach((p, i) => {
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(13).text(
+      `${i === 0 ? "Primary" : "Secondary"} — ${p.name}`,
+      72,
+      doc.y,
+    );
+    doc.moveDown(0.2);
+    let x = 72;
+    x = ciChip(doc, p.role, x, doc.y, BRAND.navy);
+    x = ciChip(doc, p.seniority.toUpperCase(), x, doc.y, BRAND.accent);
+    x = ciChip(doc, p.authority.toUpperCase(), x, doc.y, "#1B998B");
+    doc.moveDown(1);
+    ciKeyValueRow(doc, "Org", `${p.orgSize} · ${p.industry}`);
+  });
+
+  const ps = ci.psychographics;
+  if (ps) {
+    doc.moveDown(0.5);
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(12).text("Psychographics", 72, doc.y);
+    doc.moveDown(0.3);
+    ciKeyValueRow(doc, "Personality", ps.personalityType);
+    ciKeyValueRow(doc, "Buyer Type", `${ps.buyerType} · ${ps.buyerStage} · ${ps.userType}`);
+    ciKeyValueRow(doc, "Decision Style", `${ps.decisionStyle} · ${ps.riskTolerance} risk tolerance · ${ps.brandRelationship}`);
+    if (ps.informationDiet?.length) {
+      ciKeyValueRow(doc, "Information Diet", ps.informationDiet.join(" · "));
+    }
+  }
+
+  const st = ci.sociotype;
+  if (st?.archetype) {
+    if (doc.y > 620) doc.addPage();
+    doc.moveDown(0.5);
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(12).text(`Sociotype — ${st.archetype}`, 72, doc.y);
+    doc.moveDown(0.3);
+    ciKeyValueRow(doc, "I am", st.iAm);
+    ciKeyValueRow(doc, "I crave", st.iCrave);
+    ciKeyValueRow(doc, "But also", st.butAlso);
+    ciKeyValueRow(doc, "I struggle with", st.iStruggleWith);
+    ciKeyValueRow(doc, "I consume", st.iConsume);
+  }
+
+  // ===== Panel B: Pain + JTBD + VoC =====
+  doc.addPage();
+  ciSectionHeader(doc, "Panel B — What hurts, what they hire us for", "Pain points, jobs-to-be-done, voice of customer");
+
+  (ci.painPoints ?? []).forEach((p) => {
+    if (doc.y > 640) doc.addPage();
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(12).text(`${p.rank}. ${p.label}`, 72, doc.y);
+    doc.moveDown(0.3);
+    ciKeyValueRow(doc, "Symptom", p.symptom);
+    ciKeyValueRow(doc, "Business Cost", p.businessCost);
+    ciKeyValueRow(doc, "Current Workaround", p.currentWorkaround);
+    ciKeyValueRow(doc, "Our Leverage", p.ourLeverage);
+    doc.moveDown(0.3);
+  });
+
+  if (ci.jtbd?.length) {
+    if (doc.y > 550) doc.addPage();
+    doc.moveDown(0.5);
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(13).text("Jobs-to-be-Done", 72, doc.y);
+    doc.moveDown(0.5);
+    ci.jtbd.forEach((j, i) => {
+      if (doc.y > 650) doc.addPage();
+      doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(11).text(
+        `${i + 1}. When ${j.situation}, I want to ${j.motivation}, so I can ${j.outcome}.`,
+        72,
+        doc.y,
+        { width: 470, lineGap: 2 },
+      );
+      doc.moveDown(0.3);
+      doc.fillColor(BRAND.muted).font(FONTS.sansOblique).fontSize(9).text(
+        `Functional: ${j.functionalJob} · Emotional: ${j.emotionalJob} · Social: ${j.socialJob}`,
+        72,
+        doc.y,
+        { width: 470, lineGap: 2 },
+      );
+      doc.moveDown(0.5);
+    });
+  }
+
+  if (ci.voiceOfCustomer?.length) {
+    if (doc.y > 550) doc.addPage();
+    doc.moveDown(0.5);
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(13).text("Voice of Customer", 72, doc.y);
+    doc.moveDown(0.5);
+    ci.voiceOfCustomer.forEach((q) => {
+      if (doc.y > 650) doc.addPage();
+      doc.fillColor(BRAND.text).font(FONTS.sansOblique).fontSize(11).text(`\u201c${q.quote}\u201d`, 82, doc.y, {
+        width: 460,
+        lineGap: 2,
+      });
+      doc.moveDown(0.2);
+      const label = q.isParaphrased ? "Representative language" : q.source;
+      doc.fillColor(BRAND.muted).font(FONTS.sans).fontSize(9).text(
+        `\u2014 ${q.speaker} · ${label}${q.theme ? ` · ${q.theme}` : ""}`,
+        82,
+        doc.y,
+        { width: 460 },
+      );
+      if (q.sourceUrl) {
+        doc.fillColor(BRAND.accent).font(FONTS.sans).fontSize(8).text(q.sourceUrl, 82, doc.y, {
+          width: 460,
+          link: q.sourceUrl,
+          underline: true,
+        });
+        doc.fillColor(BRAND.text);
+      }
+      doc.moveDown(0.5);
+    });
+  }
+
+  // ===== Panel C: Validation =====
+  doc.addPage();
+  ciSectionHeader(doc, "Panel C — Will they buy?", "Would-they-buy signals, Mom Test questions, buying triggers");
+
+  (ci.wouldTheyBuySignals ?? []).forEach((s, i) => {
+    if (doc.y > 660) doc.addPage();
+    const strengthColor = s.strength === "strong" ? "#437A22" : s.strength === "moderate" ? "#F4BD11" : "#607382";
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(11).text(`${i + 1}. ${s.signal}`, 72, doc.y);
+    doc.moveDown(0.2);
+    ciChip(doc, s.strength.toUpperCase(), 72, doc.y, strengthColor);
+    doc.moveDown(0.6);
+    doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(10).text(s.whatItMeans, 72, doc.y, { width: 470, lineGap: 2 });
+    doc.moveDown(0.4);
+  });
+
+  if (ci.momTestQuestions?.length) {
+    if (doc.y > 550) doc.addPage();
+    doc.moveDown(0.5);
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(13).text("Mom Test Questions", 72, doc.y);
+    doc.moveDown(0.5);
+    ci.momTestQuestions.forEach((q, i) => {
+      if (doc.y > 630) doc.addPage();
+      doc.fillColor(BRAND.text).font(FONTS.sansBold).fontSize(11).text(`${i + 1}. ${q.question}`, 72, doc.y, { width: 470 });
+      doc.moveDown(0.2);
+      doc.fillColor(BRAND.muted).font(FONTS.sansOblique).fontSize(9).text(`Why it works: ${q.whyItWorks}`, 72, doc.y, { width: 470, lineGap: 2 });
+      doc.moveDown(0.1);
+      doc.fillColor("#C02B0A").font(FONTS.sansOblique).fontSize(9).text(`Avoid: "${q.antipattern}"`, 72, doc.y, { width: 470, lineGap: 2 });
+      doc.moveDown(0.5);
+    });
+  }
+
+  if (ci.buyingSignals?.length) {
+    if (doc.y > 550) doc.addPage();
+    doc.moveDown(0.5);
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(13).text("In-Market Buying Signals", 72, doc.y);
+    doc.moveDown(0.5);
+    ci.buyingSignals.forEach((b) => {
+      if (doc.y > 660) doc.addPage();
+      const urgencyColor = b.urgency === "in-market" ? "#C02B0A" : b.urgency === "hot" ? "#F4BD11" : b.urgency === "warming" ? "#00A6FB" : "#607382";
+      doc.fillColor(BRAND.text).font(FONTS.sansBold).fontSize(11).text(b.trigger, 72, doc.y, { width: 470 });
+      doc.moveDown(0.2);
+      let x = 72;
+      x = ciChip(doc, b.category.toUpperCase(), x, doc.y, BRAND.navy);
+      x = ciChip(doc, b.urgency.toUpperCase(), x, doc.y, urgencyColor);
+      doc.moveDown(0.8);
+      doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(10).text(`Play: ${b.action}`, 72, doc.y, { width: 470, lineGap: 2 });
+      doc.moveDown(0.4);
+    });
+  }
+
+  // ===== Panel D: Deal mechanics =====
+  doc.addPage();
+  ciSectionHeader(doc, "Panel D — How the deal closes", "Decision committee, objections, journey stages");
+
+  (ci.decisionCommittee ?? []).forEach((r) => {
+    if (doc.y > 640) doc.addPage();
+    const playColor = r.ourPlay === "champion" ? "#437A22" : r.ourPlay === "neutralize" ? "#C02B0A" : r.ourPlay === "bypass" ? "#607382" : "#F4BD11";
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(12).text(r.role, 72, doc.y);
+    doc.moveDown(0.2);
+    ciChip(doc, `PLAY: ${r.ourPlay.toUpperCase()}`, 72, doc.y, playColor);
+    doc.moveDown(0.8);
+    ciKeyValueRow(doc, "Motivation", r.motivation);
+    ciKeyValueRow(doc, "Blocker", r.blocker);
+    ciKeyValueRow(doc, "Primary Objection", r.primaryObjection);
+    doc.moveDown(0.3);
+  });
+
+  if (ci.objections?.length) {
+    if (doc.y > 550) doc.addPage();
+    doc.moveDown(0.5);
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(13).text("Objection Handling", 72, doc.y);
+    doc.moveDown(0.5);
+    ci.objections.forEach((o) => {
+      if (doc.y > 620) doc.addPage();
+      doc.fillColor(BRAND.text).font(FONTS.sansBold).fontSize(11).text(`\u201c${o.objection}\u201d`, 72, doc.y, { width: 470 });
+      doc.moveDown(0.2);
+      ciChip(doc, o.frame.toUpperCase(), 72, doc.y, BRAND.navy);
+      doc.moveDown(0.8);
+      ciKeyValueRow(doc, "Underlying Fear", o.underlyingFear);
+      ciKeyValueRow(doc, "Reframe", o.reframe);
+      ciKeyValueRow(doc, "Proof Asset", o.proofAsset);
+      doc.moveDown(0.3);
+    });
+  }
+
+  if (ci.journeyStages?.length) {
+    if (doc.y > 500) doc.addPage();
+    doc.moveDown(0.5);
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(13).text("Buyer Journey", 72, doc.y);
+    doc.moveDown(0.5);
+    ci.journeyStages.forEach((j, i) => {
+      if (doc.y > 620) doc.addPage();
+      doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(11).text(`${i + 1}. ${j.stage.toUpperCase().replace("-", " ")}`, 72, doc.y);
+      doc.moveDown(0.3);
+      ciKeyValueRow(doc, "Mindset", j.mindset);
+      ciKeyValueRow(doc, "Question in their head", j.primaryQuestion);
+      ciKeyValueRow(doc, "Where they are", j.channel);
+      ciKeyValueRow(doc, "Content asset", j.contentAsset);
+      ciKeyValueRow(doc, "CTA", j.cta);
+      ciKeyValueRow(doc, "Exit criterion", j.exitCriterion);
+      doc.moveDown(0.4);
+    });
+  }
+
+  // VoC sources appendix at the end
+  if (ci.vocSources?.length) {
+    if (doc.y > 500) doc.addPage();
+    doc.moveDown(0.5);
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(12).text("Voice-of-Customer Sources", 72, doc.y);
+    doc.moveDown(0.3);
+    ci.vocSources.forEach((src, i) => {
+      if (doc.y > 700) doc.addPage();
+      doc.fillColor(BRAND.text).font(FONTS.sans).fontSize(9).text(
+        `${i + 1}. ${src.title}${src.publisher ? ` — ${src.publisher}` : ""}${src.date ? ` (${src.date})` : ""}`,
+        72,
+        doc.y,
+        { width: 470, lineGap: 2 },
+      );
+      doc.fillColor(BRAND.accent).font(FONTS.sans).fontSize(8).text(src.url, 72, doc.y, {
+        width: 470,
+        link: src.url,
+        underline: true,
+      });
+      doc.moveDown(0.3);
+    });
+  }
 }

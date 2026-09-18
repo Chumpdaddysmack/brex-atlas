@@ -14,6 +14,18 @@ import { calculateRoiProjections, FALLBACK_ASSUMPTIONS, ROI_INFERENCE_SYSTEM_PRO
 import type { RoiAssumptions } from "@shared/schema";
 import type { ContentPlanPayload } from "@shared/schema";
 
+// Defensive parse for Customer Insights JSON — same pattern as PDF export uses
+// for SWOT/PESTEL. A corrupt row must not crash a whole export.
+function safeParseCI(raw: string | null): any {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error("[routes] failed to parse customer_insights JSON:", err);
+    return null;
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -129,6 +141,7 @@ export async function registerRoutes(
       swot: null,
       pestel: null,
       porters: null,
+      customerInsights: null,
     } as any);
     runPipeline(req.params.id).catch((err) => console.error("[pipeline] regenerate fatal", err));
     const updated = await storage.getAnalysis(req.params.id);
@@ -341,6 +354,7 @@ export async function registerRoutes(
           swot: analysis.swot as any,
           porters: analysis.porters as any,
           pestel: analysis.pestel as any,
+          customerInsights: analysis.customerInsights as any,
           competitors: (analysis.competitors as any) ?? [],
         });
         payload.sitemap = sitemap;
@@ -435,6 +449,7 @@ export async function registerRoutes(
         swot: analysis.swot ? JSON.parse(analysis.swot) : null,
         pestel: analysis.pestel ? JSON.parse(analysis.pestel) : null,
         porters: analysis.porters ? JSON.parse(analysis.porters) : null,
+        customerInsights: analysis.customerInsights ? safeParseCI(analysis.customerInsights) : null,
       });
 
       const safeName = (analysis.clientName || "client").replace(/[^a-z0-9-_]/gi, "_");
@@ -522,6 +537,7 @@ export async function registerRoutes(
         swot: analysis.swot ? JSON.parse(analysis.swot) : null,
         pestel: analysis.pestel ? JSON.parse(analysis.pestel) : null,
         porters: analysis.porters ? JSON.parse(analysis.porters) : null,
+        customerInsights: analysis.customerInsights ? safeParseCI(analysis.customerInsights) : null,
       });
     } catch (err) {
       console.error("[pdf-export] failed", err);

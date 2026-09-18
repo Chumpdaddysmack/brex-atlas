@@ -262,6 +262,7 @@ type AnalysisRow = {
   notes: string | null;
   include_pestel: boolean | number | null;
   include_porters: boolean | number | null;
+  include_customer_insights: boolean | number | null;
   assumptions: any; // jsonb in postgres, TEXT in sqlite
   status: string;
   progress: number;
@@ -274,6 +275,7 @@ type AnalysisRow = {
   swot: any;
   pestel: any;
   porters: any;
+  customer_insights: any;
   created_at: number;
 };
 
@@ -453,6 +455,7 @@ export class SupabaseStorage implements IStorage {
       notes: input.notes ?? null,
       include_pestel: !!input.includePestel,
       include_porters: !!input.includePorters,
+      include_customer_insights: !!(input as any).includeCustomerInsights,
       assumptions: parseAssumptionsForRow((input as any).assumptions),
       status: "queued",
       progress: 0,
@@ -465,6 +468,7 @@ export class SupabaseStorage implements IStorage {
       swot: null,
       pestel: null,
       porters: null,
+      customer_insights: null,
       created_at: Date.now(),
     };
     const { data, error } = await this.supa.from("analyses").insert(row).select().single();

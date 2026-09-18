@@ -53,6 +53,7 @@ const intakeSchema = z.object({
   notes: z.string().optional(),
   includePestel: z.boolean().optional(),
   includePorters: z.boolean().optional(),
+  includeCustomerInsights: z.boolean().optional(),
   // Underlying assumptions (all string inputs; parsed to numbers before submit)
   currentAnnualRevenue: z.string().optional(),
   currentMarketingBudget: z.string().optional(),
@@ -81,6 +82,7 @@ export default function Home() {
       notes: "",
       includePestel: false,
       includePorters: false,
+      includeCustomerInsights: false,
       currentAnnualRevenue: "",
       currentMarketingBudget: "",
       grossMarginPct: "",
@@ -498,6 +500,26 @@ export default function Home() {
                       </FormControl>
                       <FormLabel className="font-normal cursor-pointer">
                         Include Porter's Five Forces (industry structure with cited sources)
+                      </FormLabel>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="includeCustomerInsights"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-3 space-y-0">
+                      <FormControl>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border accent-primary"
+                          checked={!!field.value}
+                          onChange={(e) => field.onChange(e.target.checked)}
+                          data-testid="toggle-customer-insights"
+                        />
+                      </FormControl>
+                      <FormLabel className="font-normal cursor-pointer">
+                        Include Customer Insights (12 buyer-intelligence analyses with real VoC when available)
                       </FormLabel>
                     </FormItem>
                   )}

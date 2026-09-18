@@ -11,6 +11,7 @@ import type {
   PortersFiveForces,
   PortersForce,
   PortersForceName,
+  CustomerInsights,
 } from "@shared/schema";
 import { PRICING_BENCHMARKS, BENCHMARK_SOURCES, formatMoney } from "./pricing-benchmarks";
 import {
@@ -57,6 +58,7 @@ export interface PptxExportArgs {
   swot?: SwotAnalysis | null;
   pestel?: PestelAnalysis | null;
   porters?: PortersFiveForces | null;
+  customerInsights?: CustomerInsights | null;
 }
 
 // -------- Helpers --------
@@ -1228,7 +1230,7 @@ function buildSourcesSlide(pptx: PptxGenJS) {
 // Main export function
 // =============================================================
 export async function buildContentPlanPptx(args: PptxExportArgs): Promise<Buffer> {
-  const { payload, clientName, clientUrl, generatedAt = new Date(), swot, pestel, porters } = args;
+  const { payload, clientName, clientUrl, generatedAt = new Date(), swot, pestel, porters, customerInsights } = args;
 
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_16x9"; // 10 x 5.625 inches
@@ -1264,6 +1266,15 @@ export async function buildContentPlanPptx(args: PptxExportArgs): Promise<Buffer
   if (swot) buildSwotSlides(pptx, swot);
   if (pestel) buildPestelSlide(pptx, pestel);
   if (porters) buildPortersSlides(pptx, porters);
+
+  // 9d. Customer Insights (opt-in — 4 panels across 6-10 slides)
+  if (customerInsights) {
+    try {
+      buildCustomerInsightsSlides(pptx, customerInsights);
+    } catch (err) {
+      console.error("[pptx-export] customer insights slides failed:", err);
+    }
+  }
 
   // 10a. Brex vs. Market — Tier comparison
   buildBrexTierMatrixSlide(pptx);
@@ -1712,4 +1723,261 @@ function domainFromPptxUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+// =============================================================
+// Customer Insights slides — 4-panel deep buyer intelligence
+// Added Sep 2026. Overview + one detail slide per panel + VoC + journey.
+// =============================================================
+
+function buildCustomerInsightsSlides(pptx: PptxGenJS, ci: CustomerInsights) {
+  buildCIOverviewSlide(pptx, ci);
+  buildCIPersonasSlide(pptx, ci);
+  buildCIPainJTBDSlide(pptx, ci);
+  buildCIVoCSlide(pptx, ci);
+  buildCIValidationSlide(pptx, ci);
+  buildCIBuyingSignalsSlide(pptx, ci);
+  buildCICommitteeSlide(pptx, ci);
+  buildCIObjectionsSlide(pptx, ci);
+  buildCIJourneySlide(pptx, ci);
+}
+
+function buildCIOverviewSlide(pptx: PptxGenJS, ci: CustomerInsights) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "Customer Insights", `Deep buyer intelligence · ${ci.industry}`);
+
+  // Evidence-mode chip
+  const modeColor = ci.vocEvidenceMode === "real" ? "437A22" : ci.vocEvidenceMode === "mixed" ? "F4BD11" : "607382";
+  const modeLabel = ci.vocEvidenceMode === "real" ? "VoC: Real Research"
+    : ci.vocEvidenceMode === "mixed" ? "VoC: Mixed"
+    : "VoC: Representative Language";
+  slide.addShape("rect", { x: 0.4, y: 1.25, w: 2.4, h: 0.28, fill: { color: modeColor }, line: { color: modeColor, width: 0 } });
+  slide.addText(modeLabel, { x: 0.4, y: 1.25, w: 2.4, h: 0.28, fontSize: 9, bold: true, color: "FFFFFF", align: "center", valign: "middle", fontFace: "Arial" });
+
+  // Executive read
+  if (ci.summary) {
+    slide.addText(ci.summary, {
+      x: 0.4, y: 1.7, w: 9.2, h: 1.0,
+      fontSize: 12, fontFace: "Arial", color: BRAND.text, valign: "top",
+    });
+  }
+
+  // 4-panel grid summary
+  const startY = 2.85;
+  const cellW = 4.5;
+  const cellH = 1.2;
+  const rowGap = 0.15;
+  const cells = [
+    { x: 0.4, y: startY, label: "A · WHO THEY ARE", body: `${ci.personas?.length ?? 0} persona${(ci.personas?.length ?? 0) === 1 ? "" : "s"} · ${ci.psychographics?.decisionStyle ?? "—"} decisions · ${ci.psychographics?.riskTolerance ?? "—"} risk`, color: BRAND.navy },
+    { x: 5.1, y: startY, label: "B · WHAT HURTS / HIRE", body: `${ci.painPoints?.length ?? 0} pain points · ${ci.jtbd?.length ?? 0} JTBD · ${ci.voiceOfCustomer?.length ?? 0} VoC quotes`, color: BRAND.accent },
+    { x: 0.4, y: startY + cellH + rowGap, label: "C · WILL THEY BUY", body: `${ci.wouldTheyBuySignals?.length ?? 0} WTB signals · ${ci.momTestQuestions?.length ?? 0} Mom Test Qs · ${ci.buyingSignals?.length ?? 0} triggers`, color: "1B998B" },
+    { x: 5.1, y: startY + cellH + rowGap, label: "D · HOW IT CLOSES", body: `${ci.decisionCommittee?.length ?? 0} committee roles · ${ci.objections?.length ?? 0} objections · ${ci.journeyStages?.length ?? 0} journey stages`, color: "F4BD11" },
+  ];
+  cells.forEach((c) => {
+    slide.addShape("rect", { x: c.x, y: c.y, w: cellW, h: cellH, fill: { color: "FFFFFF" }, line: { color: BRAND.border, width: 0.75 } });
+    slide.addShape("rect", { x: c.x, y: c.y, w: cellW, h: 0.32, fill: { color: c.color }, line: { color: c.color, width: 0 } });
+    slide.addText(c.label, { x: c.x + 0.14, y: c.y + 0.03, w: cellW - 0.28, h: 0.26, fontSize: 10, bold: true, color: "FFFFFF", charSpacing: 2, fontFace: "Arial", valign: "middle" });
+    slide.addText(c.body, { x: c.x + 0.14, y: c.y + 0.45, w: cellW - 0.28, h: cellH - 0.5, fontSize: 11, color: BRAND.text, fontFace: "Arial", valign: "top" });
+  });
+}
+
+function buildCIPersonasSlide(pptx: PptxGenJS, ci: CustomerInsights) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "Panel A — Who They Are", "Personas, psychographics, sociotype");
+
+  const personas = ci.personas ?? [];
+  const primaryX = 0.4;
+  const secondX = personas.length > 1 ? 5.1 : 0.4;
+  const cellW = personas.length > 1 ? 4.5 : 9.2;
+
+  personas.slice(0, 2).forEach((p, i) => {
+    const x = i === 0 ? primaryX : secondX;
+    slide.addShape("rect", { x, y: 1.3, w: cellW, h: 1.5, fill: { color: BRAND.light }, line: { color: BRAND.border, width: 0.5 } });
+    slide.addText(`${i === 0 ? "PRIMARY" : "SECONDARY"} · ${p.role}`, { x: x + 0.15, y: 1.4, w: cellW - 0.3, h: 0.25, fontSize: 9, bold: true, color: BRAND.muted, charSpacing: 2, fontFace: "Arial" });
+    slide.addText(p.name, { x: x + 0.15, y: 1.65, w: cellW - 0.3, h: 0.4, fontSize: 18, bold: true, color: BRAND.navy, fontFace: "Arial" });
+    slide.addText(`${p.orgSize} · ${p.industry}`, { x: x + 0.15, y: 2.1, w: cellW - 0.3, h: 0.25, fontSize: 10, color: BRAND.text, fontFace: "Arial" });
+    slide.addText(`${p.seniority.toUpperCase()} · ${p.authority.toUpperCase()}`, { x: x + 0.15, y: 2.4, w: cellW - 0.3, h: 0.25, fontSize: 9, italic: true, color: BRAND.accent, fontFace: "Arial" });
+  });
+
+  // Psychographics + sociotype side-by-side
+  const ps = ci.psychographics;
+  const st = ci.sociotype;
+  const bottomY = 3.0;
+  const halfW = 4.5;
+
+  slide.addText("PSYCHOGRAPHICS", { x: 0.4, y: bottomY, w: halfW, h: 0.25, fontSize: 9, bold: true, color: BRAND.muted, charSpacing: 2, fontFace: "Arial" });
+  if (ps) {
+    const psRows = [
+      ["Personality", ps.personalityType],
+      ["Buyer Type", `${ps.buyerType} · ${ps.buyerStage}`],
+      ["Decision", `${ps.decisionStyle} · ${ps.riskTolerance} risk`],
+      ["Diet", (ps.informationDiet ?? []).slice(0, 4).join(" · ") || "—"],
+    ];
+    psRows.forEach((r, i) => {
+      slide.addText(r[0], { x: 0.4, y: bottomY + 0.3 + i * 0.4, w: 1.1, h: 0.35, fontSize: 9, bold: true, color: BRAND.muted, fontFace: "Arial" });
+      slide.addText(r[1], { x: 1.55, y: bottomY + 0.3 + i * 0.4, w: 3.35, h: 0.35, fontSize: 10, color: BRAND.text, fontFace: "Arial", valign: "top" });
+    });
+  }
+
+  slide.addText(`SOCIOTYPE · ${st?.archetype ?? ""}`, { x: 5.1, y: bottomY, w: halfW, h: 0.25, fontSize: 9, bold: true, color: BRAND.muted, charSpacing: 2, fontFace: "Arial" });
+  if (st) {
+    const stRows = [
+      ["I am", st.iAm],
+      ["I crave", st.iCrave],
+      ["I struggle with", st.iStruggleWith],
+      ["I consume", st.iConsume],
+    ];
+    stRows.forEach((r, i) => {
+      slide.addText(r[0], { x: 5.1, y: bottomY + 0.3 + i * 0.4, w: 1.3, h: 0.35, fontSize: 9, bold: true, color: BRAND.muted, fontFace: "Arial" });
+      slide.addText(r[1], { x: 6.45, y: bottomY + 0.3 + i * 0.4, w: 3.15, h: 0.35, fontSize: 9.5, color: BRAND.text, fontFace: "Arial", valign: "top" });
+    });
+  }
+}
+
+function buildCIPainJTBDSlide(pptx: PptxGenJS, ci: CustomerInsights) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "Panel B — What Hurts, What They Hire Us For", "Ranked pain points + jobs-to-be-done");
+
+  const pains = (ci.painPoints ?? []).slice(0, 4);
+  const rowH = 0.7;
+  pains.forEach((p, i) => {
+    const y = 1.35 + i * (rowH + 0.1);
+    slide.addShape("rect", { x: 0.4, y, w: 4.5, h: rowH, fill: { color: BRAND.light }, line: { color: BRAND.border, width: 0.5 } });
+    slide.addShape("rect", { x: 0.4, y, w: 0.45, h: rowH, fill: { color: BRAND.accent }, line: { color: BRAND.accent, width: 0 } });
+    slide.addText(String(p.rank), { x: 0.4, y, w: 0.45, h: rowH, fontSize: 18, bold: true, color: "FFFFFF", align: "center", valign: "middle", fontFace: "Arial" });
+    slide.addText(p.label, { x: 1.0, y: y + 0.05, w: 3.85, h: 0.3, fontSize: 11, bold: true, color: BRAND.navy, fontFace: "Arial" });
+    slide.addText(p.businessCost || p.symptom, { x: 1.0, y: y + 0.35, w: 3.85, h: rowH - 0.35, fontSize: 8.5, color: BRAND.text, fontFace: "Arial" });
+  });
+
+  const jtbd = (ci.jtbd ?? []).slice(0, 4);
+  slide.addText("JOBS TO BE DONE", { x: 5.1, y: 1.35, w: 4.5, h: 0.25, fontSize: 9, bold: true, color: BRAND.muted, charSpacing: 2, fontFace: "Arial" });
+  jtbd.forEach((j, i) => {
+    const y = 1.65 + i * 0.85;
+    slide.addText(`${i + 1}. When ${j.situation},`, { x: 5.1, y, w: 4.5, h: 0.25, fontSize: 10, bold: true, color: BRAND.navy, fontFace: "Arial" });
+    slide.addText(`I want to ${j.motivation}, so I can ${j.outcome}.`, { x: 5.1, y: y + 0.25, w: 4.5, h: 0.35, fontSize: 9.5, color: BRAND.text, fontFace: "Arial", valign: "top" });
+    slide.addText(`F: ${j.functionalJob} · E: ${j.emotionalJob}`, { x: 5.1, y: y + 0.6, w: 4.5, h: 0.2, fontSize: 8, italic: true, color: BRAND.muted, fontFace: "Arial" });
+  });
+}
+
+function buildCIVoCSlide(pptx: PptxGenJS, ci: CustomerInsights) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "Voice of Customer", ci.vocEvidenceMode === "real" ? "Real-world buyer quotes" : ci.vocEvidenceMode === "mixed" ? "Real + representative buyer language" : "Representative buyer language");
+
+  const quotes = (ci.voiceOfCustomer ?? []).slice(0, 6);
+  const quoteH = 0.65;
+  quotes.forEach((q, i) => {
+    const y = 1.3 + i * (quoteH + 0.05);
+    slide.addShape("rect", { x: 0.4, y, w: 9.2, h: quoteH, fill: { color: q.isParaphrased ? BRAND.light : "F5FAFB" }, line: { color: BRAND.border, width: 0.5 } });
+    slide.addShape("rect", { x: 0.4, y, w: 0.08, h: quoteH, fill: { color: q.isParaphrased ? BRAND.muted : "1B998B" }, line: { color: q.isParaphrased ? BRAND.muted : "1B998B", width: 0 } });
+    slide.addText(`\u201c${q.quote}\u201d`, { x: 0.6, y: y + 0.05, w: 6.5, h: quoteH - 0.1, fontSize: 10, italic: true, color: BRAND.text, fontFace: "Arial", valign: "top" });
+    slide.addText(`\u2014 ${q.speaker}`, { x: 7.2, y: y + 0.08, w: 2.35, h: 0.25, fontSize: 8.5, bold: true, color: BRAND.navy, fontFace: "Arial" });
+    slide.addText(q.isParaphrased ? "Representative" : q.source, { x: 7.2, y: y + 0.33, w: 2.35, h: 0.25, fontSize: 7.5, color: BRAND.muted, fontFace: "Arial" });
+  });
+}
+
+function buildCIValidationSlide(pptx: PptxGenJS, ci: CustomerInsights) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "Panel C — Will They Buy?", "Would-they-buy signals · Mom Test questions");
+
+  const wtb = (ci.wouldTheyBuySignals ?? []).slice(0, 5);
+  slide.addText("WOULD-THEY-BUY SIGNALS", { x: 0.4, y: 1.3, w: 4.5, h: 0.25, fontSize: 9, bold: true, color: BRAND.muted, charSpacing: 2, fontFace: "Arial" });
+  wtb.forEach((s, i) => {
+    const y = 1.6 + i * 0.7;
+    const strengthColor = s.strength === "strong" ? "437A22" : s.strength === "moderate" ? "F4BD11" : "607382";
+    slide.addShape("rect", { x: 0.4, y, w: 0.7, h: 0.22, fill: { color: strengthColor }, line: { color: strengthColor, width: 0 } });
+    slide.addText(s.strength.toUpperCase(), { x: 0.4, y, w: 0.7, h: 0.22, fontSize: 7.5, bold: true, color: "FFFFFF", align: "center", valign: "middle", fontFace: "Arial" });
+    slide.addText(s.signal, { x: 1.2, y, w: 3.7, h: 0.25, fontSize: 10, bold: true, color: BRAND.navy, fontFace: "Arial" });
+    slide.addText(s.whatItMeans, { x: 0.4, y: y + 0.27, w: 4.5, h: 0.4, fontSize: 8.5, color: BRAND.text, fontFace: "Arial", valign: "top" });
+  });
+
+  const mom = (ci.momTestQuestions ?? []).slice(0, 5);
+  slide.addText("MOM TEST QUESTIONS", { x: 5.1, y: 1.3, w: 4.5, h: 0.25, fontSize: 9, bold: true, color: BRAND.muted, charSpacing: 2, fontFace: "Arial" });
+  mom.forEach((q, i) => {
+    const y = 1.6 + i * 0.7;
+    slide.addText(`${i + 1}. ${q.question}`, { x: 5.1, y, w: 4.5, h: 0.28, fontSize: 10, bold: true, color: BRAND.navy, fontFace: "Arial" });
+    slide.addText(`Avoid: \u201c${q.antipattern}\u201d`, { x: 5.1, y: y + 0.3, w: 4.5, h: 0.35, fontSize: 8, italic: true, color: "C02B0A", fontFace: "Arial", valign: "top" });
+  });
+}
+
+function buildCIBuyingSignalsSlide(pptx: PptxGenJS, ci: CustomerInsights) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "In-Market Buying Signals", "Triggers to watch + outreach plays");
+
+  const signals = (ci.buyingSignals ?? []).slice(0, 8);
+  signals.forEach((b, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const x = col === 0 ? 0.4 : 5.1;
+    const y = 1.3 + row * 0.95;
+    const urgencyColor = b.urgency === "in-market" ? "C02B0A" : b.urgency === "hot" ? "F4BD11" : b.urgency === "warming" ? "00A6FB" : "607382";
+
+    slide.addShape("rect", { x, y, w: 4.5, h: 0.85, fill: { color: BRAND.light }, line: { color: BRAND.border, width: 0.5 } });
+    slide.addShape("rect", { x, y, w: 4.5, h: 0.22, fill: { color: urgencyColor }, line: { color: urgencyColor, width: 0 } });
+    slide.addText(`${b.category.toUpperCase()}  ·  ${b.urgency.toUpperCase()}`, { x: x + 0.1, y, w: 4.3, h: 0.22, fontSize: 8, bold: true, color: "FFFFFF", charSpacing: 1, valign: "middle", fontFace: "Arial" });
+    slide.addText(b.trigger, { x: x + 0.1, y: y + 0.27, w: 4.3, h: 0.25, fontSize: 10, bold: true, color: BRAND.navy, fontFace: "Arial" });
+    slide.addText(`Play: ${b.action}`, { x: x + 0.1, y: y + 0.53, w: 4.3, h: 0.3, fontSize: 8.5, color: BRAND.text, fontFace: "Arial", valign: "top" });
+  });
+}
+
+function buildCICommitteeSlide(pptx: PptxGenJS, ci: CustomerInsights) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "Panel D — Decision Committee", "Who has to say yes · Our play for each");
+
+  const roles = (ci.decisionCommittee ?? []).slice(0, 5);
+  roles.forEach((r, i) => {
+    const y = 1.3 + i * 0.75;
+    const playColor = r.ourPlay === "champion" ? "437A22" : r.ourPlay === "neutralize" ? "C02B0A" : r.ourPlay === "bypass" ? "607382" : "F4BD11";
+    slide.addShape("rect", { x: 0.4, y, w: 9.2, h: 0.65, fill: { color: "FFFFFF" }, line: { color: BRAND.border, width: 0.5 } });
+    slide.addText(r.role, { x: 0.55, y: y + 0.05, w: 2.5, h: 0.3, fontSize: 12, bold: true, color: BRAND.navy, fontFace: "Arial" });
+    slide.addShape("rect", { x: 0.55, y: y + 0.35, w: 1.8, h: 0.22, fill: { color: playColor }, line: { color: playColor, width: 0 } });
+    slide.addText(`PLAY: ${r.ourPlay.toUpperCase()}`, { x: 0.55, y: y + 0.35, w: 1.8, h: 0.22, fontSize: 8, bold: true, color: "FFFFFF", align: "center", valign: "middle", fontFace: "Arial" });
+    slide.addText(`Motivation: ${r.motivation}`, { x: 3.2, y: y + 0.05, w: 6.3, h: 0.28, fontSize: 9, color: BRAND.text, fontFace: "Arial", valign: "top" });
+    slide.addText(`Blocker: ${r.blocker}  ·  Objection: \u201c${r.primaryObjection}\u201d`, { x: 3.2, y: y + 0.35, w: 6.3, h: 0.28, fontSize: 8.5, italic: true, color: BRAND.muted, fontFace: "Arial", valign: "top" });
+  });
+}
+
+function buildCIObjectionsSlide(pptx: PptxGenJS, ci: CustomerInsights) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "Objection Handling", "Frame · Fear · Reframe · Proof");
+
+  const objs = (ci.objections ?? []).slice(0, 5);
+  objs.forEach((o, i) => {
+    const y = 1.3 + i * 0.8;
+    slide.addShape("rect", { x: 0.4, y, w: 9.2, h: 0.72, fill: { color: BRAND.light }, line: { color: BRAND.border, width: 0.5 } });
+    slide.addText(`\u201c${o.objection}\u201d`, { x: 0.55, y: y + 0.05, w: 5.0, h: 0.3, fontSize: 10.5, bold: true, color: BRAND.navy, fontFace: "Arial" });
+    slide.addShape("rect", { x: 5.65, y: y + 0.05, w: 1.4, h: 0.22, fill: { color: BRAND.navy }, line: { color: BRAND.navy, width: 0 } });
+    slide.addText(o.frame.toUpperCase(), { x: 5.65, y: y + 0.05, w: 1.4, h: 0.22, fontSize: 8, bold: true, color: "FFFFFF", align: "center", valign: "middle", fontFace: "Arial" });
+    slide.addText(`Fear: ${o.underlyingFear}`, { x: 0.55, y: y + 0.35, w: 4.5, h: 0.32, fontSize: 8.5, color: BRAND.text, fontFace: "Arial", valign: "top" });
+    slide.addText(`Reframe: ${o.reframe}`, { x: 5.2, y: y + 0.35, w: 4.35, h: 0.32, fontSize: 8.5, bold: true, color: "1B998B", fontFace: "Arial", valign: "top" });
+  });
+}
+
+function buildCIJourneySlide(pptx: PptxGenJS, ci: CustomerInsights) {
+  const slide = pptx.addSlide();
+  addSectionHeader(slide, "Buyer Journey", "Five stages · Content asset per stage");
+
+  const stages = ci.journeyStages ?? [];
+  const cellW = 1.85;
+  const cellH = 3.6;
+  const stageColors = ["607382", "00A6FB", "1B998B", "F4BD11", "2A4365"];
+  stages.slice(0, 5).forEach((s, i) => {
+    const x = 0.4 + i * (cellW + 0.02);
+    const color = stageColors[i] ?? BRAND.accent;
+    slide.addShape("rect", { x, y: 1.3, w: cellW, h: cellH, fill: { color: "FFFFFF" }, line: { color: BRAND.border, width: 0.5 } });
+    slide.addShape("rect", { x, y: 1.3, w: cellW, h: 0.4, fill: { color }, line: { color, width: 0 } });
+    slide.addText(s.stage.toUpperCase().replace("-", " "), { x: x + 0.05, y: 1.3, w: cellW - 0.1, h: 0.4, fontSize: 9, bold: true, color: "FFFFFF", charSpacing: 1, align: "center", valign: "middle", fontFace: "Arial" });
+
+    const rows = [
+      ["Mindset", s.mindset],
+      ["Asks", s.primaryQuestion],
+      ["Where", s.channel],
+      ["Asset", s.contentAsset],
+      ["CTA", s.cta],
+    ];
+    rows.forEach((r, ri) => {
+      const rowY = 1.8 + ri * 0.62;
+      slide.addText(r[0].toUpperCase(), { x: x + 0.08, y: rowY, w: cellW - 0.16, h: 0.18, fontSize: 7, bold: true, color: BRAND.muted, charSpacing: 1, fontFace: "Arial" });
+      slide.addText(r[1], { x: x + 0.08, y: rowY + 0.18, w: cellW - 0.16, h: 0.38, fontSize: 8, color: BRAND.text, fontFace: "Arial", valign: "top" });
+    });
+  });
 }

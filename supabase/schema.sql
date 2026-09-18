@@ -18,6 +18,7 @@ create table if not exists public.analyses (
   -- Framework opt-ins (Sep 2026)
   include_pestel  boolean not null default false,
   include_porters boolean not null default false,
+  include_customer_insights boolean not null default false,
 
   status        text not null,               -- queued | extracting | competitors | strategy | sow | frameworks | done | error
   progress      integer not null default 0,  -- 0-100
@@ -33,6 +34,7 @@ create table if not exists public.analyses (
   swot     jsonb,
   pestel   jsonb,
   porters  jsonb,
+  customer_insights jsonb,
 
   created_at    bigint not null
 );
@@ -40,10 +42,12 @@ create table if not exists public.analyses (
 -- Idempotent alter for pre-existing installs (Sep 2026 migration)
 alter table public.analyses add column if not exists include_pestel  boolean not null default false;
 alter table public.analyses add column if not exists include_porters boolean not null default false;
+alter table public.analyses add column if not exists include_customer_insights boolean not null default false;
 alter table public.analyses add column if not exists assumptions jsonb;
 alter table public.analyses add column if not exists swot    jsonb;
 alter table public.analyses add column if not exists pestel  jsonb;
 alter table public.analyses add column if not exists porters jsonb;
+alter table public.analyses add column if not exists customer_insights jsonb;
 
 create index if not exists analyses_created_at_idx on public.analyses (created_at desc);
 create index if not exists analyses_status_idx     on public.analyses (status);

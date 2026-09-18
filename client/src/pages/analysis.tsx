@@ -48,6 +48,7 @@ import type {
   StrategicRationale,
   PestelFinding,
   PortersForce,
+  CustomerInsights,
 } from "@shared/schema";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -304,11 +305,12 @@ export default function AnalysisPage() {
         {/* Results — tabbed */}
         {(analysis.extraction || analysis.competitors || analysis.strategy || analysis.sow) && (
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid grid-cols-4 w-full max-w-2xl">
+            <TabsList className="grid grid-cols-5 w-full max-w-3xl">
               <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
               <TabsTrigger value="strategy" data-testid="tab-strategy">Strategy</TabsTrigger>
               <TabsTrigger value="sow" data-testid="tab-sow">SOW</TabsTrigger>
               <TabsTrigger value="frameworks" data-testid="tab-frameworks">Frameworks</TabsTrigger>
+              <TabsTrigger value="buyer" data-testid="tab-buyer">Buyer</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-8 pt-6">
@@ -350,6 +352,15 @@ export default function AnalysisPage() {
                   swot={safeParse<SwotAnalysis>(analysis.swot)}
                   pestel={safeParse<PestelAnalysis>(analysis.pestel)}
                   porters={safeParse<PortersFiveForces>(analysis.porters)}
+                  status={analysis.status}
+                />
+              </SectionErrorBoundary>
+            </TabsContent>
+
+            <TabsContent value="buyer" className="space-y-8 pt-6">
+              <SectionErrorBoundary label="Customer Insights">
+                <CustomerInsightsSection
+                  ci={safeParse<CustomerInsights>(analysis.customerInsights)}
                   status={analysis.status}
                 />
               </SectionErrorBoundary>
@@ -1707,5 +1718,325 @@ function AssumptionsDialog({ analysis }: { analysis: Analysis }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// -------- Customer Insights section --------
+function CustomerInsightsSection({
+  ci,
+  status,
+}: {
+  ci: CustomerInsights | null | undefined;
+  status: string | null | undefined;
+}) {
+  if (!ci) {
+    return (
+      <Card className="p-6 text-sm text-muted-foreground" data-testid="ci-empty">
+        {status === "running"
+          ? "Customer Insights still generating…"
+          : "No Customer Insights generated. Re-run the intake with the Customer Insights toggle enabled to add 12 buyer-intelligence analyses across four panels."}
+      </Card>
+    );
+  }
+
+  const evidenceLabel =
+    ci.vocEvidenceMode === "real"
+      ? { label: "VoC · Real Research", tone: "bg-emerald-100 text-emerald-800 border-emerald-200" }
+      : ci.vocEvidenceMode === "mixed"
+      ? { label: "VoC · Mixed", tone: "bg-amber-100 text-amber-800 border-amber-200" }
+      : { label: "VoC · Representative Language", tone: "bg-muted text-muted-foreground border-border" };
+
+  return (
+    <section className="space-y-6">
+      <SectionHeader
+        index="05"
+        eyebrow="Customer Insights"
+        title="Deep buyer intelligence"
+        description={`12 sub-analyses across four panels — persona, pain, validation, and deal mechanics for the ${ci.industry} buyer.`}
+      />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`inline-flex items-center px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide border rounded ${evidenceLabel.tone}`}>
+          {evidenceLabel.label}
+        </span>
+        {ci.voiceOfCustomer?.some((q) => q.isParaphrased) && ci.vocEvidenceMode !== "paraphrased" && (
+          <span className="text-xs text-muted-foreground">Some quotes are representative language, not verbatim.</span>
+        )}
+      </div>
+
+      {ci.summary && (
+        <Card className="p-5 border-l-4 border-l-accent">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Executive Read</div>
+          <p className="text-sm leading-relaxed">{ci.summary}</p>
+        </Card>
+      )}
+
+      {/* Panel A — Who they are */}
+      <div>
+        <div className="text-[11px] font-mono uppercase tracking-wider text-accent mb-2">Panel A</div>
+        <h3 className="font-serif text-xl mb-4">Who They Are</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {(ci.personas ?? []).map((p, i) => (
+            <Card key={p.name + i} className="p-5" data-testid={`ci-persona-${i}`}>
+              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+                {i === 0 ? "Primary" : "Secondary"} · {p.role}
+              </div>
+              <h4 className="font-serif text-lg mb-1">{p.name}</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                {p.orgSize} · {p.industry}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-secondary text-secondary-foreground">{p.seniority}</span>
+                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-accent/10 text-accent">{p.authority}</span>
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+          {ci.psychographics && (
+            <Card className="p-5">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-3">Psychographics</div>
+              <dl className="space-y-2 text-sm">
+                <div className="flex gap-3"><dt className="w-32 shrink-0 text-muted-foreground">Personality</dt><dd>{ci.psychographics.personalityType}</dd></div>
+                <div className="flex gap-3"><dt className="w-32 shrink-0 text-muted-foreground">Buyer</dt><dd>{ci.psychographics.buyerType} · {ci.psychographics.buyerStage}</dd></div>
+                <div className="flex gap-3"><dt className="w-32 shrink-0 text-muted-foreground">Decision</dt><dd>{ci.psychographics.decisionStyle} · {ci.psychographics.riskTolerance} risk</dd></div>
+                <div className="flex gap-3"><dt className="w-32 shrink-0 text-muted-foreground">Brand rel.</dt><dd>{ci.psychographics.brandRelationship}</dd></div>
+                {ci.psychographics.informationDiet?.length ? (
+                  <div className="flex gap-3"><dt className="w-32 shrink-0 text-muted-foreground">Diet</dt><dd>{ci.psychographics.informationDiet.join(" · ")}</dd></div>
+                ) : null}
+              </dl>
+            </Card>
+          )}
+          {ci.sociotype?.archetype && (
+            <Card className="p-5">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">Sociotype</div>
+              <h4 className="font-serif text-lg mb-3">{ci.sociotype.archetype}</h4>
+              <dl className="space-y-2 text-sm">
+                <div><dt className="text-muted-foreground text-xs uppercase tracking-wide">I am</dt><dd>{ci.sociotype.iAm}</dd></div>
+                <div><dt className="text-muted-foreground text-xs uppercase tracking-wide">I crave</dt><dd>{ci.sociotype.iCrave}</dd></div>
+                <div><dt className="text-muted-foreground text-xs uppercase tracking-wide">But also</dt><dd>{ci.sociotype.butAlso}</dd></div>
+                <div><dt className="text-muted-foreground text-xs uppercase tracking-wide">I struggle with</dt><dd>{ci.sociotype.iStruggleWith}</dd></div>
+                <div><dt className="text-muted-foreground text-xs uppercase tracking-wide">I consume</dt><dd>{ci.sociotype.iConsume}</dd></div>
+              </dl>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Panel B — Pain + JTBD + VoC */}
+      <div>
+        <div className="text-[11px] font-mono uppercase tracking-wider text-accent mb-2">Panel B</div>
+        <h3 className="font-serif text-xl mb-4">What Hurts, What They Hire Us For</h3>
+
+        {ci.painPoints?.length ? (
+          <Card className="p-5 mb-4">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-3">Ranked Pain Points</div>
+            <ol className="space-y-3">
+              {ci.painPoints.map((p) => (
+                <li key={p.rank} className="flex gap-3" data-testid={`ci-pain-${p.rank}`}>
+                  <span className="flex-shrink-0 w-8 h-8 rounded bg-accent text-accent-foreground font-serif text-lg flex items-center justify-center">{p.rank}</span>
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm">{p.label}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Symptom: {p.symptom}</div>
+                    <div className="text-xs text-muted-foreground">Cost: {p.businessCost}</div>
+                    <div className="text-xs italic text-muted-foreground mt-1">Workaround: {p.currentWorkaround} → our leverage: {p.ourLeverage}</div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </Card>
+        ) : null}
+
+        {ci.jtbd?.length ? (
+          <Card className="p-5 mb-4">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-3">Jobs to Be Done</div>
+            <ul className="space-y-3">
+              {ci.jtbd.map((j, i) => (
+                <li key={i} className="text-sm" data-testid={`ci-jtbd-${i}`}>
+                  <span className="font-semibold">When</span> {j.situation}, <span className="font-semibold">I want to</span> {j.motivation}, <span className="font-semibold">so I can</span> {j.outcome}.
+                  <div className="text-xs text-muted-foreground italic mt-1">Functional: {j.functionalJob} · Emotional: {j.emotionalJob} · Social: {j.socialJob}</div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ) : null}
+
+        {ci.voiceOfCustomer?.length ? (
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Voice of Customer</div>
+              <div className="text-[11px] text-muted-foreground">{ci.voiceOfCustomer.length} quotes</div>
+            </div>
+            <div className="space-y-3">
+              {ci.voiceOfCustomer.map((q, i) => (
+                <div key={i} className={`border-l-4 pl-3 py-1 ${q.isParaphrased ? "border-l-muted" : "border-l-emerald-500"}`} data-testid={`ci-voc-${i}`}>
+                  <p className="text-sm italic">&ldquo;{q.quote}&rdquo;</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs font-semibold">{q.speaker}</span>
+                    <span className="text-xs text-muted-foreground">·</span>
+                    <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${q.isParaphrased ? "bg-muted text-muted-foreground" : "bg-emerald-50 text-emerald-700"}`}>
+                      {q.isParaphrased ? "Representative" : "Verbatim"}
+                    </span>
+                    {q.theme && <span className="text-xs text-muted-foreground">· {q.theme}</span>}
+                  </div>
+                  {q.sourceUrl && (
+                    <a href={q.sourceUrl} target="_blank" rel="noreferrer" className="text-[11px] text-accent hover:underline break-all">{q.sourceUrl}</a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
+      </div>
+
+      {/* Panel C — Validation */}
+      <div>
+        <div className="text-[11px] font-mono uppercase tracking-wider text-accent mb-2">Panel C</div>
+        <h3 className="font-serif text-xl mb-4">Will They Buy?</h3>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {ci.wouldTheyBuySignals?.length ? (
+            <Card className="p-5">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-3">Would-They-Buy Signals</div>
+              <ul className="space-y-3">
+                {ci.wouldTheyBuySignals.map((s, i) => {
+                  const tone = s.strength === "strong" ? "bg-emerald-50 text-emerald-700" : s.strength === "moderate" ? "bg-amber-50 text-amber-700" : "bg-muted text-muted-foreground";
+                  return (
+                    <li key={i} className="text-sm" data-testid={`ci-wtb-${i}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${tone}`}>{s.strength}</span>
+                        <span className="font-semibold">{s.signal}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">{s.whatItMeans}</div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          ) : null}
+
+          {ci.momTestQuestions?.length ? (
+            <Card className="p-5">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-3">Mom Test Questions</div>
+              <ol className="space-y-3">
+                {ci.momTestQuestions.map((q, i) => (
+                  <li key={i} className="text-sm" data-testid={`ci-mom-${i}`}>
+                    <div className="font-semibold">{q.question}</div>
+                    <div className="text-xs text-muted-foreground italic mt-1">Why it works: {q.whyItWorks}</div>
+                    <div className="text-xs text-destructive italic mt-1">Avoid: &ldquo;{q.antipattern}&rdquo;</div>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          ) : null}
+        </div>
+
+        {ci.buyingSignals?.length ? (
+          <Card className="p-5 mt-4">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-3">In-Market Buying Signals</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {ci.buyingSignals.map((b, i) => {
+                const tone = b.urgency === "in-market" ? "bg-destructive text-destructive-foreground" : b.urgency === "hot" ? "bg-amber-500 text-white" : b.urgency === "warming" ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground";
+                return (
+                  <div key={i} className="border rounded p-3" data-testid={`ci-signal-${i}`}>
+                    <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                      <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">{b.category}</span>
+                      <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${tone}`}>{b.urgency}</span>
+                    </div>
+                    <div className="text-sm font-semibold">{b.trigger}</div>
+                    <div className="text-xs text-muted-foreground mt-1">Play: {b.action}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        ) : null}
+      </div>
+
+      {/* Panel D — Deal mechanics */}
+      <div>
+        <div className="text-[11px] font-mono uppercase tracking-wider text-accent mb-2">Panel D</div>
+        <h3 className="font-serif text-xl mb-4">How the Deal Closes</h3>
+
+        {ci.decisionCommittee?.length ? (
+          <Card className="p-5 mb-4">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-3">Decision Committee</div>
+            <div className="space-y-3">
+              {ci.decisionCommittee.map((r, i) => {
+                const tone = r.ourPlay === "champion" ? "bg-emerald-50 text-emerald-700" : r.ourPlay === "neutralize" ? "bg-destructive/10 text-destructive" : r.ourPlay === "bypass" ? "bg-muted text-muted-foreground" : "bg-amber-50 text-amber-700";
+                return (
+                  <div key={i} className="border-l-2 border-l-accent pl-3" data-testid={`ci-committee-${i}`}>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="font-semibold text-sm">{r.role}</span>
+                      <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${tone}`}>Play: {r.ourPlay}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">Motivation: {r.motivation}</div>
+                    <div className="text-xs text-muted-foreground">Blocker: {r.blocker}</div>
+                    <div className="text-xs italic text-muted-foreground">Objection: &ldquo;{r.primaryObjection}&rdquo;</div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        ) : null}
+
+        {ci.objections?.length ? (
+          <Card className="p-5 mb-4">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-3">Objection Handling</div>
+            <div className="space-y-3">
+              {ci.objections.map((o, i) => (
+                <div key={i} className="border rounded p-3" data-testid={`ci-objection-${i}`}>
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <p className="font-semibold text-sm">&ldquo;{o.objection}&rdquo;</p>
+                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground shrink-0">{o.frame}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">Fear: {o.underlyingFear}</div>
+                  <div className="text-xs text-emerald-700 mt-1"><span className="font-semibold">Reframe:</span> {o.reframe}</div>
+                  <div className="text-xs text-muted-foreground italic mt-1">Proof: {o.proofAsset}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
+
+        {ci.journeyStages?.length ? (
+          <Card className="p-5">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-3">Buyer Journey</div>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+              {ci.journeyStages.map((j, i) => (
+                <div key={i} className="border rounded p-3" data-testid={`ci-stage-${i}`}>
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-accent mb-2">{i + 1}. {j.stage.replace("-", " ")}</div>
+                  <dl className="space-y-1.5 text-xs">
+                    <div><dt className="font-semibold text-muted-foreground">Mindset</dt><dd>{j.mindset}</dd></div>
+                    <div><dt className="font-semibold text-muted-foreground">Asks</dt><dd>{j.primaryQuestion}</dd></div>
+                    <div><dt className="font-semibold text-muted-foreground">Where</dt><dd>{j.channel}</dd></div>
+                    <div><dt className="font-semibold text-muted-foreground">Asset</dt><dd>{j.contentAsset}</dd></div>
+                    <div><dt className="font-semibold text-muted-foreground">CTA</dt><dd>{j.cta}</dd></div>
+                  </dl>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
+      </div>
+
+      {ci.vocSources?.length ? (
+        <Card className="p-5">
+          <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-3">Voice-of-Customer Sources</div>
+          <ol className="space-y-1.5 text-xs">
+            {ci.vocSources.map((s, i) => (
+              <li key={i}>
+                <a href={s.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                  {s.title || s.url}
+                </a>
+                {s.publisher && <span className="text-muted-foreground"> — {s.publisher}</span>}
+                {s.date && <span className="text-muted-foreground"> ({s.date})</span>}
+              </li>
+            ))}
+          </ol>
+        </Card>
+      ) : null}
+    </section>
   );
 }

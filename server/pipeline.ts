@@ -3,8 +3,9 @@ import { llmJson, retryFillExtraction, SCHEMA_EXTRACT, SCHEMA_COMPETITORS, SCHEM
 import { generateSwot } from "./swot";
 import { generatePestel } from "./pestel";
 import { generatePorters } from "./porters";
+import { generateCustomerInsights } from "./customer-insights";
 import { injectRationale } from "./rationale";
-import type { SwotAnalysis, PestelAnalysis, PortersFiveForces, Strategy, SOW, Extraction, Competitor, Assumptions } from "@shared/schema";
+import type { SwotAnalysis, PestelAnalysis, PortersFiveForces, CustomerInsights, Strategy, SOW, Extraction, Competitor, Assumptions } from "@shared/schema";
 
 // Format the assumptions blob into a bracketed prompt block. Empty/null yields "".
 // Called from every LLM stage so the model grounds outputs in prospect reality.
@@ -169,10 +170,11 @@ export async function runPipeline(id: string) {
       sow: JSON.stringify(sow),
     });
 
-    // Stage 5: Strategic frameworks (SWOT always; PESTEL/Porter's opt-in)
+    // Stage 5: Strategic frameworks (SWOT always; PESTEL/Porter's/CI opt-in)
     let swotResult: SwotAnalysis | null = null;
     let pestelResult: PestelAnalysis | null = null;
     let portersResult: PortersFiveForces | null = null;
+    let ciResult: CustomerInsights | null = null;
 
     try {
       // SWOT always runs — fast and free
@@ -189,9 +191,10 @@ export async function runPipeline(id: string) {
 
       const wantsPestel = (record as any).includePestel === 1 || (record as any).includePestel === true;
       const wantsPorters = (record as any).includePorters === 1 || (record as any).includePorters === true;
+      const wantsCI = (record as any).includeCustomerInsights === 1 || (record as any).includeCustomerInsights === true;
 
-      // Run PESTEL + Porter's in parallel if opted in
-      const [pestelR, portersR] = await Promise.all([
+      // Run PESTEL + Porter's + Customer Insights in parallel if opted in
+      const [pestelR, portersR, ciR] = await Promise.all([
         wantsPestel
           ? generatePestel({ clientName: record.clientName, industry }).catch((err) => {
               console.error("[pestel] failed:", err);
@@ -208,9 +211,41 @@ export async function runPipeline(id: string) {
               return null;
             })
           : Promise.resolve(null),
+        wantsCI
+          ? generateCustomerInsights({
+              clientName: record.clientName,
+              industry,
+              extraction: extraction as Extraction,
+              competitors: competitors as Competitor[],
+              notes: record.notes,
+              // Brex-specific offers surface when the analysis is being run FOR Brex.
+              // Default false so client-facing runs cite the client's own offers.
+              brexContext: false,
+            }).catch((err) => {
+              console.error("[customer-insights] failed:", err);
+              return null;
+            })
+          : Promise.resolve(null),
       ]);
       pestelResult = pestelR;
       portersResult = portersR;
+      ciResult = ciR;
+
+      // If Customer Insights ran, tighten strategy.icp to a 2-3 line summary
+      // (Option A upgrade — the deep pack becomes the authoritative buyer layer).
+      if (ciResult) {
+        const s = strategy as Strategy;
+        if (s?.icp) {
+          s.icp.summary = ciResult.summary || s.icp.summary;
+          // Preserve firmographics from strategy; pain/triggers now live in CI
+          // but keep 1-liner arrays for legacy PDF/PPTX sections that read them.
+          s.icp.painPoints = ciResult.painPoints.slice(0, 5).map((p) => p.label);
+          s.icp.buyingTriggers = ciResult.buyingSignals
+            .filter((b) => b.urgency === "hot" || b.urgency === "in-market")
+            .slice(0, 5)
+            .map((b) => b.trigger);
+        }
+      }
 
       // Inject strategic rationale into the strategy + SOW
       const withRationale = await injectRationale({
@@ -233,6 +268,7 @@ export async function runPipeline(id: string) {
         swot: JSON.stringify(swotResult),
         pestel: pestelResult ? JSON.stringify(pestelResult) : null,
         porters: portersResult ? JSON.stringify(portersResult) : null,
+        customerInsights: ciResult ? JSON.stringify(ciResult) : null,
       } as any);
     } catch (frameworksErr: any) {
       // Framework failure is non-fatal — the core analysis is still complete
@@ -244,6 +280,7 @@ export async function runPipeline(id: string) {
         swot: swotResult ? JSON.stringify(swotResult) : null,
         pestel: pestelResult ? JSON.stringify(pestelResult) : null,
         porters: portersResult ? JSON.stringify(portersResult) : null,
+        customerInsights: ciResult ? JSON.stringify(ciResult) : null,
       } as any);
     }
   } catch (err: any) {

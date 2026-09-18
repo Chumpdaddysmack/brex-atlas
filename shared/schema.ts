@@ -15,6 +15,7 @@ export const analyses = sqliteTable("analyses", {
   // Framework opt-ins (from intake form)
   includePestel: integer("include_pestel").default(0),   // 0/1
   includePorters: integer("include_porters").default(0), // 0/1
+  includeCustomerInsights: integer("include_customer_insights").default(0), // 0/1
   // Underlying assumptions (JSON blob) — editable on intake AND analysis page
   assumptions: text("assumptions"),  // JSON string of Assumptions type
   status: text("status").notNull(), // queued | extracting | competitors | strategy | sow | frameworks | done | error
@@ -30,6 +31,7 @@ export const analyses = sqliteTable("analyses", {
   swot: text("swot"),         // SwotAnalysis
   pestel: text("pestel"),     // PestelAnalysis (only if includePestel)
   porters: text("porters"),   // PortersFiveForces (only if includePorters)
+  customerInsights: text("customer_insights"),  // CustomerInsights (only if includeCustomerInsights)
   createdAt: integer("created_at").notNull(),
 });
 
@@ -42,6 +44,7 @@ export const insertAnalysisSchema = createInsertSchema(analyses).pick({
   budgetBand: true,
   notes: true,
   includePestel: true,
+  includeCustomerInsights: true,
   includePorters: true,
   assumptions: true,
 });
@@ -70,6 +73,7 @@ export const intakeSchema = insertAnalysisSchema.extend({
   notes: z.string().optional(),
   // Accept booleans in the intake payload; storage/DB uses 0/1.
   includePestel: z.union([z.boolean(), z.number()]).optional().default(false),
+  includeCustomerInsights: z.union([z.boolean(), z.number()]).optional().default(false),
   includePorters: z.union([z.boolean(), z.number()]).optional().default(false),
   // Assumptions can come in as either a parsed object OR a JSON string (client sends object; DB stores string)
   assumptions: z.union([z.string(), assumptionsSchema]).nullable().optional(),
@@ -209,6 +213,149 @@ export type PortersFiveForces = {
   forces: PortersForce[];  // exactly 5, in canonical order
   overallStructure: string; // 2-3 sentence read on attractiveness
   summary: string;
+};
+
+// ============================================================
+// Customer Insights — deep buyer intelligence pack.
+// Added Sep 2026 (Option A upgrade). Replaces the shallow strategy.icp
+// fields when opted in: strategy.icp becomes a 2-3 line summary drawn from
+// this payload. 12 sub-analyses grouped into 4 panels:
+//   A. Who they are      — persona, psychographics, sociotype
+//   B. What hurts / hire  — pain points, JTBD, voice-of-customer
+//   C. Will they buy      — Would-They-Buy, Mom Test, buying signals
+//   D. How the deal closes — decision committee, objections, journey stages
+// ============================================================
+
+// Panel A
+export type CIPersona = {
+  name: string;                                   // e.g. "Liam Hawthorne"
+  role: string;                                   // "ERP Project Manager"
+  seniority: "ic" | "manager" | "director" | "vp" | "c-suite" | "owner";
+  orgSize: string;                                // "50-500 employees"
+  industry: string;
+  authority: "decider" | "influencer" | "user" | "gatekeeper" | "champion";
+  isPrimary: boolean;
+};
+
+export type CIPsychographics = {
+  personalityType: string;                        // "Methodical"
+  buyerType: string;                              // "Brand Loyalist"
+  buyerStage: string;                             // "Early Adopter"
+  userType: string;                               // "Power User"
+  decisionStyle: "analytical" | "intuitive" | "consensus" | "directive";
+  riskTolerance: "low" | "medium" | "high";
+  informationDiet: string[];                      // sources they consume
+  brandRelationship: "loyalist" | "switcher" | "evaluator" | "skeptic";
+};
+
+export type CISociotype = {
+  archetype: string;                              // "ENTJ — Strategic Implementer"
+  iAm: string;
+  iCrave: string;
+  butAlso: string;
+  iStruggleWith: string;
+  iConsume: string;
+};
+
+// Panel B
+export type CIPainPoint = {
+  rank: number;                                   // 1-5
+  label: string;                                  // "Implementation Complexity"
+  symptom: string;
+  businessCost: string;
+  currentWorkaround: string;
+  ourLeverage: string;                            // how Brex/client solves it
+};
+
+export type CIJTBD = {
+  situation: string;                              // "When {situation}"
+  motivation: string;                             // "I want to {motivation}"
+  outcome: string;                                // "so I can {outcome}"
+  functionalJob: string;
+  emotionalJob: string;
+  socialJob: string;
+};
+
+export type CIVoiceOfCustomer = {
+  quote: string;                                  // verbatim or paraphrased
+  speaker: string;                                // "SaaS COO, 200-person co"
+  source: string;                                 // "G2 review" | "LinkedIn" | "Representative language"
+  sourceUrl?: string;                             // present when real search returned it
+  isParaphrased: boolean;                         // true when fallback / representative
+  theme: string;                                  // groups quotes
+  supportsJTBD?: string;                          // ties back to JTBD situation line
+  supportsPain?: string;                          // ties back to a pain-point label
+};
+
+// Panel C
+export type CIWouldTheyBuySignal = {
+  signal: string;                                 // "Prospect asks for pricing before demo"
+  whatItMeans: string;
+  strength: "weak" | "moderate" | "strong";
+};
+
+export type CIMomTestQuestion = {
+  question: string;
+  whyItWorks: string;
+  antipattern: string;                            // the compliment-seeking version
+};
+
+export type CIBuyingSignal = {
+  trigger: string;                                // "Hired a VP of Ops"
+  category: "hiring" | "funding" | "tech-stack" | "leadership" | "content" | "competitor";
+  urgency: "cold" | "warming" | "hot" | "in-market";
+  action: string;                                 // outreach play to run
+};
+
+// Panel D
+export type CIDecisionCommitteeRole = {
+  role: string;                                   // "CFO"
+  motivation: string;
+  blocker: string;
+  ourPlay: "champion" | "neutralize" | "educate" | "bypass";
+  primaryObjection: string;
+};
+
+export type CIObjection = {
+  objection: string;                              // "We already have an agency"
+  frame: "price" | "risk" | "timing" | "fit" | "authority" | "status-quo";
+  underlyingFear: string;
+  reframe: string;                                // the language we use
+  proofAsset: string;                             // case study, calculator, benchmark
+};
+
+export type CIJourneyStage = {
+  stage: "unaware" | "aware" | "considering" | "deciding" | "deciding-with-us";
+  mindset: string;
+  primaryQuestion: string;
+  channel: string;                                // "LinkedIn, industry podcasts"
+  contentAsset: string;                           // "Growth Excavation Report"
+  cta: string;
+  exitCriterion: string;                          // what proves they moved on
+};
+
+export type CustomerInsights = {
+  industry: string;
+  // Panel A
+  personas: CIPersona[];                          // 1-2
+  psychographics: CIPsychographics;
+  sociotype: CISociotype;
+  // Panel B
+  painPoints: CIPainPoint[];                      // 3-5
+  jtbd: CIJTBD[];                                 // 3-5
+  voiceOfCustomer: CIVoiceOfCustomer[];           // 6-10
+  // Panel C
+  wouldTheyBuySignals: CIWouldTheyBuySignal[];    // 5
+  momTestQuestions: CIMomTestQuestion[];          // 5
+  buyingSignals: CIBuyingSignal[];                // 5-8
+  // Panel D
+  decisionCommittee: CIDecisionCommitteeRole[];   // 3-7
+  objections: CIObjection[];                      // 5
+  journeyStages: CIJourneyStage[];                // exactly 5
+  // Meta
+  summary: string;                                // 2-3 sentence exec read — feeds strategy.icp.summary
+  vocSources: FrameworkSource[];                  // aggregated sources from real search (empty when fallback)
+  vocEvidenceMode: "real" | "paraphrased" | "mixed";
 };
 
 // Strategic rationale block — appended to 90-day plan items and SOW
