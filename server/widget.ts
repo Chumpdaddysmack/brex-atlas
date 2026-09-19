@@ -24,7 +24,6 @@ import {
   isPersistenceConfigured,
 } from "./widget-store";
 import { syncAtlasLeadToHubSpot } from "./hubspot";
-import { sendHotLeadAlert, shouldAlert } from "./widget-alerts";
 
 // ---------- Public config (chip options + strategic copy) ----------
 
@@ -638,28 +637,8 @@ async function handleLeadSideEffects(p: LeadSideEffectInput): Promise<void> {
     });
   }
 
-  // 5. Hot-lead alert (only for strategist/full-fractional with score ≥ 65)
-  if (shouldAlert(p.diagOutput.fitTier, p.diagOutput.overallScore)) {
-    const alerted = await sendHotLeadAlert({
-      overallScore: p.diagOutput.overallScore,
-      fitTier: p.diagOutput.fitTier,
-      verdict: p.diagOutput.verdict,
-      positioningScore: subMap.get("positioning"),
-      offerScore: subMap.get("offer"),
-      buyerScore: subMap.get("buyer"),
-      growthScore: subMap.get("growth"),
-      headline: p.diagOutput.headline,
-      url: p.diagInput.url,
-      industry: p.diagInput.industry,
-      revenueBand: p.diagInput.revenueBand,
-      primaryGoal: p.diagInput.goal,
-      email: p.email,
-      company: p.company,
-      hubspotContactId: syncResult.contactId,
-      hubspotDealId: syncResult.dealId,
-    });
-    if (leadId && alerted) {
-      await updateLeadSync(leadId, { hotLeadAlertSent: true });
-    }
-  }
+  // 5. Hot-lead notification: handled by a HubSpot workflow.
+  //    When contact atlas_fit_tier is strategist or full-fractional AND
+  //    atlas_fit_score >= 65, HubSpot fires an in-app notification to Kenny.
+  //    See project docs for workflow setup steps.
 }
