@@ -30,6 +30,7 @@ import {
   drawStatBlock,
   drawCadenceBar,
   drawTwoSeriesLine,
+  drawSmallMultiplesLines,
   drawFunnelBars,
   drawCostCompareBars,
 } from "./pdf-charts";
@@ -2108,8 +2109,8 @@ function renderRoiSection(
 
   doc.y = rowTopY + 2 * cardH + 8 + 20;
 
-  // ---- Chart 1: Traffic curve ----
-  ensureSpace(doc, 190);
+  // ---- Chart 1: Traffic curve (small-multiples pair) ----
+  ensureSpace(doc, 210);
   doc
     .fillColor(BRAND.text)
     .font(FONTS.sansBold)
@@ -2123,28 +2124,29 @@ function renderRoiSection(
   doc.moveDown(1.0);
 
   const xLabels = monthlyProjection.map((m) => `M${m.month}`);
-  const visitorsSeries = {
-    label: "Monthly visitors",
-    color: BRAND.navy,
-    values: monthlyProjection.map((m) => m.monthlyVisitors),
-  };
-  const leadsSeries = {
-    label: "Monthly leads",
-    color: BRAND.accent,
-    values: monthlyProjection.map((m) => m.monthlyLeads),
-  };
-  drawTwoSeriesLine(
+  // Small-multiples pair: visitors and leads have independent y-scales
+  // so the leads line stays legible even when visitors dwarf it by 50-100x.
+  drawSmallMultiplesLines(
     doc,
     leftMargin,
     doc.y,
     pageWidth,
-    140,
-    visitorsSeries,
-    leadsSeries,
-    "num",
+    160,
+    {
+      label: "Monthly visitors",
+      color: BRAND.navy,
+      values: monthlyProjection.map((m) => m.monthlyVisitors),
+      format: "num",
+    },
+    {
+      label: "Monthly leads",
+      color: BRAND.accent,
+      values: monthlyProjection.map((m) => m.monthlyLeads),
+      format: "num",
+    },
     xLabels,
   );
-  doc.y += 155;
+  doc.y += 175;
 
   // ---- Chart 2: Payback timeline ----
   ensureSpace(doc, 190);

@@ -556,6 +556,136 @@ export function drawTwoSeriesLine(
   doc.fillColor(CHART_COLORS.text).text(series2.label, s2Box.x + 10, s2Box.y, { lineBreak: false });
 }
 
+// =============================================================
+// Small-multiples line pair — two stacked line charts sharing
+// a single x-axis but each series gets its OWN y-scale, so a
+// small series (e.g. monthly leads) isn't flattened against a
+// large series (e.g. monthly visitors). Use this instead of
+// drawTwoSeriesLine when the two series differ by more than ~5x.
+// =============================================================
+export function drawSmallMultiplesLines(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  series1: { label: string; color: string; values: number[]; format: "usd" | "num" },
+  series2: { label: string; color: string; values: number[]; format: "usd" | "num"; dashed?: boolean },
+  xLabels: string[],
+) {
+  const gap = 12; // vertical gap between the two panels
+  const panelH = (height - gap) / 2;
+  drawSingleLinePanel(doc, x, y, width, panelH, series1, xLabels, false);
+  drawSingleLinePanel(doc, x, y + panelH + gap, width, panelH, series2, xLabels, true);
+}
+
+function drawSingleLinePanel(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  series: { label: string; color: string; values: number[]; format: "usd" | "num"; dashed?: boolean },
+  xLabels: string[],
+  showXLabels: boolean,
+) {
+  const leftPad = 44;
+  const bottomPad = showXLabels ? 18 : 6;
+  const topPad = 14; // room for panel title
+  const rightPad = 8;
+  const chartW = width - leftPad - rightPad;
+  const chartH = height - topPad - bottomPad;
+
+  const maxV = Math.max(...series.values, 1);
+  const stepX = xLabels.length > 1 ? chartW / (xLabels.length - 1) : 0;
+  const fmt = series.format === "usd" ? formatUsdShort : formatNumShort;
+
+  // Panel title with end value
+  const endValue = series.values[series.values.length - 1] ?? 0;
+  doc
+    .fillColor(CHART_COLORS.text)
+    .font("Helvetica-Bold")
+    .fontSize(8)
+    .text(series.label, x + leftPad, y, { lineBreak: false });
+  const endLabel = `M${xLabels.length}: ${fmt(endValue)}`;
+  const endLabelW = doc.font("Helvetica").fontSize(8).widthOfString(endLabel);
+  doc
+    .fillColor(CHART_COLORS.muted)
+    .text(endLabel, x + leftPad + chartW - endLabelW, y, { lineBreak: false });
+
+  // Axes
+  doc
+    .strokeColor(CHART_COLORS.border)
+    .lineWidth(0.5)
+    .moveTo(x + leftPad, y + topPad)
+    .lineTo(x + leftPad, y + topPad + chartH)
+    .lineTo(x + leftPad + chartW, y + topPad + chartH)
+    .stroke();
+
+  // Y-axis gridlines (3 lines: 0, mid, max)
+  for (let i = 0; i <= 2; i++) {
+    const gy = y + topPad + (chartH * i) / 2;
+    const value = maxV * (1 - i / 2);
+    doc
+      .strokeColor(CHART_COLORS.light)
+      .lineWidth(0.3)
+      .moveTo(x + leftPad, gy)
+      .lineTo(x + leftPad + chartW, gy)
+      .stroke();
+    doc
+      .fillColor(CHART_COLORS.muted)
+      .font("Helvetica")
+      .fontSize(7)
+      .text(fmt(value), x, gy - 3, { width: leftPad - 4, align: "right", lineBreak: false });
+  }
+
+  // X-axis labels (only on bottom panel)
+  if (showXLabels) {
+    for (let i = 0; i < xLabels.length; i++) {
+      const gx = x + leftPad + stepX * i;
+      if (i % 2 === 0 || i === xLabels.length - 1) {
+        doc
+          .fillColor(CHART_COLORS.muted)
+          .font("Helvetica")
+          .fontSize(7)
+          .text(xLabels[i], gx - 10, y + topPad + chartH + 4, { width: 20, align: "center", lineBreak: false });
+      }
+    }
+  }
+
+  // Filled area under line for visual weight (very subtle)
+  doc.save();
+  doc.fillColor(series.color).fillOpacity(0.08);
+  series.values.forEach((val, i) => {
+    const px = x + leftPad + stepX * i;
+    const py = y + topPad + chartH - (val / maxV) * chartH;
+    if (i === 0) doc.moveTo(px, y + topPad + chartH).lineTo(px, py);
+    else doc.lineTo(px, py);
+  });
+  const lastX = x + leftPad + stepX * (series.values.length - 1);
+  doc.lineTo(lastX, y + topPad + chartH).closePath().fill();
+  doc.restore();
+
+  // Line
+  doc.strokeColor(series.color).lineWidth(2);
+  if (series.dashed) doc.dash(4, { space: 3 });
+  series.values.forEach((val, i) => {
+    const px = x + leftPad + stepX * i;
+    const py = y + topPad + chartH - (val / maxV) * chartH;
+    if (i === 0) doc.moveTo(px, py);
+    else doc.lineTo(px, py);
+  });
+  doc.stroke().undash();
+
+  // Dots
+  doc.fillColor(series.color).fillOpacity(1);
+  series.values.forEach((val, i) => {
+    const px = x + leftPad + stepX * i;
+    const py = y + topPad + chartH - (val / maxV) * chartH;
+    doc.circle(px, py, 1.8).fill();
+  });
+}
+
 // Horizontal funnel bars — visitors → leads → MQL → SQL → won
 export function drawFunnelBars(
   doc: PDFKit.PDFDocument,
