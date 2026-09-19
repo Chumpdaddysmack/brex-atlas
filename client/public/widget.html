@@ -653,14 +653,31 @@
     label.textContent = verdictText;
     $('verdict-headline').textContent = d.headline;
 
-    // Benchmark strip
+    // Benchmark strip — 'You:' is always driven from overallScore (single
+    // source of truth) so the ring, the verdict, and the benchmark can never
+    // disagree. Guard against a rogue LLM 'you'/'yourScore' field by clamping
+    // to overallScore no matter what the model returned.
+    const you = d.overallScore;
+    const industryAvg = Math.max(0, Math.min(100, Number(d.benchmark.industryAverage) || 55));
+    const topQuartile = Math.max(0, Math.min(100, Number(d.benchmark.topQuartile) || 78));
+    // Also enforce industryAvg < topQuartile (sanity check on LLM output).
+    const bench = industryAvg < topQuartile
+      ? { ind: industryAvg, top: topQuartile }
+      : { ind: Math.min(industryAvg, topQuartile), top: Math.max(industryAvg, topQuartile) };
+    const youVsIndustry = you >= bench.ind
+      ? `<span style="color:var(--teal); font-weight:700;">+${you - bench.ind}</span> vs industry avg`
+      : `<span style="color:var(--rust); font-weight:700;">−${bench.ind - you}</span> vs industry avg`;
     $('benchmark-strip').innerHTML =
-      `Industry average: <b>${d.benchmark.industryAverage}</b> &middot; Top quartile: <b>${d.benchmark.topQuartile}</b> &middot; You: <b>${d.overallScore}</b>`;
+      `Industry average: <b>${bench.ind}</b> &middot; Top quartile: <b>${bench.top}</b> &middot; You: <b>${you}</b> &nbsp;·&nbsp; ${youVsIndustry}`;
 
-    // Sub-scores
+    // Sub-scores — defensive against a rogue payload where subScores comes
+    // back as an object instead of an array (server normalizer catches this,
+    // but we belt-and-suspender it here so a cached bad response can't blank
+    // the whole widget).
     const grid = $('subscore-grid');
     grid.innerHTML = '';
-    d.subScores.forEach((s, idx) => {
+    const subs = Array.isArray(d.subScores) ? d.subScores : Object.values(d.subScores || {});
+    subs.forEach((s, idx) => {
       const tone = s.score < 50 ? 'low' : s.score < 70 ? 'mid' : 'high';
       const el = document.createElement('div');
       el.className = 'subscore';

@@ -147,6 +147,12 @@ SCORING GUIDANCE:
   * $25M+ → 'full-fractional'
 - Industry benchmark: fabricate plausible values. Industry avg typically 55-65. Top quartile typically 75-82.
 
+CONSISTENCY RULES (do not violate):
+- The AVERAGE of the four subScores must be within ±3 of overallScore. Do the math before you return.
+- The headline must NOT quote any number. Describe the situation qualitatively so the prospect never sees a written score that contradicts the score in the gauge.
+- topQuartile must be strictly greater than industryAverage.
+- verdict must match overallScore: <40 critical, 40-59 developing, 60-74 solid, 75+ top-quartile.
+
 Return ONLY valid JSON matching this exact schema — no prose, no markdown:
 {
   "overallScore": 52,
@@ -242,7 +248,138 @@ Produce the inferred diagnostic JSON now.`;
   if (!toolUse || !toolUse.input) {
     throw new Error("Diagnostic LLM returned no tool_use block");
   }
-  return toolUse.input as WidgetOutput;
+  return normalizeWidgetOutput(toolUse.input as WidgetOutput);
+}
+
+// Server-side consistency guarantees. The prompt already asks for these but a
+// stray model output must never reach the browser — a prospect seeing a
+// contradictory score kills trust in the paid Growth Excavation Report before
+// we ever get on a call. Every value is coerced into a coherent state here.
+function normalizeWidgetOutput(o: WidgetOutput): WidgetOutput {
+  // Clamp overallScore + sub-scores to 0..100
+  const clamp = (n: any) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+  o.overallScore = clamp(o.overallScore);
+
+  // Coerce subScores to the canonical array shape. Claude sometimes returns it
+  // as an object keyed by sub-score name (e.g. { positioning: {...}, offer: {...} }),
+  // which crashes .forEach downstream. Accept both shapes and rebuild the array
+  // in the required order.
+  o.subScores = coerceSubScores((o as any).subScores);
+
+  o.subScores = o.subScores.map((s) => ({ ...s, score: clamp(s.score) }));
+
+  // Force sub-score average within ±3 of overallScore by nudging the closest
+  // sub-score. This preserves the LLM's relative weakness signal while
+  // guaranteeing the surfaced numbers can't publicly disagree.
+  const avg = () => o.subScores.reduce((a, s) => a + s.score, 0) / o.subScores.length;
+  let attempts = 0;
+  while (Math.abs(avg() - o.overallScore) > 3 && attempts < 16) {
+    const diff = o.overallScore - avg();
+    // Nudge the sub-score furthest from the target overall in the wrong direction
+    const sorted = [...o.subScores].sort((a, b) =>
+      Math.abs(b.score - o.overallScore) - Math.abs(a.score - o.overallScore),
+    );
+    const target = o.subScores.find((s) => s.key === sorted[0].key)!;
+    target.score = clamp(target.score + Math.sign(diff) * Math.max(1, Math.round(Math.abs(diff))));
+    attempts++;
+  }
+
+  // Verdict must match overallScore band
+  const s = o.overallScore;
+  o.verdict = s < 40 ? "critical" : s < 60 ? "developing" : s < 75 ? "solid" : "top-quartile";
+
+  // Benchmark sanity: clamp, and force topQuartile > industryAverage
+  o.benchmark.industryAverage = clamp(o.benchmark.industryAverage) || 58;
+  o.benchmark.topQuartile = clamp(o.benchmark.topQuartile) || 78;
+  if (o.benchmark.topQuartile <= o.benchmark.industryAverage) {
+    o.benchmark.topQuartile = Math.min(100, o.benchmark.industryAverage + 15);
+  }
+
+  // Strip any digits from the headline so the score gauge is the only score
+  // the prospect sees. If stripping empties the headline, fall back to a
+  // safe qualitative line.
+  const scrubbed = String(o.headline || "")
+    .replace(/\b\d+(\.\d+)?%?\b/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  o.headline = scrubbed.length >= 20
+    ? scrubbed
+    : "Alignment gaps between positioning, offer, buyer, and growth motion are the biggest lever here.";
+
+  // Coerce swotTitles buckets to string arrays (Claude occasionally returns
+  // objects like { title1: '...', title2: '...' } instead of arrays).
+  o.swotTitles = {
+    strengths: coerceStringArray((o as any).swotTitles?.strengths, 3),
+    weaknesses: coerceStringArray((o as any).swotTitles?.weaknesses, 3),
+    opportunities: coerceStringArray((o as any).swotTitles?.opportunities, 3),
+    threats: coerceStringArray((o as any).swotTitles?.threats, 3),
+  };
+
+  return o;
+}
+
+const SUBSCORE_ORDER: Array<SubScore["key"]> = ["positioning", "offer", "buyer", "growth"];
+const SUBSCORE_LABELS: Record<SubScore["key"], string> = {
+  positioning: "Positioning Clarity",
+  offer: "Offer Structure",
+  buyer: "Buyer Alignment",
+  growth: "Growth Signal",
+};
+
+function coerceSubScores(raw: any): SubScore[] {
+  // Already an array — keep as-is, but fill any missing canonical entries.
+  const src: Record<string, any> = {};
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (item && typeof item === "object") {
+        const key = normalizeSubScoreKey(item.key);
+        if (key) src[key] = item;
+      }
+    }
+  } else if (raw && typeof raw === "object") {
+    // Object shape: keys may be canonical (positioning/offer/buyer/growth) or
+    // camelCase (positioningClarity, offerStructure, buyerAlignment, growthSignal).
+    for (const [k, v] of Object.entries(raw)) {
+      const key = normalizeSubScoreKey(k);
+      if (key && v && typeof v === "object") src[key] = v;
+    }
+  }
+
+  return SUBSCORE_ORDER.map((key) => {
+    const item = src[key] || {};
+    return {
+      key,
+      label: typeof item.label === "string" && item.label.trim() ? item.label : SUBSCORE_LABELS[key],
+      score: Number.isFinite(Number(item.score)) ? Number(item.score) : 55,
+      finding: typeof item.finding === "string" && item.finding.trim()
+        ? item.finding
+        : "Typical alignment gap seen at this stage — the paid report cites the specific evidence.",
+    };
+  });
+}
+
+function normalizeSubScoreKey(k: any): SubScore["key"] | null {
+  if (typeof k !== "string") return null;
+  const key = k.toLowerCase();
+  if (key.startsWith("position")) return "positioning";
+  if (key.startsWith("offer")) return "offer";
+  if (key.startsWith("buyer")) return "buyer";
+  if (key.startsWith("growth")) return "growth";
+  return null;
+}
+
+function coerceStringArray(raw: any, minLen: number): string[] {
+  let arr: string[] = [];
+  if (Array.isArray(raw)) {
+    arr = raw.filter((v) => typeof v === "string" && v.trim()).map((v) => String(v).trim());
+  } else if (raw && typeof raw === "object") {
+    arr = Object.values(raw)
+      .filter((v) => typeof v === "string" && (v as string).trim())
+      .map((v) => String(v).trim());
+  }
+  // Pad with safe fillers if the LLM under-delivered
+  while (arr.length < minLen) arr.push("Additional finding available in the paid report");
+  return arr.slice(0, Math.max(minLen, arr.length));
 }
 
 // ---------- URL validation (shallow — we don't fetch) ----------
