@@ -223,13 +223,16 @@ export async function runPipeline(id: string) {
     });
 
     // Stage 5: Strategic frameworks (SWOT always; PESTEL/Porter's/CI opt-in)
+    // Each generator runs in its OWN try/catch so one failure never wipes
+    // out siblings — this fixes the empty-Frameworks-tab bug that hit when
+    // SWOT threw before PESTEL/Porter's/CI could start.
     let swotResult: SwotAnalysis | null = null;
     let pestelResult: PestelAnalysis | null = null;
     let portersResult: PortersFiveForces | null = null;
     let ciResult: CustomerInsights | null = null;
+    const frameworkErrors: string[] = [];
 
     try {
-      // SWOT always runs — fast and free
       swotResult = await generateSwot({
         clientName: record.clientName,
         industry: record.industry,
@@ -237,104 +240,117 @@ export async function runPipeline(id: string) {
         competitors: competitors as Competitor[],
         notes: [record.notes, assumptionsBlock].filter(Boolean).join("\n\n"),
       });
-
-      // Infer industry from SWOT (which infers from extraction) for PESTEL/Porter's
-      const industry = record.industry || swotResult.industry || "General B2B";
-
-      const wantsPestel = (record as any).includePestel === 1 || (record as any).includePestel === true;
-      const wantsPorters = (record as any).includePorters === 1 || (record as any).includePorters === true;
-      const wantsCI = (record as any).includeCustomerInsights === 1 || (record as any).includeCustomerInsights === true;
-
-      // Run PESTEL + Porter's + Customer Insights in parallel if opted in
-      const [pestelR, portersR, ciR] = await Promise.all([
-        wantsPestel
-          ? generatePestel({ clientName: record.clientName, industry }).catch((err) => {
-              console.error("[pestel] failed:", err);
-              return null;
-            })
-          : Promise.resolve(null),
-        wantsPorters
-          ? generatePorters({
-              clientName: record.clientName,
-              industry,
-              competitors: competitors as Competitor[],
-            }).catch((err) => {
-              console.error("[porters] failed:", err);
-              return null;
-            })
-          : Promise.resolve(null),
-        wantsCI
-          ? generateCustomerInsights({
-              clientName: record.clientName,
-              industry,
-              extraction: extraction as Extraction,
-              competitors: competitors as Competitor[],
-              notes: record.notes,
-              // Brex-specific offers surface when the analysis is being run FOR Brex.
-              // Default false so client-facing runs cite the client's own offers.
-              brexContext: false,
-            }).catch((err) => {
-              console.error("[customer-insights] failed:", err);
-              return null;
-            })
-          : Promise.resolve(null),
-      ]);
-      pestelResult = pestelR;
-      portersResult = portersR;
-      ciResult = ciR;
-
-      // If Customer Insights ran, tighten strategy.icp to a 2-3 line summary
-      // (Option A upgrade — the deep pack becomes the authoritative buyer layer).
-      if (ciResult) {
-        const s = strategy as Strategy;
-        if (s?.icp) {
-          s.icp.summary = ciResult.summary || s.icp.summary;
-          // Preserve firmographics from strategy; pain/triggers now live in CI
-          // but keep 1-liner arrays for legacy PDF/PPTX sections that read them.
-          s.icp.painPoints = ciResult.painPoints.slice(0, 5).map((p) => p.label);
-          s.icp.buyingTriggers = ciResult.buyingSignals
-            .filter((b) => b.urgency === "hot" || b.urgency === "in-market")
-            .slice(0, 5)
-            .map((b) => b.trigger);
-        }
-      }
-
-      // Inject strategic rationale into the strategy + SOW
-      const withRationale = await injectRationale({
-        strategy: strategy as Strategy,
-        sow: sow as SOW,
-        swot: swotResult,
-        pestel: pestelResult,
-        porters: portersResult,
-      }).catch((err) => {
-        console.error("[rationale] failed:", err);
-        return { strategy: strategy as Strategy, sow: sow as SOW };
-      });
-
-      await storage.updateAnalysis(id, {
-        progress: 100,
-        currentStep: "Complete",
-        status: "done",
-        strategy: JSON.stringify(withRationale.strategy),
-        sow: JSON.stringify(withRationale.sow),
-        swot: JSON.stringify(swotResult),
-        pestel: pestelResult ? JSON.stringify(pestelResult) : null,
-        porters: portersResult ? JSON.stringify(portersResult) : null,
-        customerInsights: ciResult ? JSON.stringify(ciResult) : null,
-      } as any);
-    } catch (frameworksErr: any) {
-      // Framework failure is non-fatal — the core analysis is still complete
-      console.error("[frameworks] non-fatal error:", frameworksErr);
-      await storage.updateAnalysis(id, {
-        progress: 100,
-        currentStep: "Complete (frameworks partial)",
-        status: "done",
-        swot: swotResult ? JSON.stringify(swotResult) : null,
-        pestel: pestelResult ? JSON.stringify(pestelResult) : null,
-        porters: portersResult ? JSON.stringify(portersResult) : null,
-        customerInsights: ciResult ? JSON.stringify(ciResult) : null,
-      } as any);
+    } catch (err: any) {
+      console.error("[swot] failed:", err);
+      frameworkErrors.push(`SWOT: ${String(err?.message ?? err).slice(0, 200)}`);
     }
+
+    // Infer industry from SWOT (which infers from extraction) for PESTEL/Porter's;
+    // fall back to record.industry or generic when SWOT failed.
+    const industry = record.industry || swotResult?.industry || "General B2B";
+
+    const wantsPestel = (record as any).includePestel === 1 || (record as any).includePestel === true;
+    const wantsPorters = (record as any).includePorters === 1 || (record as any).includePorters === true;
+    const wantsCI = (record as any).includeCustomerInsights === 1 || (record as any).includeCustomerInsights === true;
+
+    // Run PESTEL + Porter's + Customer Insights in parallel if opted in.
+    // Independent of SWOT so a SWOT outage never blocks these.
+    const [pestelR, portersR, ciR] = await Promise.all([
+      wantsPestel
+        ? generatePestel({ clientName: record.clientName, industry }).catch((err) => {
+            console.error("[pestel] failed:", err);
+            frameworkErrors.push(`PESTEL: ${String(err?.message ?? err).slice(0, 200)}`);
+            return null;
+          })
+        : Promise.resolve(null),
+      wantsPorters
+        ? generatePorters({
+            clientName: record.clientName,
+            industry,
+            competitors: competitors as Competitor[],
+          }).catch((err) => {
+            console.error("[porters] failed:", err);
+            frameworkErrors.push(`Porter's: ${String(err?.message ?? err).slice(0, 200)}`);
+            return null;
+          })
+        : Promise.resolve(null),
+      wantsCI
+        ? generateCustomerInsights({
+            clientName: record.clientName,
+            industry,
+            extraction: extraction as Extraction,
+            competitors: competitors as Competitor[],
+            notes: record.notes,
+            // Brex-specific offers surface when the analysis is being run FOR Brex.
+            // Default false so client-facing runs cite the client's own offers.
+            brexContext: false,
+          }).catch((err) => {
+            console.error("[customer-insights] failed:", err);
+            frameworkErrors.push(`Customer Insights: ${String(err?.message ?? err).slice(0, 200)}`);
+            return null;
+          })
+        : Promise.resolve(null),
+    ]);
+    pestelResult = pestelR;
+    portersResult = portersR;
+    ciResult = ciR;
+
+    // If Customer Insights ran, tighten strategy.icp to a 2-3 line summary
+    // (Option A upgrade — the deep pack becomes the authoritative buyer layer).
+    if (ciResult) {
+      const s = strategy as Strategy;
+      if (s?.icp) {
+        s.icp.summary = ciResult.summary || s.icp.summary;
+        // Preserve firmographics from strategy; pain/triggers now live in CI
+        // but keep 1-liner arrays for legacy PDF/PPTX sections that read them.
+        s.icp.painPoints = ciResult.painPoints.slice(0, 5).map((p) => p.label);
+        s.icp.buyingTriggers = ciResult.buyingSignals
+          .filter((b) => b.urgency === "hot" || b.urgency === "in-market")
+          .slice(0, 5)
+          .map((b) => b.trigger);
+      }
+    }
+
+    // Inject strategic rationale into the strategy + SOW.
+    // Uses whatever frameworks succeeded; missing ones simply aren't referenced.
+    const withRationale = await injectRationale({
+      strategy: strategy as Strategy,
+      sow: sow as SOW,
+      swot: swotResult,
+      pestel: pestelResult,
+      porters: portersResult,
+    }).catch((err) => {
+      console.error("[rationale] failed:", err);
+      return { strategy: strategy as Strategy, sow: sow as SOW };
+    });
+
+    // Determine terminal status. "Complete" only when every REQUESTED framework
+    // succeeded. Partial state is called out so the UI can offer a Retry button.
+    const missing: string[] = [];
+    if (!swotResult) missing.push("SWOT");
+    if (wantsPestel && !pestelResult) missing.push("PESTEL");
+    if (wantsPorters && !portersResult) missing.push("Porter's");
+    if (wantsCI && !ciResult) missing.push("Customer Insights");
+
+    const finalStep =
+      missing.length === 0
+        ? "Complete"
+        : `Complete (frameworks partial — retry: ${missing.join(", ")})`;
+
+    await storage.updateAnalysis(id, {
+      progress: 100,
+      currentStep: finalStep,
+      status: "done",
+      strategy: JSON.stringify(withRationale.strategy),
+      sow: JSON.stringify(withRationale.sow),
+      swot: swotResult ? JSON.stringify(swotResult) : null,
+      pestel: pestelResult ? JSON.stringify(pestelResult) : null,
+      porters: portersResult ? JSON.stringify(portersResult) : null,
+      customerInsights: ciResult ? JSON.stringify(ciResult) : null,
+      // Surface framework errors so the UI can render "Retry frameworks"
+      // with an accurate cause instead of the misleading "toggles were off" copy.
+      errorMessage: frameworkErrors.length ? frameworkErrors.join(" | ") : null,
+    } as any);
   } catch (err: any) {
     console.error("[pipeline] error", err);
     await storage.updateAnalysis(id, {

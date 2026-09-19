@@ -4,6 +4,11 @@ import type { Server } from "node:http";
 import { storage } from "./storage";
 import { intakeSchema, assumptionsSchema } from "@shared/schema";
 import { runPipeline } from "./pipeline";
+import { generateSwot } from "./swot";
+import { generatePestel } from "./pestel";
+import { generatePorters } from "./porters";
+import { generateCustomerInsights } from "./customer-insights";
+import type { Extraction, Competitor } from "@shared/schema";
 import { runContentPlanGeneration } from "./content-pipeline";
 import { requireAuth } from "./auth";
 import { streamContentPlanPdf, type PdfScope } from "./pdf-export";
@@ -146,6 +151,108 @@ export async function registerRoutes(
     runPipeline(req.params.id).catch((err) => console.error("[pipeline] regenerate fatal", err));
     const updated = await storage.getAnalysis(req.params.id);
     res.status(202).json(updated);
+  });
+
+  // Regenerate ONLY the strategic frameworks (SWOT, PESTEL, Porter's, Customer
+  // Insights) for an analysis whose core pipeline already succeeded. Fast retry
+  // path when a transient LLM failure left the Frameworks / Buyer tabs empty.
+  // Skips extraction, competitors, strategy, and SOW — they're preserved.
+  app.post("/api/analyses/:id/regenerate-frameworks", async (req, res) => {
+    const existing = await storage.getAnalysis(req.params.id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.status !== "done") {
+      return res.status(400).json({ error: "Analysis must be complete before retrying frameworks" });
+    }
+    if (!existing.extraction || !existing.competitors) {
+      return res.status(400).json({ error: "Core analysis data missing; use /regenerate instead" });
+    }
+
+    const extraction = JSON.parse(existing.extraction) as Extraction;
+    const competitors = JSON.parse(existing.competitors) as Competitor[];
+    const wantsPestel = (existing as any).includePestel === 1 || (existing as any).includePestel === true;
+    const wantsPorters = (existing as any).includePorters === 1 || (existing as any).includePorters === true;
+    const wantsCI =
+      (existing as any).includeCustomerInsights === 1 || (existing as any).includeCustomerInsights === true;
+
+    // Fire and forget — client polls the analysis GET for updated fields.
+    (async () => {
+      const errors: string[] = [];
+      let swot: any = null;
+      let pestel: any = null;
+      let porters: any = null;
+      let ci: any = null;
+
+      try {
+        swot = await generateSwot({
+          clientName: existing.clientName,
+          industry: existing.industry,
+          extraction,
+          competitors,
+          notes: existing.notes ?? "",
+        });
+      } catch (err: any) {
+        console.error("[regen-frameworks/swot] failed:", err);
+        errors.push(`SWOT: ${String(err?.message ?? err).slice(0, 200)}`);
+      }
+
+      const industry = existing.industry || swot?.industry || "General B2B";
+
+      const [pestelR, portersR, ciR] = await Promise.all([
+        wantsPestel
+          ? generatePestel({ clientName: existing.clientName, industry }).catch((err) => {
+              console.error("[regen-frameworks/pestel] failed:", err);
+              errors.push(`PESTEL: ${String(err?.message ?? err).slice(0, 200)}`);
+              return null;
+            })
+          : Promise.resolve(null),
+        wantsPorters
+          ? generatePorters({ clientName: existing.clientName, industry, competitors }).catch(
+              (err) => {
+                console.error("[regen-frameworks/porters] failed:", err);
+                errors.push(`Porter's: ${String(err?.message ?? err).slice(0, 200)}`);
+                return null;
+              },
+            )
+          : Promise.resolve(null),
+        wantsCI
+          ? generateCustomerInsights({
+              clientName: existing.clientName,
+              industry,
+              extraction,
+              competitors,
+              notes: existing.notes,
+              brexContext: false,
+            }).catch((err) => {
+              console.error("[regen-frameworks/customer-insights] failed:", err);
+              errors.push(`Customer Insights: ${String(err?.message ?? err).slice(0, 200)}`);
+              return null;
+            })
+          : Promise.resolve(null),
+      ]);
+      pestel = pestelR;
+      porters = portersR;
+      ci = ciR;
+
+      const missing: string[] = [];
+      if (!swot) missing.push("SWOT");
+      if (wantsPestel && !pestel) missing.push("PESTEL");
+      if (wantsPorters && !porters) missing.push("Porter's");
+      if (wantsCI && !ci) missing.push("Customer Insights");
+
+      await storage.updateAnalysis(existing.id, {
+        swot: swot ? JSON.stringify(swot) : null,
+        pestel: pestel ? JSON.stringify(pestel) : null,
+        porters: porters ? JSON.stringify(porters) : null,
+        customerInsights: ci ? JSON.stringify(ci) : null,
+        currentStep:
+          missing.length === 0
+            ? "Complete"
+            : `Complete (frameworks partial — retry: ${missing.join(", ")})`,
+        errorMessage: errors.length ? errors.join(" | ") : null,
+      } as any);
+    })().catch((err) => console.error("[regen-frameworks] fatal:", err));
+
+    res.status(202).json({ ok: true, message: "Framework regeneration started" });
   });
 
   // -------- Content plan endpoints --------

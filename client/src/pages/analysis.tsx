@@ -353,6 +353,10 @@ export default function AnalysisPage() {
                   pestel={safeParse<PestelAnalysis>(analysis.pestel)}
                   porters={safeParse<PortersFiveForces>(analysis.porters)}
                   status={analysis.status}
+                  analysisId={analysis.id}
+                  wantsPestel={!!(analysis as any).includePestel}
+                  wantsPorters={!!(analysis as any).includePorters}
+                  errorMessage={(analysis as any).errorMessage}
                 />
               </SectionErrorBoundary>
             </TabsContent>
@@ -362,6 +366,9 @@ export default function AnalysisPage() {
                 <CustomerInsightsSection
                   ci={safeParse<CustomerInsights>(analysis.customerInsights)}
                   status={analysis.status}
+                  analysisId={analysis.id}
+                  wantsCI={!!(analysis as any).includeCustomerInsights}
+                  errorMessage={(analysis as any).errorMessage}
                 />
               </SectionErrorBoundary>
             </TabsContent>
@@ -1207,36 +1214,137 @@ function BrexVsMarketMatrix() {
 
 // -------- Frameworks (SWOT / PESTEL / Porter's) --------
 
+// Retry ONLY the strategic frameworks (SWOT, PESTEL, Porter's, Customer Insights)
+// without re-running extraction / competitors / strategy / SOW. Used when a transient
+// LLM failure left the tab empty even though the toggles were on.
+function RetryFrameworksButton({
+  analysisId,
+  label = "Retry frameworks",
+}: {
+  analysisId: string;
+  label?: string;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const retryMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest(
+        "POST",
+        `/api/analyses/${analysisId}/regenerate-frameworks`,
+      );
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Retrying frameworks",
+        description: "This usually takes 20–40 seconds. The tab will refresh automatically.",
+      });
+      // Poll analysis for updated fields
+      const start = Date.now();
+      const poll = setInterval(() => {
+        queryClient.invalidateQueries({ queryKey: [`/api/analyses/${analysisId}`] });
+        if (Date.now() - start > 90_000) clearInterval(poll);
+      }, 4_000);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Retry failed",
+        description: String(err?.message ?? err),
+        variant: "destructive",
+      });
+    },
+  });
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => retryMutation.mutate()}
+      disabled={retryMutation.isPending}
+      data-testid="button-retry-frameworks"
+    >
+      {retryMutation.isPending ? "Retrying…" : label}
+    </Button>
+  );
+}
+
 function FrameworksSection({
   swot,
   pestel,
   porters,
   status,
+  analysisId,
+  wantsPestel,
+  wantsPorters,
+  errorMessage,
 }: {
   swot: SwotAnalysis | null;
   pestel: PestelAnalysis | null;
   porters: PortersFiveForces | null;
   status: string;
+  analysisId: string;
+  wantsPestel: boolean;
+  wantsPorters: boolean;
+  errorMessage?: string | null;
 }) {
   const anyLoaded = !!(swot || pestel || porters);
   const isRunning = status !== "done" && status !== "error";
+  // Any toggle was on but nothing came back → this is a failure, not a config choice
+  const requestedButMissing =
+    (!swot || (wantsPestel && !pestel) || (wantsPorters && !porters)) && !isRunning;
 
   if (!anyLoaded) {
     return (
-      <Card className="p-6 text-sm text-muted-foreground">
-        {isRunning
-          ? "Strategic frameworks are generating…"
-          : "No frameworks generated for this analysis. Re-run the intake with PESTEL / Porter's toggles enabled to get macro + industry-structure research with cited sources."}
+      <Card className="p-6 space-y-3">
+        {isRunning ? (
+          <p className="text-sm text-muted-foreground">Strategic frameworks are generating…</p>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {requestedButMissing
+                ? "Frameworks were requested but didn't finish generating — usually a transient LLM timeout. Retry runs SWOT, PESTEL, and Porter's again without redoing extraction or strategy."
+                : "No frameworks generated for this analysis. Re-run the intake with PESTEL / Porter's toggles enabled to get macro + industry-structure research with cited sources."}
+            </p>
+            {errorMessage && (
+              <p className="text-xs font-mono text-muted-foreground bg-muted/50 p-2 rounded border border-border">
+                Last error: {errorMessage}
+              </p>
+            )}
+            {requestedButMissing && <RetryFrameworksButton analysisId={analysisId} />}
+          </>
+        )}
       </Card>
     );
   }
 
+  // Partial — some frameworks succeeded but others requested went missing.
+  const missing: string[] = [];
+  if (!swot) missing.push("SWOT");
+  if (wantsPestel && !pestel) missing.push("PESTEL");
+  if (wantsPorters && !porters) missing.push("Porter's");
+
   return (
     <div className="space-y-10">
+      {missing.length > 0 && !isRunning && (
+        <Card className="p-4 border-amber-300 bg-amber-50 dark:bg-amber-950/30">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                Frameworks partial — {missing.join(", ")} didn't complete
+              </p>
+              {errorMessage && (
+                <p className="text-xs font-mono text-amber-900/80 dark:text-amber-100/80">
+                  {errorMessage}
+                </p>
+              )}
+            </div>
+            <RetryFrameworksButton analysisId={analysisId} label={`Retry ${missing.join(" + ")}`} />
+          </div>
+        </Card>
+      )}
       {swot && <SwotView swot={swot} />}
       {pestel && <PestelView pestel={pestel} />}
       {porters && <PortersView porters={porters} />}
-      {!pestel && !porters && (
+      {!pestel && !porters && !wantsPestel && !wantsPorters && (
         <Card className="p-5 bg-muted/30 border-dashed">
           <div className="text-xs font-mono text-muted-foreground mb-1">TIP</div>
           <p className="text-sm">
@@ -1725,16 +1833,41 @@ function AssumptionsDialog({ analysis }: { analysis: Analysis }) {
 function CustomerInsightsSection({
   ci,
   status,
+  analysisId,
+  wantsCI,
+  errorMessage,
 }: {
   ci: CustomerInsights | null | undefined;
   status: string | null | undefined;
+  analysisId: string;
+  wantsCI: boolean;
+  errorMessage?: string | null;
 }) {
+  const isRunning = status === "running" || (status !== "done" && status !== "error");
   if (!ci) {
+    // Toggle WAS on but nothing came back → this is a failure, not a config choice
+    const requestedButMissing = wantsCI && !isRunning;
     return (
-      <Card className="p-6 text-sm text-muted-foreground" data-testid="ci-empty">
-        {status === "running"
-          ? "Customer Insights still generating…"
-          : "No Customer Insights generated. Re-run the intake with the Customer Insights toggle enabled to add 12 buyer-intelligence analyses across four panels."}
+      <Card className="p-6 space-y-3" data-testid="ci-empty">
+        {isRunning ? (
+          <p className="text-sm text-muted-foreground">Customer Insights still generating…</p>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {requestedButMissing
+                ? "Customer Insights was requested but didn't finish generating — usually a transient LLM timeout. Retry runs the 12 buyer-intelligence analyses again without redoing extraction or strategy."
+                : "No Customer Insights generated. Re-run the intake with the Customer Insights toggle enabled to add 12 buyer-intelligence analyses across four panels."}
+            </p>
+            {errorMessage && (
+              <p className="text-xs font-mono text-muted-foreground bg-muted/50 p-2 rounded border border-border">
+                Last error: {errorMessage}
+              </p>
+            )}
+            {requestedButMissing && (
+              <RetryFrameworksButton analysisId={analysisId} label="Retry Customer Insights" />
+            )}
+          </>
+        )}
       </Card>
     );
   }
