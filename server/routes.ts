@@ -42,11 +42,12 @@ export async function registerRoutes(
   // research; see server/widget.ts.
   registerWidgetRoutes(app);
 
-  // PUBLIC widget page — serves the standalone HTML at /widget so it can be
+  // PUBLIC widget page — serves the standalone HTML at /excavate so it can be
   // iframed from brexconsulting.com. In production the built file lives at
   // dist/public/widget.html (copied by Vite from client/public/); in dev
   // Vite's dev middleware serves it from client/public/widget.html.
-  app.get("/widget", async (_req, res) => {
+  // /widget is preserved as an alias for any pre-existing embeds.
+  app.get(["/excavate", "/widget"], async (_req, res) => {
     // Allow embedding from any origin (widget is designed for iframe use)
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader(
