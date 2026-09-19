@@ -15,6 +15,16 @@
 import type { Express, Request, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { client as anthropic, MODEL } from "./llm";
+import {
+  insertDiagnostic,
+  getDiagnostic,
+  insertLead,
+  updateLeadSync,
+  markLeadCaptured,
+  isPersistenceConfigured,
+} from "./widget-store";
+import { syncAtlasLeadToHubSpot } from "./hubspot";
+import { sendHotLeadAlert, shouldAlert } from "./widget-alerts";
 
 // ---------- Public config (chip options + strategic copy) ----------
 
@@ -439,14 +449,39 @@ export function registerWidgetRoutes(app: Express) {
     try {
       const output = await runInferredDiagnostic(input);
       pruneDiagnostics();
-      const id = randomUUID();
-      diagnostics.set(id, {
-        id,
-        createdAt: Date.now(),
-        ip,
-        input,
-        output,
-      });
+
+      // Persist to Supabase when configured (source of truth).
+      // Fall back to in-memory Map when Supabase isn't wired (dev / rollback safety).
+      let id: string;
+      if (isPersistenceConfigured()) {
+        try {
+          const subMap = new Map(output.subScores.map((s) => [s.key, s.score]));
+          id = await insertDiagnostic({
+            ip,
+            url: input.url,
+            industry: input.industry,
+            revenueBand: input.revenueBand,
+            primaryGoal: input.goal,
+            overallScore: output.overallScore,
+            fitTier: output.fitTier,
+            verdict: output.verdict,
+            positioningScore: subMap.get("positioning"),
+            offerScore: subMap.get("offer"),
+            buyerScore: subMap.get("buyer"),
+            growthScore: subMap.get("growth"),
+            headline: output.headline,
+            rawOutput: output,
+          });
+        } catch (persistErr: any) {
+          console.error("[widget/diagnose] persistence failed, falling back to memory:", persistErr?.message ?? persistErr);
+          id = randomUUID();
+          diagnostics.set(id, { id, createdAt: Date.now(), ip, input, output });
+        }
+      } else {
+        id = randomUUID();
+        diagnostics.set(id, { id, createdAt: Date.now(), ip, input, output });
+      }
+
       res.json({
         diagnosticId: id,
         remaining: rate.remaining,
@@ -471,33 +506,160 @@ export function registerWidgetRoutes(app: Express) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
       return res.status(400).json({ error: "Please enter a valid work email." });
     }
-    const diag = diagnostics.get(diagnosticId);
-    if (!diag) {
+
+    // Load diagnostic — Supabase first (source of truth), then memory fallback
+    let diagOutput: WidgetOutput | null = null;
+    let diagInput: { url: string; industry: string; revenueBand: string; goal: string } | null = null;
+    let diagCreatedAt = new Date();
+
+    if (isPersistenceConfigured()) {
+      const stored = await getDiagnostic(diagnosticId);
+      if (stored) {
+        diagOutput = stored.rawOutput as WidgetOutput;
+        diagInput = {
+          url: stored.url,
+          industry: stored.industry,
+          revenueBand: stored.revenueBand,
+          goal: stored.primaryGoal,
+        };
+        diagCreatedAt = new Date(stored.createdAt);
+      }
+    }
+    if (!diagOutput) {
+      const mem = diagnostics.get(diagnosticId);
+      if (mem) {
+        diagOutput = mem.output;
+        diagInput = mem.input;
+        diagCreatedAt = new Date(mem.createdAt);
+      }
+    }
+    if (!diagOutput || !diagInput) {
       return res.status(404).json({ error: "Diagnostic session expired. Please run it again." });
     }
-    diag.lead = { email, company, capturedAt: Date.now() };
+
     console.log(
       `[widget/lead] captured — email=${email} company=${company ?? "-"} ` +
-        `score=${diag.output.overallScore} tier=${diag.output.fitTier} ` +
-        `industry=${diag.input.industry} revenue=${diag.input.revenueBand}`,
+        `score=${diagOutput.overallScore} tier=${diagOutput.fitTier} ` +
+        `industry=${diagInput.industry} revenue=${diagInput.revenueBand}`,
     );
-    // Return the "unlocked" payload — same output plus one strength/weakness
-    // evidence unlocked as a taste, and the full report CTA.
+
+    // Respond to the browser FAST — HubSpot + email happen after the response
     res.json({
       ok: true,
       unlocked: {
-        // Peel back the first strength + weakness with fake-real evidence,
-        // to demonstrate what the paid report delivers. Kept short so it
-        // still leaves the prospect wanting more.
         strengthUnlock: {
-          title: diag.output.swotTitles.strengths[0],
-          evidence: `Sample evidence sentence anchored in ${diag.input.industry} category patterns — the paid Growth Excavation Report cites your actual homepage, competitor pages, and 2026 buyer research for every SWOT item.`,
+          title: diagOutput.swotTitles.strengths[0],
+          evidence: `Sample evidence sentence anchored in ${diagInput.industry} category patterns — the paid Growth Excavation Report cites your actual homepage, competitor pages, and 2026 buyer research for every SWOT item.`,
         },
         weaknessUnlock: {
-          title: diag.output.swotTitles.weaknesses[0],
+          title: diagOutput.swotTitles.weaknesses[0],
           evidence: `Sample evidence sentence — the paid report shows exactly where this shows up on your site, which competitors exploit it, and the 30-day fix.`,
         },
       },
     });
+
+    // ---------- Fire-and-forget: HubSpot + Supabase lead row + hot-lead email ----------
+    // Wrapped in setImmediate so a slow HubSpot/Resend never blocks the browser.
+    setImmediate(() => {
+      void handleLeadSideEffects({
+        diagnosticId,
+        email,
+        company,
+        diagInput,
+        diagOutput,
+        diagCreatedAt,
+      }).catch((err) => {
+        console.error("[widget/lead] side-effects failed:", err);
+      });
+    });
   });
+}
+
+// ---------- Side-effect pipeline: Supabase lead row + HubSpot sync + hot-lead alert ----------
+
+interface LeadSideEffectInput {
+  diagnosticId: string;
+  email: string;
+  company?: string;
+  diagInput: { url: string; industry: string; revenueBand: string; goal: string };
+  diagOutput: WidgetOutput;
+  diagCreatedAt: Date;
+}
+
+async function handleLeadSideEffects(p: LeadSideEffectInput): Promise<void> {
+  const subMap = new Map(p.diagOutput.subScores.map((s) => [s.key, s.score]));
+
+  // 1. Mark diagnostic as lead-captured (best-effort)
+  if (isPersistenceConfigured()) {
+    await markLeadCaptured(p.diagnosticId, p.email);
+  }
+
+  // 2. Insert lead row (Supabase) — pending sync
+  let leadId: string | null = null;
+  if (isPersistenceConfigured()) {
+    try {
+      leadId = await insertLead({
+        diagnosticId: p.diagnosticId,
+        email: p.email,
+        company: p.company,
+        hubspotSyncStatus: "pending",
+      });
+    } catch (err) {
+      console.error("[widget/lead] insertLead failed:", err);
+    }
+  }
+
+  // 3. HubSpot sync
+  const syncResult = await syncAtlasLeadToHubSpot({
+    diagnosticId: p.diagnosticId,
+    overallScore: p.diagOutput.overallScore,
+    fitTier: p.diagOutput.fitTier,
+    verdict: p.diagOutput.verdict,
+    positioningScore: subMap.get("positioning"),
+    offerScore: subMap.get("offer"),
+    buyerScore: subMap.get("buyer"),
+    growthScore: subMap.get("growth"),
+    url: p.diagInput.url,
+    industry: p.diagInput.industry,
+    revenueBand: p.diagInput.revenueBand,
+    primaryGoal: p.diagInput.goal,
+    email: p.email,
+    company: p.company,
+    runAt: p.diagCreatedAt,
+  });
+
+  // 4. Update lead row with sync result
+  if (leadId) {
+    await updateLeadSync(leadId, {
+      hubspotContactId: syncResult.contactId,
+      hubspotDealId: syncResult.dealId,
+      hubspotSyncStatus: syncResult.status,
+      hubspotSyncError: syncResult.error ?? null,
+    });
+  }
+
+  // 5. Hot-lead alert (only for strategist/full-fractional with score ≥ 65)
+  if (shouldAlert(p.diagOutput.fitTier, p.diagOutput.overallScore)) {
+    const alerted = await sendHotLeadAlert({
+      overallScore: p.diagOutput.overallScore,
+      fitTier: p.diagOutput.fitTier,
+      verdict: p.diagOutput.verdict,
+      positioningScore: subMap.get("positioning"),
+      offerScore: subMap.get("offer"),
+      buyerScore: subMap.get("buyer"),
+      growthScore: subMap.get("growth"),
+      headline: p.diagOutput.headline,
+      url: p.diagInput.url,
+      industry: p.diagInput.industry,
+      revenueBand: p.diagInput.revenueBand,
+      primaryGoal: p.diagInput.goal,
+      email: p.email,
+      company: p.company,
+      hubspotContactId: syncResult.contactId,
+      hubspotDealId: syncResult.dealId,
+    });
+    if (leadId && alerted) {
+      await updateLeadSync(leadId, { hotLeadAlertSent: true });
+    }
+  }
 }
