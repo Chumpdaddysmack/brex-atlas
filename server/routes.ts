@@ -11,6 +11,7 @@ import { generateCustomerInsights } from "./customer-insights";
 import type { Extraction, Competitor } from "@shared/schema";
 import { runContentPlanGeneration } from "./content-pipeline";
 import { requireAuth } from "./auth";
+import { registerWidgetRoutes } from "./widget";
 import { streamContentPlanPdf, type PdfScope } from "./pdf-export";
 import { buildContentPlanPptx } from "./pptx-export";
 import { llmJson, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
@@ -35,6 +36,39 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // PUBLIC widget routes (/api/widget/*) — mounted BEFORE requireAuth so the
+  // embeddable prospect diagnostic on brexconsulting.com works without login.
+  // These endpoints intentionally never touch real client data or paid-tier
+  // research; see server/widget.ts.
+  registerWidgetRoutes(app);
+
+  // PUBLIC widget page — serves the standalone HTML at /widget so it can be
+  // iframed from brexconsulting.com. In production the built file lives at
+  // dist/public/widget.html (copied by Vite from client/public/); in dev
+  // Vite's dev middleware serves it from client/public/widget.html.
+  app.get("/widget", async (_req, res) => {
+    // Allow embedding from any origin (widget is designed for iframe use)
+    res.setHeader("X-Frame-Options", "ALLOWALL");
+    res.setHeader(
+      "Content-Security-Policy",
+      "frame-ancestors *; default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; connect-src 'self'; font-src https://fonts.gstatic.com;",
+    );
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const candidates = [
+      path.resolve(__dirname, "public", "widget.html"),               // prod: dist/public/
+      path.resolve(process.cwd(), "dist", "public", "widget.html"),   // prod alt
+      path.resolve(process.cwd(), "client", "public", "widget.html"), // dev
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        return res.sendFile(p);
+      }
+    }
+    return res.status(404).send("Widget not built.");
+  });
+
   // All /api routes below require an authenticated session.
   // Auth endpoints themselves (/api/login, /api/logout, /api/auth/status)
   // are registered in setupAuth() before this and stay unprotected.
