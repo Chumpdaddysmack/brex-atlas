@@ -297,7 +297,14 @@ function normalizeWidgetOutput(o: WidgetOutput): WidgetOutput {
   const s = o.overallScore;
   o.verdict = s < 40 ? "critical" : s < 60 ? "developing" : s < 75 ? "solid" : "top-quartile";
 
-  // Benchmark sanity: clamp, and force topQuartile > industryAverage
+  // Benchmark sanity: clamp, and force topQuartile > industryAverage.
+  // Claude sometimes returns benchmark as a string (leaking raw XML tool syntax
+  // like '<parameter name="industryAverage">61'). Coerce to a valid object shape
+  // rather than crash the diagnostic — the widget already normalizes other
+  // stray model output shapes upstream, so mirror that pattern here.
+  if (!o.benchmark || typeof o.benchmark !== "object") {
+    o.benchmark = { industryAverage: 58, topQuartile: 76 };
+  }
   o.benchmark.industryAverage = clamp(o.benchmark.industryAverage) || 58;
   o.benchmark.topQuartile = clamp(o.benchmark.topQuartile) || 78;
   if (o.benchmark.topQuartile <= o.benchmark.industryAverage) {
