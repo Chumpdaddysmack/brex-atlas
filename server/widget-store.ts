@@ -7,6 +7,8 @@
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
+import ws from "ws";
+import type { WidgetConsentEvidence } from "@shared/widget-consent";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -21,6 +23,8 @@ function db(): SupabaseClient {
   if (!client) {
     client = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
+      // Match the main storage client: Node 20 has no native WebSocket.
+      realtime: { transport: ws as any },
     });
   }
   return client;
@@ -146,6 +150,27 @@ export async function markLeadCaptured(
 }
 
 // ---------- Leads ----------
+
+export async function insertWidgetConsent(
+  diagnosticId: string, email: string, evidence: WidgetConsentEvidence,
+): Promise<{ id: string; recordedAt: string }> {
+  const row = {
+    diagnostic_id: diagnosticId, email, decision: evidence.decision,
+    policy_version: evidence.policyVersion, consent_text: evidence.consentText,
+    subscription_type_id: evidence.subscriptionTypeId, source: evidence.source,
+  };
+  // Retries preserve the original server timestamp and never overwrite history.
+  const { error } = await db().from("widget_consent_events").upsert(row, {
+    onConflict: "diagnostic_id,email,policy_version,decision", ignoreDuplicates: true,
+  });
+  if (error) throw new Error(`Consent evidence could not be saved: ${error.message}`);
+  const { data, error: readError } = await db().from("widget_consent_events")
+    .select("id,created_at").match({
+      diagnostic_id: diagnosticId, email, policy_version: evidence.policyVersion, decision: evidence.decision,
+    }).single();
+  if (readError || !data) throw new Error("Consent receipt could not be verified.");
+  return { id: data.id, recordedAt: data.created_at };
+}
 
 export async function insertLead(p: InsertLeadParams): Promise<string> {
   const { data, error } = await db()

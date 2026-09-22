@@ -22,8 +22,10 @@ import {
   updateLeadSync,
   markLeadCaptured,
   isPersistenceConfigured,
+  insertWidgetConsent,
 } from "./widget-store";
 import { syncAtlasLeadToHubSpot } from "./hubspot";
+import { parseWidgetConsent, WIDGET_MARKETING_CONSENT } from "@shared/widget-consent";
 
 // ---------- Public config (chip options + strategic copy) ----------
 
@@ -419,6 +421,7 @@ export function registerWidgetRoutes(app: Express) {
       industries: WIDGET_INDUSTRIES,
       revenueBands: WIDGET_REVENUE_BANDS,
       goals: WIDGET_GOALS,
+      marketingConsent: WIDGET_MARKETING_CONSENT,
     });
   });
 
@@ -501,15 +504,20 @@ export function registerWidgetRoutes(app: Express) {
     }
   });
 
-  // Lead capture — trades email for the "unlock evidence" experience.
-  // Persists into memory only (post-v1 = write to Supabase + HubSpot).
+  // Recap requests and optional marketing permission are separate.
   app.post("/api/widget/lead", async (req: Request, res: Response) => {
     const body = req.body ?? {};
     const diagnosticId = String(body.diagnosticId || "");
     const email = String(body.email || "").trim().toLowerCase();
     const company = body.company ? String(body.company).trim() : undefined;
+    let consentEvidence;
+    try {
+      consentEvidence = parseWidgetConsent(body);
+    } catch (err: any) {
+      return res.status(400).json({ error: err.message });
+    }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
       return res.status(400).json({ error: "Please enter a valid work email." });
     }
 
@@ -543,6 +551,16 @@ export function registerWidgetRoutes(app: Express) {
       return res.status(404).json({ error: "Diagnostic session expired. Please run it again." });
     }
 
+    // Persist permission evidence BEFORE success and BEFORE any CRM/email side effect.
+    // Never silently accept checked consent into the ephemeral in-memory fallback.
+    let consentReceipt;
+    try {
+      consentReceipt = await insertWidgetConsent(diagnosticId, email, consentEvidence);
+    } catch {
+      console.error("[widget/lead] permission evidence could not be saved");
+      return res.status(503).json({ error: "We couldn't save your request safely. Please try again in a moment. Your email preferences have not been changed." });
+    }
+
     console.log(
       `[widget/lead] captured — email=${email} company=${company ?? "-"} ` +
         `score=${diagOutput.overallScore} tier=${diagOutput.fitTier} ` +
@@ -552,6 +570,11 @@ export function registerWidgetRoutes(app: Express) {
     // Respond to the browser FAST — HubSpot + email happen after the response
     res.json({
       ok: true,
+      consent: {
+        decision: consentEvidence.decision,
+        receiptId: consentReceipt.id,
+        recordedAt: consentReceipt.recordedAt,
+      },
       unlocked: {
         strengthUnlock: {
           title: diagOutput.swotTitles.strengths[0],

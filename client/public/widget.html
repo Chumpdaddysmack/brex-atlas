@@ -309,6 +309,10 @@
   .lead-row input::placeholder { color: #94A3B8; }
   .lead-row input:focus { border-color: var(--sky); background: rgba(255,255,255,.12); }
   .lead-row .btn-primary { flex-shrink: 0; }
+  .consent-choice { display:flex; align-items:flex-start; gap:10px; margin:16px 0 8px; color:#F7FAFC; font-size:14px; line-height:1.5; cursor:pointer; }
+  .consent-choice input { flex:0 0 20px; width:20px; height:20px; margin:2px 0 0; accent-color:var(--sky); }
+  .consent-choice input:focus-visible { outline:2px solid #fff; outline-offset:3px; }
+  .lead-card .consent-note { margin:0; font-size:12px; color:#CBD5E0; }
 
   /* Unlocked evidence panel (post lead-capture) */
   .unlock-panel {
@@ -444,14 +448,19 @@
 
     <!-- Lead capture (shown BEFORE unlock) -->
     <div class="lead-card" id="lead-card">
-      <h3>Unlock evidence + sample deep-dive</h3>
-      <p>Drop your work email. We'll unlock one strength and one weakness with real evidence copy so you can feel the difference between preview and paid.</p>
+      <h3>Get your preview recap</h3>
+      <p>Enter your work email to request your Atlas recap and unlock an inferred strength and possible constraint. This preview is not a researched website audit.</p>
       <div class="lead-row">
-        <input type="email" id="lead-email" placeholder="you@company.com" autocomplete="email" />
-        <input type="text"  id="lead-company" placeholder="Company (optional)" autocomplete="organization" />
-        <button class="btn btn-primary" id="lead-btn">Unlock &rsaquo;</button>
+        <input type="email" id="lead-email" aria-label="Work email" placeholder="you@company.com" autocomplete="email" maxlength="254" />
+        <input type="text"  id="lead-company" aria-label="Company (optional)" placeholder="Company (optional)" autocomplete="organization" />
+        <button class="btn btn-primary" id="lead-btn">Send recap &rsaquo;</button>
       </div>
-      <div id="lead-error"></div>
+      <label class="consent-choice" for="marketing-consent">
+        <input type="checkbox" id="marketing-consent" aria-describedby="consent-note" disabled />
+        <span id="marketing-consent-text">Optional marketing permission is loading.</span>
+      </label>
+      <p class="consent-note" id="consent-note">The checkbox is optional. Leaving it unchecked does not block your recap or change any existing email preferences.</p>
+      <div id="lead-error" role="alert"></div>
     </div>
 
     <!-- Unlocked panels (revealed after lead-capture) -->
@@ -515,6 +524,12 @@
     try {
       const res = await fetch('/api/widget/config');
       state.config = await res.json();
+      if (state.config.marketingConsent?.version && state.config.marketingConsent?.text) {
+        $('marketing-consent-text').textContent = state.config.marketingConsent.text;
+        $('marketing-consent').disabled = false;
+      } else {
+        $('marketing-consent-text').textContent = 'Optional marketing signup is unavailable. You can still request your recap.';
+      }
       renderChips('industry-chips',  state.config.industries,   (v) => { state.industry = v; validate(); });
       renderChips('revenue-chips',   state.config.revenueBands, (v) => { state.revenueBand = v; validate(); });
       renderChips('goal-chips',      state.config.goals,        (v) => { state.goal = v; validate(); });
@@ -687,6 +702,7 @@
     });
 
     // Reset lead + unlock slots
+    $('marketing-consent').checked = false;
     $('lead-card').classList.remove('hidden');
     $('unlock-slot').classList.add('hidden');
     $('unlock-slot').innerHTML = '';
@@ -729,6 +745,10 @@
         body: JSON.stringify({
           diagnosticId: state.diagnosticId,
           email, company,
+          ...(state.config?.marketingConsent?.version ? {
+            marketingConsent: $('marketing-consent').checked,
+            marketingConsentVersion: state.config.marketingConsent.version,
+          } : {}),
         }),
       });
       const data = await res.json();
@@ -755,7 +775,7 @@
       errorSlot.innerHTML = `<div style="margin-top:10px;font-size:12px;color:#FCA5A5;">${escapeHtml(err.message)}</div>`;
     } finally {
       $('lead-btn').disabled = false;
-      $('lead-btn').textContent = 'Unlock ›';
+      $('lead-btn').textContent = 'Send recap ›';
     }
   }
 
@@ -764,6 +784,9 @@
     e.preventDefault();
     state.url = ''; state.industry = null; state.revenueBand = null; state.goal = null;
     state.result = null; state.diagnosticId = null;
+    $('marketing-consent').checked = false;
+    $('lead-email').value = '';
+    $('lead-company').value = '';
     urlInput.value = '';
     document.querySelectorAll('.chip.active').forEach((c) => c.classList.remove('active'));
     $('run-btn').disabled = true;
