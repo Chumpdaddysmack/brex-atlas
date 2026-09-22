@@ -27,6 +27,7 @@ import {
   drawPillarDonut,
   drawBenchmarkRow,
   drawGanttTimeline,
+  measureGanttTimeline,
   drawStatBlock,
   drawCadenceBar,
   drawTwoSeriesLine,
@@ -585,9 +586,9 @@ function renderPillarMixChart(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
 function renderTimelineChart(doc: PDFKit.PDFDocument, p: ContentPlanPayload) {
   if (!p.contentPillars?.length || !p.blogCalendar?.length) return;
 
-  const pillarCount = p.contentPillars.length;
-  const chartHeight = 40 + pillarCount * 18;
-  ensureSpace(doc, chartHeight + 40);
+  const chartHeight = measureGanttTimeline(doc, p.contentPillars, doc.page.width - 144).height;
+  // Include the section heading, wrapped description and breathing room.
+  ensureSpace(doc, chartHeight + 100);
 
   sectionHeader(doc, "12-Week Publishing Timeline");
   doc
@@ -714,42 +715,55 @@ function renderBrexPricingMatrix(
   // Tier comparison table — 3 rows, one per tier
   const tableX = 72;
   const tableW = doc.page.width - 144;
-  const rowH = 74;
   const tierColW = tableW * 0.24;
   const priceColW = tableW * 0.18;
   const industryColW = tableW * 0.28;
   const savingsColW = tableW * 0.15;
   const bundleColW = tableW * 0.15;
+  const tierLayouts = BREX_TIERS.map(tier => {
+    doc.font(FONTS.sansBold).fontSize(11);
+    const nameHeight = doc.heightOfString(tier.name, { width: tierColW - 16 });
+    const description = tier.bestFor.slice(0, 100) + (tier.bestFor.length > 100 ? "…" : "");
+    doc.font(FONTS.sans).fontSize(7.5);
+    const descriptionHeight = doc.heightOfString(description, { width: tierColW - 16, lineGap: 1 });
+    return { nameHeight, description, height: Math.max(74, Math.ceil(8 + nameHeight + 5 + descriptionHeight + 8)) };
+  });
+  const rowH = Math.max(...tierLayouts.map(row => row.height));
 
-  // Header row
-  doc
-    .rect(tableX, doc.y, tableW, 22)
-    .fillColor(BRAND.navy)
-    .fill();
-  doc
-    .fillColor("#FFFFFF")
-    .font(FONTS.sansBold)
-    .fontSize(9);
-  const hy = doc.y + 7;
-  doc.text("Brex Tier", tableX + 8, hy, { width: tierColW - 16 });
-  doc.text("Brex Price", tableX + tierColW, hy, { width: priceColW - 8 });
-  doc.text("Industry Mid-Market", tableX + tierColW + priceColW, hy, {
-    width: industryColW - 8,
-  });
-  doc.text("Savings vs Mid", tableX + tierColW + priceColW + industryColW, hy, {
-    width: savingsColW - 8,
-  });
-  doc.text(
-    "Bundle Savings",
-    tableX + tierColW + priceColW + industryColW + savingsColW,
-    hy,
-    { width: bundleColW - 8 },
-  );
-  doc.y += 22;
+  const headerCells = [
+    { text: "Brex Tier", x: tableX + 8, width: tierColW - 16 },
+    { text: "Brex Price", x: tableX + tierColW, width: priceColW - 8 },
+    { text: "Industry Mid-Market", x: tableX + tierColW + priceColW, width: industryColW - 8 },
+    { text: "Savings vs Mid", x: tableX + tierColW + priceColW + industryColW, width: savingsColW - 8 },
+    { text: "Bundle Savings", x: tableX + tierColW + priceColW + industryColW + savingsColW, width: bundleColW - 8 },
+  ];
+  doc.font(FONTS.sansBold).fontSize(9);
+  const headerH = Math.ceil(Math.max(...headerCells.map(cell =>
+    doc.heightOfString(cell.text, { width: cell.width, lineGap: 1, characterSpacing: 0 }),
+  ))) + 14;
+  function drawTierHeader() {
+    const headerY = doc.y;
+    doc.rect(tableX, headerY, tableW, headerH).fill(BRAND.navy);
+    doc.fillColor("#FFFFFF").font(FONTS.sansBold).fontSize(9);
+    for (const cell of headerCells) {
+      doc.text(cell.text, cell.x, headerY + 7, {
+        width: cell.width, lineGap: 1, characterSpacing: 0,
+      });
+    }
+    // Explicit positioning: text() changes doc.y, especially on wrapped labels.
+    doc.y = headerY + headerH + 6;
+  }
+  ensureSpace(doc, headerH + rowH + 16);
+  drawTierHeader();
 
   // Data rows
-  for (const tier of BREX_TIERS) {
-    ensureSpace(doc, rowH + 10);
+  for (let tierIndex = 0; tierIndex < BREX_TIERS.length; tierIndex++) {
+    const tier = BREX_TIERS[tierIndex];
+    const tierLayout = tierLayouts[tierIndex];
+    if (doc.y + rowH + 10 > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      drawTierHeader();
+    }
     const y = doc.y;
     const industryMid = (tier.industryLow + tier.industryHigh) / 2;
     const vsMid = computeSavings(tier.monthly, industryMid);
@@ -775,7 +789,7 @@ function renderBrexPricingMatrix(
       .fillColor(BRAND.muted)
       .font(FONTS.sans)
       .fontSize(7.5)
-      .text(tier.bestFor.slice(0, 100) + (tier.bestFor.length > 100 ? "…" : ""), tableX + 8, y + 24, {
+      .text(tierLayout.description, tableX + 8, y + 8 + tierLayout.nameHeight + 5, {
         width: tierColW - 16,
         lineGap: 1,
       });

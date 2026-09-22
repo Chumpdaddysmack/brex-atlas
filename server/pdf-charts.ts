@@ -210,6 +210,28 @@ export function drawBenchmarkRow(
 // =============================================================
 // 12-week Gantt-style timeline — pillars across weeks
 // =============================================================
+export function measureGanttTimeline(
+  doc: PDFKit.PDFDocument,
+  pillars: { name: string; description: string }[],
+  width: number,
+) {
+  const labelWidth = Math.min(150, width * 0.34);
+  doc.font("Helvetica-Bold").fontSize(8);
+  const rows = pillars.map((pillar) => {
+    const textHeight = doc.heightOfString(pillar.name, {
+      width: labelWidth - 10,
+      lineGap: 1,
+      characterSpacing: 0,
+    });
+    return { textHeight, height: Math.max(24, Math.ceil(textHeight) + 12) };
+  });
+  return {
+    labelWidth,
+    rows,
+    height: 18 + rows.reduce((sum, row) => sum + row.height, 0) + 8,
+  };
+}
+
 export function drawGanttTimeline(
   doc: PDFKit.PDFDocument,
   calendar: ContentPlanPayload["blogCalendar"],
@@ -218,49 +240,62 @@ export function drawGanttTimeline(
   y: number,
   width: number,
 ): number {
+  const layout = measureGanttTimeline(doc, pillars, width);
   const weekCount = Math.max(calendar.length, 12);
-  const weekWidth = (width - 100) / weekCount;
-  const rowHeight = 18;
-  const startX = x + 100;
+  const weekWidth = (width - layout.labelWidth) / weekCount;
+  const startX = x + layout.labelWidth;
 
   // Header — week numbers
-  doc
-    .fillColor(CHART_COLORS.muted)
-    .font("Helvetica-Bold")
-    .fontSize(7)
-    .text("PILLAR", x, y, { width: 95, lineBreak: false, characterSpacing: 0.5 });
-
-  for (let w = 1; w <= weekCount; w++) {
+  function drawHeader(headerY: number) {
     doc
       .fillColor(CHART_COLORS.muted)
-      .font("Helvetica")
+      .font("Helvetica-Bold")
       .fontSize(7)
-      .text(`W${w}`, startX + (w - 1) * weekWidth, y, {
-        width: weekWidth,
-        align: "center",
-        lineBreak: false,
-      });
+      .text("PILLAR", x, headerY, { width: layout.labelWidth - 10, lineBreak: false, characterSpacing: 0.5 });
+
+    for (let w = 1; w <= weekCount; w++) {
+      doc
+        .fillColor(CHART_COLORS.muted)
+        .font("Helvetica")
+        .fontSize(7)
+        .text(`W${w}`, startX + (w - 1) * weekWidth, headerY, {
+          width: weekWidth,
+          align: "center",
+          lineBreak: false,
+          characterSpacing: 0,
+        });
+    }
   }
 
-  let currentY = y + 14;
+  drawHeader(y);
+  let currentY = y + 18;
 
   pillars.forEach((pillar, idx) => {
+    const { textHeight, height: rowHeight } = layout.rows[idx];
+    // Keep each label and its week cells together, repeating the week header.
+    if (currentY + rowHeight + 8 > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      currentY = doc.page.margins.top;
+      drawHeader(currentY);
+      currentY += 18;
+    }
     const color = CHART_COLORS.pillar[idx % CHART_COLORS.pillar.length];
+    const bandY = currentY + (rowHeight - 16) / 2;
 
     // Pillar label
     doc
       .fillColor(CHART_COLORS.text)
       .font("Helvetica-Bold")
       .fontSize(8)
-      .text(pillar.name, x, currentY + 4, {
-        width: 95,
-        lineBreak: false,
-        ellipsis: true,
+      .text(pillar.name, x, currentY + (rowHeight - textHeight) / 2, {
+        width: layout.labelWidth - 10,
+        lineGap: 1,
+        characterSpacing: 0,
       });
 
     // Background row
     doc
-      .rect(startX, currentY, weekWidth * weekCount, rowHeight - 4)
+      .rect(startX, bandY, weekWidth * weekCount, 16)
       .fill(CHART_COLORS.light);
 
     // For each week, count posts matching this pillar and draw a colored square
@@ -271,7 +306,7 @@ export function drawGanttTimeline(
       if (matchCount > 0) {
         // Opacity relative to post count in this week for this pillar
         doc
-          .rect(startX + w * weekWidth + 1, currentY + 1, weekWidth - 2, rowHeight - 6)
+          .rect(startX + w * weekWidth + 1, bandY + 1, weekWidth - 2, 14)
           .fill(color);
 
         // Count label
@@ -279,10 +314,11 @@ export function drawGanttTimeline(
           .fillColor("#FFFFFF")
           .font("Helvetica-Bold")
           .fontSize(7)
-          .text(String(matchCount), startX + w * weekWidth, currentY + 3, {
+          .text(String(matchCount), startX + w * weekWidth, bandY + 4, {
             width: weekWidth,
             align: "center",
             lineBreak: false,
+            characterSpacing: 0,
           });
       }
     }
@@ -290,7 +326,7 @@ export function drawGanttTimeline(
     currentY += rowHeight;
   });
 
-  return currentY + 4;
+  return currentY + 8;
 }
 
 // =============================================================
