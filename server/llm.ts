@@ -427,14 +427,45 @@ export const SCHEMA_SHELL = {
 
 // Blog calendar batch returned by the 12-week generator. Each item is a
 // week: {weekNumber, weekOf, posts[{title, pillar, targetQuery, angle,
-// keywords[], scheduledDate, editorialBrief}]}. Item shape enforced via
-// the SYSTEM prompt.
+// keywords[], scheduledDate, editorialBrief}]}. Validate at runtime as well:
+// model tool schemas alone do not guarantee the returned runtime shape.
 export const SCHEMA_BLOG_BATCH = {
   type: "object",
   additionalProperties: true,
   required: ["blogCalendar"],
   properties: {
-    blogCalendar: { type: "array", minItems: 1 },
+    blogCalendar: {
+      type: "array", minItems: 3, maxItems: 3,
+      items: {
+        type: "object",
+        required: ["weekNumber", "weekOf", "posts"],
+        properties: {
+          weekNumber: { type: "integer", minimum: 1, maximum: 12 },
+          weekOf: { type: "string" },
+          posts: {
+            type: "array", minItems: 10, maxItems: 10,
+            items: {
+              type: "object",
+              required: ["title", "pillar", "targetQuery", "angle", "keywords", "scheduledDate", "editorialBrief"],
+              properties: {
+                title: { type: "string" }, pillar: { type: "string" },
+                targetQuery: { type: "string" }, angle: { type: "string" },
+                keywords: { type: "array", items: { type: "string" } },
+                scheduledDate: { type: "string" },
+                editorialBrief: {
+                  type: "object",
+                  required: ["readerQuestion", "angleSummary", "primaryKeyword", "aeoQuery"],
+                  properties: {
+                    readerQuestion: { type: "string" }, angleSummary: { type: "string" },
+                    primaryKeyword: { type: "string" }, aeoQuery: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 };
 

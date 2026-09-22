@@ -5,6 +5,7 @@
 // No per-piece drafting — reviewers work from titles, angles, target queries.
 
 import { storage } from "./storage";
+import { generateValidatedBlogBatch, normalizeBlogCalendar } from "./blog-calendar";
 import { llmJson, SCHEMA_SHELL, SCHEMA_BLOG_BATCH, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
 import { ROI_INFERENCE_SYSTEM_PROMPT, calculateRoiProjections, FALLBACK_ASSUMPTIONS } from "./roi-calc";
 import { generateSitemap, crossLinkContentToSitemap } from "./sitemap";
@@ -261,14 +262,20 @@ export async function runContentPlanGeneration(planId: string) {
       const blogMsg = `${contextBlock}\n\n=== SHELL (already generated — use these pillars) ===\n${JSON.stringify({ contentPillars: shell.contentPillars, adBriefAudience: shell.adBrief?.[0]?.audience, landingPages: (shell.landingPages ?? []).map((p: any) => p.title) }, null, 2)}\n\n=== YOUR JOB ===\nWrite blog calendar weeks ${b.start} through ${b.end} inclusive (${b.end - b.start + 1} weeks × 10 posts = ${(b.end - b.start + 1) * 10} posts).\n\nPlan starts Monday ${startISO} (that's week 1). weekOf = startMonday + (weekNumber - 1) × 7 days.\n\nAssign each post to a pillar from this list (use these exact names):\n${pillarNames.map((n) => `- ${n}`).join("\n")}\n\n${previousTitles.length ? `Do NOT reuse any of these titles from earlier batches:\n${previousTitles.slice(0, 60).map((t) => `- ${t}`).join("\n")}` : ""}\n\nReturn the JSON now.`;
 
       try {
-        const batchOut = await llmJson(SYS_BLOG_BATCH, blogMsg, 16000, SCHEMA_BLOG_BATCH);
-        const weeks = batchOut?.blogCalendar ?? [];
-        console.log(
-          `[content-plan] batch ${b.start}-${b.end}: keys=${batchOut ? Object.keys(batchOut).join(",") : "null"} weeks=${weeks.length}`,
+        const weeks = await generateValidatedBlogBatch(
+          (validationError) => llmJson(
+            SYS_BLOG_BATCH,
+            blogMsg + (validationError
+              ? `\n\nThe previous batch failed validation: ${validationError}. Return all requested weeks and complete posts as actual JSON arrays/objects, not encoded strings.`
+              : ""),
+            16000,
+            SCHEMA_BLOG_BATCH,
+          ),
+          Array.from({ length: b.end - b.start + 1 }, (_, offset) => b.start + offset),
         );
-        if (weeks.length === 0) {
-          batchErrors.push(`weeks ${b.start}-${b.end}: returned 0 weeks`);
-        }
+        console.log(
+          `[content-plan] batch ${b.start}-${b.end}: validated weeks=${weeks.length}`,
+        );
         allWeeks.push(...weeks);
         for (const w of weeks) for (const p of w.posts ?? []) previousTitles.push(p.title);
       } catch (err: any) {
@@ -278,17 +285,22 @@ export async function runContentPlanGeneration(planId: string) {
       }
     }
 
-    if (allWeeks.length === 0) {
+    if (batchErrors.length > 0) {
       throw new Error(
-        `Blog batches returned 0 weeks total. Shell had ${shell.contentPillars.length} pillars. Batch errors: ${batchErrors.join(" | ")}`,
+        `Blog calendar is incomplete; plan was not saved as ready. Batch errors: ${batchErrors.join(" | ")}`,
       );
     }
+    const validatedCalendar = normalizeBlogCalendar(allWeeks, {
+      expectedWeeks: Array.from({ length: 12 }, (_, i) => i + 1),
+      postsPerWeek: 10,
+      requireCompleteBrief: true,
+    });
 
     // Merge into final payload
     const payload: ContentPlanPayload = {
       summary: shell.summary,
       contentPillars: shell.contentPillars ?? [],
-      blogCalendar: allWeeks,
+      blogCalendar: validatedCalendar,
       socialCadence: shell.socialCadence ?? [],
       adBrief: shell.adBrief ?? [],
       landingPages: shell.landingPages ?? [],
