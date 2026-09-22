@@ -8,6 +8,8 @@
 // Auth: Private App access token from env var HUBSPOT_ACCESS_TOKEN.
 // On Railway, set this to your pat-na2-... token.
 
+import type { GrowthOffer, ImplementationReadiness } from "@shared/growth-offers";
+
 const HUBSPOT_API = "https://api.hubapi.com";
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
 
@@ -112,6 +114,8 @@ export interface AtlasWidgetSyncInput {
   email: string;
   company?: string;
   runAt: Date;
+  recommendedOffer?: GrowthOffer;
+  implementationReadiness?: ImplementationReadiness;
 }
 
 export interface AtlasWidgetSyncResult {
@@ -155,6 +159,9 @@ function buildContactProperties(input: AtlasWidgetSyncInput) {
   if (input.company) {
     props.company = input.company;
   }
+  // Prospect preferences must never overwrite purchased tier, cash paid, or credit dates.
+  if (input.recommendedOffer) props.atlas_recommended_offer = input.recommendedOffer;
+  if (input.implementationReadiness) props.atlas_implementation_readiness = input.implementationReadiness;
   return props;
 }
 

@@ -24,6 +24,8 @@ import {
   isPersistenceConfigured,
 } from "./widget-store";
 import { syncAtlasLeadToHubSpot } from "./hubspot";
+import { GROWTH_OFFERS, recommendGrowthOffer } from "@shared/growth-offers";
+import type { GrowthNeed, GrowthOffer, ImplementationReadiness } from "@shared/growth-offers";
 
 // ---------- Public config (chip options + strategic copy) ----------
 
@@ -140,7 +142,7 @@ This is a WIDGET on brexconsulting.com — a 90-second inferred diagnostic that 
 
 CRITICAL RULES:
 - You are inferring from category patterns, NOT researching the actual website. Do not claim to have visited the URL.
-- Every finding must be specific, punchy, and feel eerily accurate — the "how did it know that?" moment is what sells the paid report.
+- Every finding must be clearly framed as a hypothesis from category patterns, not a verified fact about this company.
 - Findings should be grounded in what is TYPICAL for a company in this industry + revenue band + goal, not generic MBA advice.
 - Sub-scores are honest — reveal real weaknesses. Prospects will not book a call if the score is 90/100.
 - Big Rock Method framing: growth problems are ALIGNMENT problems. Score reflects alignment between positioning, offer, buyer, and growth motion.
@@ -154,7 +156,7 @@ SCORING GUIDANCE:
   * $1M–$5M → 'advisor' (score < 55) or 'strategist' (score ≥ 55)
   * $5M–$25M → 'strategist' (score < 60) or 'full-fractional' (score ≥ 60)
   * $25M+ → 'full-fractional'
-- Industry benchmark: fabricate plausible values. Industry avg typically 55-65. Top quartile typically 75-82.
+- The legacy benchmark object is required for response compatibility only. Use 58 and 76 as illustrative placeholders, never mention them in findings or claim a measured industry ranking. These values are not displayed to prospects or used to recommend a paid offer.
 
 CONSISTENCY RULES (do not violate):
 - The AVERAGE of the four subScores must be within ±3 of overallScore. Do the math before you return.
@@ -419,6 +421,7 @@ export function registerWidgetRoutes(app: Express) {
       industries: WIDGET_INDUSTRIES,
       revenueBands: WIDGET_REVENUE_BANDS,
       goals: WIDGET_GOALS,
+      offers: GROWTH_OFFERS,
     });
   });
 
@@ -508,6 +511,16 @@ export function registerWidgetRoutes(app: Express) {
     const diagnosticId = String(body.diagnosticId || "");
     const email = String(body.email || "").trim().toLowerCase();
     const company = body.company ? String(body.company).trim() : undefined;
+    let recommendedOffer: GrowthOffer | undefined;
+    let implementationReadiness: ImplementationReadiness | undefined;
+    if (body.growthNeed || body.implementationReadiness) {
+      if (!["first-priority", "one-problem", "comprehensive"].includes(body.growthNeed) ||
+          !["owner", "team-partner", "not-ready"].includes(body.implementationReadiness)) {
+        return res.status(400).json({ error: "Please answer both next-step questions or leave both blank." });
+      }
+      implementationReadiness = body.implementationReadiness;
+      recommendedOffer = recommendGrowthOffer(body.growthNeed as GrowthNeed, implementationReadiness!);
+    }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
       return res.status(400).json({ error: "Please enter a valid work email." });
@@ -555,11 +568,11 @@ export function registerWidgetRoutes(app: Express) {
       unlocked: {
         strengthUnlock: {
           title: diagOutput.swotTitles.strengths[0],
-          evidence: `Sample evidence sentence anchored in ${diagInput.industry} category patterns — the paid Growth Excavation Report cites your actual homepage, competitor pages, and 2026 buyer research for every SWOT item.`,
+          evidence: `This is a hypothesis based on ${diagInput.industry} category patterns, not a verified observation about your website. A paid engagement checks your actual materials within the package you choose.`,
         },
         weaknessUnlock: {
           title: diagOutput.swotTitles.weaknesses[0],
-          evidence: `Sample evidence sentence — the paid report shows exactly where this shows up on your site, which competitors exploit it, and the 30-day fix.`,
+          evidence: `This possible constraint needs verification. Foundations identifies three first actions; Focus investigates one question with competitor context; the full report connects multiple growth constraints.`,
         },
       },
     });
@@ -574,6 +587,8 @@ export function registerWidgetRoutes(app: Express) {
         diagInput,
         diagOutput,
         diagCreatedAt,
+        recommendedOffer,
+        implementationReadiness,
       }).catch((err) => {
         console.error("[widget/lead] side-effects failed:", err);
       });
@@ -590,6 +605,8 @@ interface LeadSideEffectInput {
   diagInput: { url: string; industry: string; revenueBand: string; goal: string };
   diagOutput: WidgetOutput;
   diagCreatedAt: Date;
+  recommendedOffer?: GrowthOffer;
+  implementationReadiness?: ImplementationReadiness;
 }
 
 async function handleLeadSideEffects(p: LeadSideEffectInput): Promise<void> {
@@ -632,6 +649,8 @@ async function handleLeadSideEffects(p: LeadSideEffectInput): Promise<void> {
     email: p.email,
     company: p.company,
     runAt: p.diagCreatedAt,
+    recommendedOffer: p.recommendedOffer,
+    implementationReadiness: p.implementationReadiness,
   });
 
   // 4. Update lead row with sync result
@@ -645,7 +664,6 @@ async function handleLeadSideEffects(p: LeadSideEffectInput): Promise<void> {
   }
 
   // 5. Hot-lead notification: handled by a HubSpot workflow.
-  //    When contact atlas_fit_tier is strategist or full-fractional AND
-  //    atlas_fit_score >= 65, HubSpot fires an in-app notification to Kenny.
-  //    See project docs for workflow setup steps.
+  // Existing HubSpot prospect alert criteria are managed in HubSpot, unchanged here.
+  // Report purchase alerts must use verified QuickBooks payment events, not this route.
 }

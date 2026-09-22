@@ -345,6 +345,21 @@
   }
   .cta-rail p { margin: 0 0 18px; font-size: 14px; color: var(--text-muted); line-height: 1.5; }
   .cta-rail .actions { justify-content: center; }
+  .offer-section { margin: 0 0 22px; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: white; }
+  .offer-section h3 { margin: 0 0 10px; color: var(--navy-deep); }
+  .offer-intro, .offer-terms { font-size: 13px; line-height: 1.55; color: var(--text-muted); }
+  .offer-questions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0; }
+  .offer-questions label { display: block; font-size: 13px; line-height: 1.5; font-weight: 600; }
+  .offer-questions select { display: block; width: 100%; margin-top: 7px; border: 1px solid var(--border); border-radius: 6px; padding: 10px; background: white; color: var(--navy-deep); font: inherit; }
+  .offer-recommendation { padding: 12px; background: var(--chip); font-size: 14px; line-height: 1.5; margin: 12px 0; }
+  .offer-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .offer-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .offer-card.recommended { border: 2px solid var(--navy); padding: 15px; }
+  .offer-card h4 { margin: 0; font-size: 16px; color: var(--navy-deep); }
+  .offer-card .offer-price { font-size: 23px; font-weight: 800; color: var(--navy); }
+  .offer-card p { margin: 0; font-size: 13px; line-height: 1.5; }
+  .offer-card a { margin-top: auto; color: var(--navy); font-size: 13px; font-weight: 700; }
+  @media (max-width: 620px) { .offer-grid, .offer-questions { grid-template-columns: 1fr; } .offer-section { padding: 18px; } }
 
   /* ---------- Utility ---------- */
   .footer-note {
@@ -438,18 +453,64 @@
 
     <div class="swot-teaser">
       <h3>SWOT preview <span style="font-size:11px; padding:3px 8px; background:var(--chip); color:var(--navy); border-radius:4px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase;">Titles only</span></h3>
-      <div class="sublabel">Evidence, competitor cross-refs, and 30-day fixes unlock in the paid report.</div>
+      <div class="sublabel">Inferred hypotheses, not researched findings. Paid packages verify your materials within their stated scope.</div>
       <div class="swot-grid" id="swot-grid"></div>
     </div>
 
+    <section class="offer-section" aria-labelledby="offer-heading">
+      <h3 id="offer-heading">Choose the clarity you need next</h3>
+      <p class="offer-intro">Your score does not determine your budget or which report you can choose. These optional questions suggest a starting point. All prices are one-time USD fees.</p>
+      <div class="offer-questions">
+        <label for="growth-need">What do you need next?
+          <select id="growth-need">
+            <option value="">Choose a next step (optional)</option>
+            <option value="first-priority">A first-priority checklist</option>
+            <option value="one-problem">A plan for one growth problem</option>
+            <option value="comprehensive">A comprehensive growth assessment</option>
+          </select>
+        </label>
+        <label for="implementation-readiness">Who can act in the next 30–60 days?
+          <select id="implementation-readiness">
+            <option value="">Choose who can act (optional)</option>
+            <option value="owner">Me</option>
+            <option value="team-partner">An internal team or partner</option>
+            <option value="not-ready">No one yet</option>
+          </select>
+        </label>
+      </div>
+      <div id="offer-recommendation" class="offer-recommendation" role="status">Choose based on the question you need answered, not your preview score.</div>
+      <div class="offer-grid">
+        <article class="offer-card" data-offer="foundations">
+          <h4>Foundations</h4><div class="offer-price" id="price-foundations">$495</div>
+          <p>What should I fix first?</p>
+          <p>Review of up to three public pages, one priority Big Rock, positioning direction, three 30-day actions, and a recorded walkthrough. No live meeting.</p>
+          <a href="mailto:Kenny@brexconsulting.com?subject=Growth%20Excavation%20Foundations%20inquiry">Find my first Big Rock</a>
+        </article>
+        <article class="offer-card" data-offer="focus">
+          <h4>Focus</h4><div class="offer-price" id="price-focus">$1,495</div>
+          <p>How do we solve one growth problem?</p>
+          <p>One strategic question, up to six client pages/assets, two competitors, a working strategic asset, a 60-day plan, and a 30-minute debrief.</p>
+          <a href="mailto:Kenny@brexconsulting.com?subject=Growth%20Excavation%20Focus%20inquiry">Build my focused growth plan</a>
+        </article>
+        <article class="offer-card" data-offer="full-report">
+          <h4>Full report</h4><div class="offer-price" id="price-full-report">$4,995</div>
+          <p>Where should we invest in growth?</p>
+          <p>Comprehensive cross-domain research, an executive report and slide deck, a 90-day roadmap, and a strategic debrief. Scope confirmed in discovery.</p>
+          <a href="https://meetings-na2.hubspot.com/kenny-peavy" target="_blank" rel="noopener">Book my Growth Excavation Call</a>
+        </article>
+      </div>
+      <p class="offer-terms">Start with the clarity you need today. Upgrade within 60 days of your first paid report's delivery and apply eligible net report payments toward a higher level for the same business and scope. The clock does not reset; credits exclude taxes and refunds, have no cash value, and cannot be counted twice. Scope is confirmed before a QuickBooks invoice is issued. Selecting an option is not a purchase.</p>
+      <p class="offer-terms">Not ready to invest? <a href="https://brexconsulting.com/articles/positioning-messaging/marketing-positioning-strategy/" target="_blank" rel="noopener">Read the free positioning guide</a>. You do not need a higher score to return.</p>
+    </section>
+
     <!-- Lead capture (shown BEFORE unlock) -->
     <div class="lead-card" id="lead-card">
-      <h3>Unlock evidence + sample deep-dive</h3>
-      <p>Drop your work email. We'll unlock one strength and one weakness with real evidence copy so you can feel the difference between preview and paid.</p>
+      <h3>Get your preview recap</h3>
+      <p>Request your recap by email and see how to interpret one strength and one possible constraint. This is still an inferred preview, not researched website evidence. Your optional next-step answers will accompany your request; this is not consent to an ongoing nurture series.</p>
       <div class="lead-row">
         <input type="email" id="lead-email" placeholder="you@company.com" autocomplete="email" />
         <input type="text"  id="lead-company" placeholder="Company (optional)" autocomplete="organization" />
-        <button class="btn btn-primary" id="lead-btn">Unlock &rsaquo;</button>
+        <button class="btn btn-primary" id="lead-btn">Send recap &rsaquo;</button>
       </div>
       <div id="lead-error"></div>
     </div>
@@ -459,8 +520,8 @@
 
     <!-- Primary CTA rail -->
     <div class="cta-rail">
-      <h3>Ready to excavate for real?</h3>
-      <p>The Growth Excavation Report&trade; is a $4,995 diagnostic across your site, competitors, and market &mdash; delivered in 5 business days. 50% credit applied to your first month if you retain us.</p>
+      <h3>Need help choosing?</h3>
+      <p>Discuss your scope before committing. The full $4,995 report remains available at any score. Its separate retainer incentive is a 50% credit toward the first month when you sign within 90 days of full-report delivery, after paying the full report fee.</p>
       <div class="actions">
         <a class="btn btn-primary" href="https://meetings-na2.hubspot.com/kenny-peavy" target="_blank" rel="noopener">
           Book your Growth Excavation Call
@@ -470,7 +531,7 @@
     </div>
 
     <div class="footer-note">
-      Preview scores are inferred from industry + revenue + goal patterns and are not a real audit. The paid Growth Excavation Report&trade; cites your homepage, actual competitors, and 2026 buyer research for every finding.
+      Preview scores are inferred from industry + revenue + goal patterns and are not a real audit or a measured industry ranking. Paid findings are verified within the scope of the package you choose.
     </div>
   </div>
 
@@ -515,6 +576,10 @@
     try {
       const res = await fetch('/api/widget/config');
       state.config = await res.json();
+      Object.entries(state.config.offers || {}).forEach(([key, offer]) => {
+        const price = $('price-' + key);
+        if (price) price.textContent = '$' + Number(offer.priceUsd).toLocaleString('en-US');
+      });
       renderChips('industry-chips',  state.config.industries,   (v) => { state.industry = v; validate(); });
       renderChips('revenue-chips',   state.config.revenueBands, (v) => { state.revenueBand = v; validate(); });
       renderChips('goal-chips',      state.config.goals,        (v) => { state.goal = v; validate(); });
@@ -558,7 +623,7 @@
     'Scanning positioning patterns…',
     'Analyzing offer structure…',
     'Mapping buyer alignment…',
-    'Cross-referencing category benchmarks…',
+    'Forming hypotheses from category patterns…',
     'Excavating the Big Rock…',
   ];
   let phaseTimer = null;
@@ -621,7 +686,7 @@
       'critical':     'Critical alignment gap',
       'developing':   'Developing — real leaks',
       'solid':        'Solid — with clear upside',
-      'top-quartile': 'Top-quartile alignment',
+      'top-quartile': 'Strong inferred alignment',
     }[d.verdict] || d.verdict;
     label.textContent = verdictText;
     $('verdict-headline').textContent = d.headline;
@@ -630,18 +695,8 @@
     // source of truth) so the ring, the verdict, and the benchmark can never
     // disagree. Guard against a rogue LLM 'you'/'yourScore' field by clamping
     // to overallScore no matter what the model returned.
-    const you = d.overallScore;
-    const industryAvg = Math.max(0, Math.min(100, Number(d.benchmark.industryAverage) || 55));
-    const topQuartile = Math.max(0, Math.min(100, Number(d.benchmark.topQuartile) || 78));
-    // Also enforce industryAvg < topQuartile (sanity check on LLM output).
-    const bench = industryAvg < topQuartile
-      ? { ind: industryAvg, top: topQuartile }
-      : { ind: Math.min(industryAvg, topQuartile), top: Math.max(industryAvg, topQuartile) };
-    const youVsIndustry = you >= bench.ind
-      ? `<span style="color:var(--teal); font-weight:700;">+${you - bench.ind}</span> vs industry avg`
-      : `<span style="color:var(--rust); font-weight:700;">−${bench.ind - you}</span> vs industry avg`;
-    $('benchmark-strip').innerHTML =
-      `Industry average: <b>${bench.ind}</b> &middot; Top quartile: <b>${bench.top}</b> &middot; You: <b>${you}</b> &nbsp;·&nbsp; ${youVsIndustry}`;
+    $('benchmark-strip').textContent =
+      'Inferred preview only. We have not researched your website, and this score is not a measured industry comparison.';
 
     // Sub-scores — defensive against a rogue payload where subScores comes
     // back as an object instead of an array (server normalizer catches this,
@@ -690,7 +745,30 @@
     $('lead-card').classList.remove('hidden');
     $('unlock-slot').classList.add('hidden');
     $('unlock-slot').innerHTML = '';
+    $('growth-need').value = '';
+    $('implementation-readiness').value = '';
+    $('growth-need').disabled = false;
+    $('implementation-readiness').disabled = false;
+    updateOfferRecommendation();
   }
+
+  function updateOfferRecommendation() {
+    const need = $('growth-need').value;
+    const readiness = $('implementation-readiness').value;
+    const selected = readiness === 'not-ready' ? 'free-resources'
+      : need && readiness ? ({ 'first-priority': 'foundations', 'one-problem': 'focus', comprehensive: 'full-report' })[need] : null;
+    const copy = {
+      foundations: 'Suggested starting point: Foundations. Verify the first priority and take three practical actions.',
+      focus: 'Suggested starting point: Focus. Build an evidence-led plan for one specific growth question.',
+      'full-report': 'Suggested starting point: the full Growth Excavation Report. Confirm scope, budget and leadership sponsorship in discovery.',
+      'free-resources': 'Start with the free positioning guide until someone can act on the findings. All paid packages remain available when you are ready.',
+    };
+    $('offer-recommendation').textContent = copy[selected] || 'Choose based on the question you need answered, not your preview score.';
+    document.querySelectorAll('[data-offer]').forEach(card => card.classList.toggle('recommended', card.dataset.offer === selected));
+    postHeight();
+  }
+  $('growth-need').addEventListener('change', updateOfferRecommendation);
+  $('implementation-readiness').addEventListener('change', updateOfferRecommendation);
 
   function animateNumber(id, from, to, duration) {
     const el = $(id);
@@ -714,14 +792,20 @@
   async function captureLead() {
     const email = $('lead-email').value.trim();
     const company = $('lead-company').value.trim();
+    const growthNeed = $('growth-need').value;
+    const implementationReadiness = $('implementation-readiness').value;
     const errorSlot = $('lead-error');
     errorSlot.innerHTML = '';
+    if (Boolean(growthNeed) !== Boolean(implementationReadiness)) {
+      errorSlot.textContent = 'Please answer both next-step questions, or leave both blank.';
+      return;
+    }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
       errorSlot.innerHTML = '<div style="margin-top:10px;font-size:12px;color:#FCA5A5;">Please enter a valid work email.</div>';
       return;
     }
     $('lead-btn').disabled = true;
-    $('lead-btn').textContent = 'Unlocking…';
+    $('lead-btn').textContent = 'Submitting…';
     try {
       const res = await fetch('/api/widget/lead', {
         method: 'POST',
@@ -729,6 +813,8 @@
         body: JSON.stringify({
           diagnosticId: state.diagnosticId,
           email, company,
+          growthNeed: growthNeed || undefined,
+          implementationReadiness: implementationReadiness || undefined,
         }),
       });
       const data = await res.json();
@@ -739,23 +825,25 @@
       slot.classList.remove('hidden');
       slot.innerHTML = `
         <div class="unlock-panel">
-          <div class="unlock-label">Strength &middot; unlocked</div>
+          <div class="unlock-label">Possible strength &middot; inferred</div>
           <div class="unlock-title">${escapeHtml(data.unlocked.strengthUnlock.title)}</div>
           <div class="unlock-evidence">${escapeHtml(data.unlocked.strengthUnlock.evidence)}</div>
         </div>
         <div class="unlock-panel">
-          <div class="unlock-label" style="color:var(--rust); background:rgba(192,43,10,.08);">Weakness &middot; unlocked</div>
+          <div class="unlock-label" style="color:var(--rust); background:rgba(192,43,10,.08);">Possible constraint &middot; inferred</div>
           <div class="unlock-title">${escapeHtml(data.unlocked.weaknessUnlock.title)}</div>
           <div class="unlock-evidence">${escapeHtml(data.unlocked.weaknessUnlock.evidence)}</div>
         </div>
       `;
       $('lead-card').classList.add('hidden');
+      $('growth-need').disabled = true;
+      $('implementation-readiness').disabled = true;
       postHeight();
     } catch (err) {
       errorSlot.innerHTML = `<div style="margin-top:10px;font-size:12px;color:#FCA5A5;">${escapeHtml(err.message)}</div>`;
     } finally {
       $('lead-btn').disabled = false;
-      $('lead-btn').textContent = 'Unlock ›';
+      $('lead-btn').textContent = 'Send recap ›';
     }
   }
 
