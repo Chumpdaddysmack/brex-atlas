@@ -44,24 +44,6 @@
   }
   @media (max-width: 600px) { .widget { padding: 20px 16px 32px; } }
 
-  .brand-strip {
-    display: flex; align-items: center; justify-content: space-between;
-    padding-bottom: 18px;
-    margin-bottom: 24px;
-    border-bottom: 1px solid var(--border);
-  }
-  .brand-mark {
-    display: flex; align-items: center; gap: 10px;
-    font-weight: 700; letter-spacing: -0.01em; color: var(--navy-deep);
-  }
-  .brand-mark .logo-dot {
-    width: 22px; height: 22px; border-radius: 6px;
-    background: linear-gradient(135deg, var(--navy) 0%, var(--sky) 100%);
-    box-shadow: inset 0 -3px 8px rgba(0,0,0,.15);
-  }
-  .brand-mark span { font-size: 15px; }
-  .brand-tag { font-size: 12px; color: var(--text-muted); font-weight: 500; }
-
   /* ---------- Card ---------- */
   .card {
     background: var(--bg);
@@ -386,15 +368,6 @@
 </head>
 <body>
 <div class="widget" id="widget-root">
-
-  <!-- Brand strip -->
-  <div class="brand-strip">
-    <div class="brand-mark">
-      <div class="logo-dot"></div>
-      <span>Brex Atlas Excavator&trade;</span>
-    </div>
-    <div class="brand-tag">Live preview &middot; Big Rock Method&trade;</div>
-  </div>
 
   <!-- STEP 1: Intake form -->
   <div id="step-intake" class="card">
