@@ -10,6 +10,7 @@ import AnalysisPage from "@/pages/analysis";
 import History from "@/pages/history";
 import ContentStudio from "@/pages/content-studio";
 import Login from "@/pages/login";
+import { DemoModeProvider } from "@/components/DemoMode";
 
 type AuthStatus = { authenticated: boolean };
 
@@ -50,7 +51,7 @@ function AuthGate() {
 
   return (
     <Router hook={useHashLocation}>
-      <AppRouter />
+      <DemoModeProvider><AppRouter /></DemoModeProvider>
     </Router>
   );
 }

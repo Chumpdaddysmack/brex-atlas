@@ -3,9 +3,11 @@ import { Logo } from "./Logo";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { LogOut } from "lucide-react";
+import { useDemoMode } from "./DemoMode";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const { demo } = useDemoMode();
   const isHome = location === "/" || location === "";
 
   const logoutMutation = useMutation({
@@ -31,12 +33,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       <header className="border-b border-border bg-background/80 backdrop-blur sticky top-0 z-40">
         <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
-          <Link href="/" data-testid="link-home">
+          {demo ? <Logo className="h-6" /> : <Link href="/" data-testid="link-home">
             <a className="flex items-center">
               <Logo className="h-6" />
             </a>
-          </Link>
+          </Link>}
           <nav className="flex items-center gap-1 text-sm">
+            {demo && <span className="px-2 text-xs font-semibold text-primary">DEMO</span>}
+            {!demo && <>
             <Link href="/">
               <a
                 data-testid="link-nav-new"
@@ -53,6 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 History
               </a>
             </Link>
+            </>}
             <button
               type="button"
               onClick={() => logoutMutation.mutate()}

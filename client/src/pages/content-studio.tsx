@@ -47,6 +47,8 @@ import type { Analysis, ContentPlan, ContentPiece, ContentPlanPayload } from "@s
 import { useToast } from "@/hooks/use-toast";
 import { RoiPanel } from "@/components/RoiPanel";
 import { SitemapPanel } from "@/components/SitemapPanel";
+import { useDemoMode, DemoModeSwitch } from "@/components/DemoMode";
+import { DemoReport } from "@/components/DemoReport";
 
 const CHANNELS: { key: string; label: string; icon: any }[] = [
   { key: "blog", label: "Blog calendar", icon: FileText },
@@ -62,6 +64,7 @@ const CHANNELS: { key: string; label: string; icon: any }[] = [
 export default function ContentStudio() {
   const [, params] = useRoute("/analysis/:id/content");
   const analysisId = params?.id;
+  const { demo } = useDemoMode();
   const { toast } = useToast();
   const [activeChannel, setActiveChannel] = useState<string>("blog");
   const [selectedPiece, setSelectedPiece] = useState<ContentPiece | null>(null);
@@ -69,7 +72,7 @@ export default function ContentStudio() {
   const analysisQ = useQuery<Analysis>({
     queryKey: ["/api/analyses", analysisId],
     queryFn: async () => (await apiRequest("GET", `/api/analyses/${analysisId}`)).json(),
-    enabled: !!analysisId,
+    enabled: !!analysisId && !demo,
   });
 
   const planQ = useQuery<ContentPlan | null>({
@@ -79,7 +82,7 @@ export default function ContentStudio() {
       if (r.status === 404) return null;
       return r.json();
     },
-    enabled: !!analysisId,
+    enabled: !!analysisId && !demo,
     refetchInterval: (query) => {
       const d = query.state.data as ContentPlan | null | undefined;
       if (!d) return false;
@@ -100,7 +103,7 @@ export default function ContentStudio() {
     queryKey: ["/api/content-plans", planQ.data?.id, "pieces", activeChannel],
     queryFn: async () =>
       (await apiRequest("GET", `/api/content-plans/${planQ.data!.id}/pieces?channel=${activeChannel}`)).json(),
-    enabled: !!planQ.data?.id && planQ.data?.status === "ready",
+    enabled: !demo && !!planQ.data?.id && planQ.data?.status === "ready",
   });
 
   const planPayload: ContentPlanPayload | null = useMemo(() => {
@@ -199,6 +202,8 @@ export default function ContentStudio() {
     }
   };
 
+  if (demo && analysisId) return <DemoReport analysisId={analysisId} content />;
+
   if (!analysisQ.data) {
     return (
       <AppShell>
@@ -214,6 +219,7 @@ export default function ContentStudio() {
   return (
     <AppShell>
       <div className="max-w-6xl mx-auto py-10 px-4 space-y-8">
+        <div className="flex justify-end"><DemoModeSwitch /></div>
         <div>
           <Link href={`/analysis/${analysisId}`}>
             <Button variant="ghost" size="sm" data-testid="button-back-to-analysis">

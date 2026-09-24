@@ -52,6 +52,8 @@ import type {
 } from "@shared/schema";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useDemoMode, DemoModeSwitch } from "@/components/DemoMode";
+import { DemoReport } from "@/components/DemoReport";
 
 const STEPS = [
   { key: "extracting", label: "Website teardown", icon: ScanSearch, min: 0 },
@@ -186,6 +188,7 @@ class SectionErrorBoundary extends Component<
 export default function AnalysisPage() {
   const [, params] = useRoute("/analysis/:id");
   const id = params?.id;
+  const { demo } = useDemoMode();
   const { toast } = useToast();
 
   const q = useQuery<Analysis>({
@@ -194,7 +197,7 @@ export default function AnalysisPage() {
       const r = await apiRequest("GET", `/api/analyses/${id}`);
       return r.json();
     },
-    enabled: !!id,
+    enabled: !!id && !demo,
     refetchInterval: (query) => {
       const data = query.state.data as Analysis | undefined;
       if (!data) return 2000;
@@ -205,6 +208,7 @@ export default function AnalysisPage() {
   const analysis = q.data;
 
   if (!id) return null;
+  if (demo) return <DemoReport analysisId={id} />;
 
   if (q.isLoading && !analysis) {
     return (
@@ -272,6 +276,7 @@ export default function AnalysisPage() {
             </a>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <DemoModeSwitch />
             {analysis.industry && <Badge variant="secondary">{analysis.industry}</Badge>}
             {analysis.revenueBand && <Badge variant="secondary">{analysis.revenueBand}</Badge>}
             {analysis.budgetBand && <Badge variant="secondary">{analysis.budgetBand}</Badge>}

@@ -20,6 +20,7 @@ import { isPerplexityConfigured, pplxAsk } from "./perplexity-search";
 import { calculateRoiProjections, FALLBACK_ASSUMPTIONS, ROI_INFERENCE_SYSTEM_PROMPT } from "./roi-calc";
 import type { RoiAssumptions } from "@shared/schema";
 import type { ContentPlanPayload } from "@shared/schema";
+import { buildDemoReport } from "./demo-report";
 
 // Defensive parse for Customer Insights JSON — same pattern as PDF export uses
 // for SWOT/PESTEL. A corrupt row must not crash a whole export.
@@ -121,6 +122,14 @@ export async function registerRoutes(
   });
 
   // Poll status / full record
+  app.get("/api/analyses/:id/demo", async (req, res) => {
+    const row = await storage.getAnalysis(req.params.id);
+    if (!row) return res.status(404).json({ error: "Not found" });
+    const plan = await storage.getContentPlanByAnalysis(row.id);
+    res.setHeader("Cache-Control", "no-store");
+    res.json(buildDemoReport(row, plan ?? null));
+  });
+
   app.get("/api/analyses/:id", async (req, res) => {
     const row = await storage.getAnalysis(req.params.id);
     if (!row) return res.status(404).json({ error: "Not found" });
