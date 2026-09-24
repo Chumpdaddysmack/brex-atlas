@@ -26,6 +26,7 @@ import {
 } from "./widget-store";
 import { syncAtlasLeadToHubSpot } from "./hubspot";
 import { parseWidgetConsent, WIDGET_MARKETING_CONSENT } from "@shared/widget-consent";
+import { applySmallBusinessFit, WIDGET_SMALL_BUSINESS_FIT } from "@shared/widget-fit";
 
 // ---------- Public config (chip options + strategic copy) ----------
 
@@ -152,7 +153,7 @@ SCORING GUIDANCE:
 - Overall score distribution should center around 45-65 for typical prospects. Rare to score above 75.
 - verdict: <40 critical, 40-59 developing, 60-74 solid, 75+ top-quartile
 - fitTier logic:
-  * Under $1M revenue → 'not-a-fit' (below Brex ICP) UNLESS score is 75+ and goal is "Launch a new offer or category"
+  * Under $1M revenue → 'advisor' when overallScore ≥ ${WIDGET_SMALL_BUSINESS_FIT.minimumScore}; otherwise 'not-a-fit'. This applies to EVERY primary goal, with no launch-goal exception.
   * $1M–$5M → 'advisor' (score < 55) or 'strategist' (score ≥ 55)
   * $5M–$25M → 'strategist' (score < 60) or 'full-fractional' (score ≥ 60)
   * $25M+ → 'full-fractional'
@@ -259,7 +260,10 @@ Produce the inferred diagnostic JSON now.`;
   if (!toolUse || !toolUse.input) {
     throw new Error("Diagnostic LLM returned no tool_use block");
   }
-  return normalizeWidgetOutput(toolUse.input as WidgetOutput);
+  const output = normalizeWidgetOutput(toolUse.input as WidgetOutput);
+  // Do not leave the approved qualification cutoff to model interpretation.
+  output.fitTier = applySmallBusinessFit(input.revenueBand, output.overallScore, output.fitTier);
+  return output;
 }
 
 // Server-side consistency guarantees. The prompt already asks for these but a
@@ -422,6 +426,7 @@ export function registerWidgetRoutes(app: Express) {
       revenueBands: WIDGET_REVENUE_BANDS,
       goals: WIDGET_GOALS,
       marketingConsent: WIDGET_MARKETING_CONSENT,
+      smallBusinessFit: WIDGET_SMALL_BUSINESS_FIT,
     });
   });
 
