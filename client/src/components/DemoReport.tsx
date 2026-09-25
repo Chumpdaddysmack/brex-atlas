@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Eye, LockKeyhole, ArrowUpRight, Loader2 } from "lucide-react";
 import type { DemoGroup, DemoReport as DemoPayload } from "@shared/demo-report";
 import { ReportVisual } from "./ReportVisuals";
+import { CompanyIntroduction } from "./CompanyIntroduction";
 
 const groups: { key: DemoGroup; label: string }[] = [
   { key: "overview", label: "Overview" }, { key: "strategy", label: "Strategy & scope" },
@@ -52,6 +53,7 @@ export function DemoReport({ analysisId, content = false }: { analysisId: string
           {groups.map(g => <TabsTrigger key={g.key} value={g.key} data-testid={`demo-tab-${g.key}`}>{g.label}</TabsTrigger>)}
         </TabsList>
         {groups.map(g => <TabsContent key={g.key} value={g.key} className="mt-5 space-y-4">
+          {g.key === "overview" && <CompanyIntroduction profile={q.data.companyProfile} />}
           <p className="text-sm text-muted-foreground">Opening examples only. Additional findings and implementation detail are reserved for the full view.</p>
           {q.data.visuals && <div className="space-y-6">
             {g.key === "overview" && <><ReportVisual kind="positioning" data={q.data.visuals} /><ReportVisual kind="competitors" data={q.data.visuals} /></>}

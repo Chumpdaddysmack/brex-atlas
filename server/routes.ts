@@ -21,6 +21,7 @@ import { calculateRoiProjections, FALLBACK_ASSUMPTIONS, ROI_INFERENCE_SYSTEM_PRO
 import type { RoiAssumptions } from "@shared/schema";
 import type { ContentPlanPayload } from "@shared/schema";
 import { buildDemoReport } from "./demo-report";
+import { CompanyProfileError, researchAndSaveCompanyProfile } from "./company-profile";
 
 // Defensive parse for Customer Insights JSON — same pattern as PDF export uses
 // for SWOT/PESTEL. A corrupt row must not crash a whole export.
@@ -140,6 +141,17 @@ export async function registerRoutes(
   app.get("/api/analyses", async (_req, res) => {
     const rows = await storage.listAnalyses();
     res.json(rows);
+  });
+
+  // Update only the introduction, never rerun strategy/frameworks/content.
+  app.post("/api/analyses/:id/company-profile", async (req, res) => {
+    try {
+      res.json(await researchAndSaveCompanyProfile(req.params.id, storage));
+    } catch (err) {
+      if (err instanceof CompanyProfileError) return res.status(err.status).json({ error: err.message });
+      console.error("[company-profile]", err);
+      res.status(503).json({ error: "Could not complete source-backed company research. Your saved report is unchanged. Please try again." });
+    }
   });
 
   // Update the underlying assumptions blob for an analysis.

@@ -56,6 +56,7 @@ import { useDemoMode, DemoModeSwitch } from "@/components/DemoMode";
 import { DemoReport } from "@/components/DemoReport";
 import { ReportVisual, ReportDetails } from "@/components/ReportVisuals";
 import { buildReportVisuals } from "@shared/report-visuals";
+import { CompanyIntroduction } from "@/components/CompanyIntroduction";
 
 const STEPS = [
   { key: "extracting", label: "Website teardown", icon: ScanSearch, min: 0 },
@@ -326,6 +327,8 @@ export default function AnalysisPage() {
             </TabsList>
 
             <TabsContent value="overview" className="space-y-8 pt-6">
+              <CompanyIntroduction profile={safeParse<Extraction>(analysis.extraction)?.companyProfile}
+                analysisId={analysis.id} canResearch={isDone} />
               <ReportVisual kind="positioning" data={visuals} />
               <ReportDetails id="positioning" label="Read the full website and positioning analysis">
               <SectionErrorBoundary label="Website extraction">

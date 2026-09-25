@@ -38,7 +38,7 @@ export function isPerplexityConfigured(): boolean {
 export async function pplxAsk(
   question: string,
   options?: {
-    recency?: "month" | "week" | "day" | "year";
+    recency?: "month" | "week" | "day" | "year" | null;
     maxTokens?: number;
     systemPrompt?: string;
   },
@@ -62,7 +62,7 @@ export async function pplxAsk(
     max_tokens: options?.maxTokens ?? 1200,
     temperature: 0.2,
     return_citations: true,
-    search_recency_filter: options?.recency ?? "year",
+    ...(options?.recency === null ? {} : { search_recency_filter: options?.recency ?? "year" }),
   };
 
   // Retry once on 429 / 5xx / network error with backoff. Handles the parallel

@@ -84,6 +84,7 @@ export type Analysis = typeof analyses.$inferSelect;
 
 // Typed shapes for parsed result JSON (frontend-friendly)
 export type Extraction = {
+  companyProfile?: CompanyProfile;
   title: string;
   description: string;
   positioningStatement: string;
@@ -95,6 +96,19 @@ export type Extraction = {
   seoNotes: string;
   aeoReadinessScore: number; // 0-100
   aeoReadinessNotes: string;
+};
+
+export type CompanyFactKey = "business" | "founded" | "industry" | "expertise" | "ownership" | "annualRevenue" | "employees" | "locations" | "marketingStrategy";
+export type CompanyFact = {
+  key: CompanyFactKey;
+  sentence: string;
+  status: "reported" | "estimate" | "observed";
+  sources: { title: string; url: string; date?: string }[];
+};
+export type CompanyProfile = {
+  version: 1;
+  researchedAt: string;
+  facts: CompanyFact[];
 };
 
 export type Competitor = {

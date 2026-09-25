@@ -5,6 +5,7 @@ import { generatePestel } from "./pestel";
 import { generatePorters } from "./porters";
 import { generateCustomerInsights } from "./customer-insights";
 import { injectRationale } from "./rationale";
+import { generateCompanyProfile } from "./company-profile";
 import type { SwotAnalysis, PestelAnalysis, PortersFiveForces, CustomerInsights, Strategy, SOW, Extraction, Competitor, Assumptions } from "@shared/schema";
 
 // Format the assumptions blob into a bracketed prompt block. Empty/null yields "".
@@ -163,6 +164,14 @@ export async function runPipeline(id: string) {
       });
       if (refill?.valueProps && vpMissing) (extraction as any).valueProps = refill.valueProps;
       if (refill?.evidenceElements && evMissing) (extraction as any).evidenceElements = refill.evidenceElements;
+    }
+
+    await storage.updateAnalysis(id, { currentStep: "Researching company introduction" });
+    try {
+      extraction.companyProfile = await generateCompanyProfile(record);
+    } catch (err) {
+      // The core report must remain available when optional company research fails.
+      console.warn("[company-profile] skipped:", err instanceof Error ? err.message : "Research unavailable");
     }
 
     await storage.updateAnalysis(id, {

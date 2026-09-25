@@ -1,6 +1,7 @@
 import type { Analysis, ContentPlan } from "@shared/schema";
 import type { DemoGroup, DemoItem, DemoReport, DemoSection } from "@shared/demo-report";
 import { buildReportVisuals } from "@shared/report-visuals";
+import { readCompanyProfile } from "@shared/company-profile";
 
 // Explicit allowlist: never return the original JSON blobs, internal notes,
 // full calendars, draft copy, price tiers, or modelled financial outcomes.
@@ -117,6 +118,7 @@ export function buildDemoReport(analysis: Analysis, plan: ContentPlan | null): D
   add("roi", "content", "ROI assumptions", [item("Deal-size rationale", p?.roiProjections?.assumptions?.rationale?.dealSize)],
     "The full assumptions, scenario model, sensitivity analysis, and financial projections. Estimates are not guaranteed results.");
   return { mode: "demo", version: 1, id: analysis.id, clientName: analysis.clientName,
+    ...(readCompanyProfile(e?.companyProfile) ? { companyProfile: readCompanyProfile(e?.companyProfile)! } : {}),
     clientUrl: analysis.clientUrl, status: analysis.status, sections,
     visuals: buildReportVisuals({ clientName: analysis.clientName, extraction: e, strategy: s,
       competitors, swot, customerInsights: ci }, true) };
