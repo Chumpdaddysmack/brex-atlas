@@ -6,6 +6,7 @@ import { generatePorters } from "./porters";
 import { generateCustomerInsights } from "./customer-insights";
 import { injectRationale } from "./rationale";
 import { generateCompanyProfile } from "./company-profile";
+import { ENGAGEMENT_PROMPT, currentOfferSow } from "@shared/engagement-terms";
 import type { SwotAnalysis, PestelAnalysis, PortersFiveForces, CustomerInsights, Strategy, SOW, Extraction, Competitor, Assumptions } from "@shared/schema";
 
 // Format the assumptions blob into a bracketed prompt block. Empty/null yields "".
@@ -217,12 +218,12 @@ export async function runPipeline(id: string) {
     });
 
     // Stage 4: Scope of Work — tier preference from assumptions steers tier recommendation
-    const sow = await llmJson(
+    const sow = currentOfferSow(await llmJson(
       SYS_SOW,
       `Client: ${record.clientName}\nBudget band: ${record.budgetBand ?? "(not specified)"}\nRevenue band: ${record.revenueBand ?? "(not specified)"}${assumptionsBlock}\n\nSTRATEGY:\n${JSON.stringify(strategy).slice(0, 6000)}`,
       10000,
       SCHEMA_SOW,
-    );
+    ));
 
     await storage.updateAnalysis(id, {
       progress: 90,
@@ -351,7 +352,7 @@ export async function runPipeline(id: string) {
       currentStep: finalStep,
       status: "done",
       strategy: JSON.stringify(withRationale.strategy),
-      sow: JSON.stringify(withRationale.sow),
+      sow: JSON.stringify(currentOfferSow(withRationale.sow)),
       swot: swotResult ? JSON.stringify(swotResult) : null,
       pestel: pestelResult ? JSON.stringify(pestelResult) : null,
       porters: portersResult ? JSON.stringify(portersResult) : null,
@@ -416,6 +417,10 @@ Rules:
 
 const SYS_STRATEGY = `You are Kenneth Peavy, Senior Fractional CMO at Brex Consulting. You apply the Big Rock Method: pick a small number of high-leverage moves and execute them relentlessly. Given a client's extraction and competitor set, produce a strategy.
 
+BREX ENGAGEMENT FRAME:
+${ENGAGEMENT_PROMPT}
+Keep ninetyDayPlan at three detailed on-ramp phases covering weeks 1-4, 5-8, and 9-12. These are foundation, launch/testing, and initial optimization within quarter one, not completion of the full annual program.
+
 Return ONLY valid JSON:
 {
   "icp": {
@@ -438,19 +443,24 @@ Return ONLY valid JSON:
   "quickWins": ["string", ...],   // 5 things that could be shipped in the next 30 days
   "ninetyDayPlan": [
     { "phase": "Foundation", "weeks": "Weeks 1-4", "focus": "string", "outcomes": ["string", ...] },
-    { "phase": "Acceleration", "weeks": "Weeks 5-8", "focus": "string", "outcomes": ["string", ...] },
-    { "phase": "Scale", "weeks": "Weeks 9-12", "focus": "string", "outcomes": ["string", ...] }
+    { "phase": "Launch & Test", "weeks": "Weeks 5-8", "focus": "string", "outcomes": ["string", ...] },
+    { "phase": "Initial Optimization", "weeks": "Weeks 9-12", "focus": "string", "outcomes": ["string", ...] }
   ]
 }`;
 
 const SYS_SOW = `You are Kenneth Peavy at Brex Consulting building a professional Scope of Work. It must feel like a real fractional CMO engagement — modular, priced in tiers, with clear phase deliverables.
 
+MANDATORY ENGAGEMENT FRAME:
+${ENGAGEMENT_PROMPT}
+Write four quarterly SOW phases spanning the full 12 months: Q1 On-ramp (Months 1-3), Q2 Optimize (Months 4-6), Q3 Scale (Months 7-9), Q4 Consolidate and plan ahead (Months 10-12).
+Tailor deliverables to the client and budget. Keep weeks as the existing field name but use the month ranges above as its values. Do not compress the annual SOW into 12 weeks.
+
 Return ONLY valid JSON:
 {
   "engagementSummary": "string — 3-5 sentence executive summary of the engagement",
   "phases": [
-    { "name": "string", "weeks": "e.g. Weeks 1-4", "deliverables": ["string", ...], "outcomes": ["string", ...] }
-    // 3-4 phases
+    { "name": "Q1 On-ramp", "weeks": "Months 1-3", "deliverables": ["string", ...], "outcomes": ["string", ...] }
+    // exactly 4 quarterly phases, ending with Q4 Months 10-12
   ],
   "team": ["Senior Fractional CMO (Kenneth Peavy) — 10 hrs/wk", "..."],   // 3-5 team roles with hours
   "priceTiers": [
@@ -458,7 +468,7 @@ Return ONLY valid JSON:
     { "name": "Growth", "monthly": "$X,XXX/mo", "inclusions": ["string", ...], "bestFor": "string" },
     { "name": "Scale", "monthly": "$X,XXX/mo", "inclusions": ["string", ...], "bestFor": "string" }
   ],
-  "termsNotes": ["3-month minimum engagement", "Monthly retainer, invoiced in advance", "..."]
+  "termsNotes": ["12-month growth engagement with an initial six-month commitment", "The 90-day roadmap is the on-ramp quarter", "Results and timing are not guaranteed", "Monthly retainer, invoiced in advance"]
 }
 
 Pricing guidance for a US mid-market fractional CMO engagement:

@@ -2,6 +2,7 @@ import type { Analysis, ContentPlan } from "@shared/schema";
 import type { DemoGroup, DemoItem, DemoReport, DemoSection } from "@shared/demo-report";
 import { buildReportVisuals } from "@shared/report-visuals";
 import { readCompanyProfile } from "@shared/company-profile";
+import { ENGAGEMENT, currentOfferText } from "@shared/engagement-terms";
 
 // Explicit allowlist: never return the original JSON blobs, internal notes,
 // full calendars, draft copy, price tiers, or modelled financial outcomes.
@@ -65,9 +66,9 @@ export function buildDemoReport(analysis: Analysis, plan: ContentPlan | null): D
   add("quick-win", "strategy", "First practical move", [item("One quick win", first(s?.quickWins))],
     "The remaining quick wins and detailed implementation sequence.");
   const phase = first(s?.ninetyDayPlan);
-  add("roadmap", "strategy", "90-day roadmap", [item(text(phase.phase) || "Opening priority", phase.focus)],
-    "The complete phased roadmap, outcomes, and strategic rationale.");
-  add("scope", "strategy", "Scope of work", [item("Engagement overview", sow?.engagementSummary)],
+  add("roadmap", "strategy", ENGAGEMENT.onRampTitle, [item(text(phase.phase) || "Opening priority", phase.focus)],
+    `The complete on-ramp roadmap, outcomes, and strategic rationale. ${ENGAGEMENT.onRamp}`);
+  add("scope", "strategy", "Scope of work", [item("Engagement overview", currentOfferText(text(sow?.engagementSummary)))],
     "Detailed phases, team, deliverables, pricing, and terms.");
   add("swot", "frameworks", "SWOT", ["strengths", "weaknesses", "opportunities", "threats"].map(key => {
     const value = first(swot?.[key]);
@@ -90,7 +91,7 @@ export function buildDemoReport(analysis: Analysis, plan: ContentPlan | null): D
   const objection = first(ci?.objections);
   add("buyer-objection", "buyer", "Objections and the buying journey", [item(text(objection.objection), objection.underlyingFear)],
     "Reframes, proof assets, decision roles, and the full buyer journey.");
-  add("thesis", "content", "12-week content strategy", [item("Strategic thesis", p?.summary)],
+  add("thesis", "content", "On-ramp quarter | 12-week content strategy", [item("Strategic thesis", p?.summary)],
     "The complete content-pillar system and cross-channel plan.");
   const post = first(first(p?.blogCalendar).posts);
   add("blog", "content", "Publishing calendar", [item(text(post.title), post.angle || post.targetQuery)],

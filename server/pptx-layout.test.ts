@@ -5,6 +5,7 @@ import { compatiblePptx } from "./pptx-package";
 import JSZip from "jszip";
 import { createContentPlanDeck } from "./pptx-export";
 import type { ContentPlanPayload } from "@shared/schema";
+import { ENGAGEMENT } from "@shared/engagement-terms";
 
 function check(d: DeckLayout) {
   for (const [i, a] of d.regions.entries()) {
@@ -110,5 +111,9 @@ test("the complete exporter handles absent optional sections without changing re
     assert.equal(JSON.stringify(payload), before);
     for (let i = 1; i <= 7; i++) assert.ok(d.regions.some(r => r.text === `Content Pillar ${i}`));
     assert.ok(!d.regions.some(r => r.text === "Customer Insights"));
+    const text = d.regions.map(r => r.text).join(" ").replace(/\s+/g, " ");
+    for (const required of [ENGAGEMENT.term, ENGAGEMENT.onRamp, ENGAGEMENT.caveat]) {
+      assert.ok(text.includes(required), `Missing engagement framing: ${required}`);
+    }
   } finally { globalThis.fetch = prior; }
 });

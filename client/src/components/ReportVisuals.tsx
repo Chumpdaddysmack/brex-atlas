@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { ArrowRight, ChevronDown, LockKeyhole, Route, Target, Users, Layers, GitCompareArrows } from "lucide-react";
 import type { ReportVisuals as VisualData } from "@shared/report-visuals";
 import "./report-visuals.css";
+import { ENGAGEMENT } from "@shared/engagement-terms";
 
 type VisualKind = "positioning" | "competitors" | "swot" | "journey" | "roadmap";
 const titles = {
@@ -9,14 +10,14 @@ const titles = {
   competitors: ["COMPETITIVE COMPARISON", "See your business beside the alternatives", GitCompareArrows],
   swot: ["SWOT", "Four lenses. A clearer set of choices.", Layers],
   journey: ["BUYER JOURNEY", "Follow the questions behind the purchase", Users],
-  roadmap: ["90-DAY ROADMAP", "Turn the strategy into a sequence", Route],
+  roadmap: ["90-DAY ROADMAP", "The on-ramp quarter", Route],
 } as const;
 const captions = {
   positioning: "Follow the connected steps. Select one to explore the saved finding.",
   competitors: "A qualitative comparison of the saved analysis, not a score or market ranking.",
   swot: "Internal factors above. External factors below. Open a finding to see its evidence.",
   journey: "A proposed buyer journey, not observed customer behavior. Select a stage to explore it.",
-  roadmap: "A proposed sequence, not measured progress. Select a phase to see its focus.",
+  roadmap: `${ENGAGEMENT.onRamp} A proposed sequence, not measured progress. Select a phase to see its focus.`,
 };
 function Values({ values }: { values: string[] }) {
   return values.length ? <ul className="rv-values">{values.map((v, i) => <li key={i}>{v}</li>)}</ul>

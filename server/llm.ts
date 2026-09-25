@@ -340,7 +340,7 @@ export const SCHEMA_SOW = {
   ],
   properties: {
     engagementSummary: { type: "string" },
-    phases: { type: "array", minItems: 1 },
+    phases: { type: "array", minItems: 4, maxItems: 4 },
     team: { type: "array", items: { type: "string" } },
     priceTiers: { type: "array", minItems: 1 },
     termsNotes: { type: "array", items: { type: "string" } },

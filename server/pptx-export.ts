@@ -6,6 +6,7 @@ import { fetchProspectLogo } from "./logo-fetch";
 import { BREX_TIERS, BREX_LINE_ITEMS, BREX_BLENDED_HOURLY, computeSavings } from "@shared/brex-pricing";
 import { PRICING_BENCHMARKS, BENCHMARK_SOURCES, formatMoney } from "./pricing-benchmarks";
 import { compatiblePptx } from "./pptx-package";
+import { ENGAGEMENT } from "@shared/engagement-terms";
 
 export interface PptxExportArgs {
   payload: ContentPlanPayload;
@@ -47,7 +48,7 @@ async function cover(d: DeckLayout, args: PptxExportArgs) {
   } else {
     d.text(s, "Client strategy briefing", .6, 2, 8.8, 34, true, C.white);
   }
-  d.text(s, "12-week content strategy", .6, 4.02, 8.8, 18, false, C.white);
+  d.text(s, "On-ramp quarter | 12-week content strategy", .6, 4.02, 8.8, 18, false, C.white);
   if (textHeight(args.clientUrl, 8.8, 11) <= .34) d.text(s, args.clientUrl, .6, 4.37, 8.8, 11, false, C.white, args.clientUrl);
   d.text(s, `Prepared by Brex Consulting · ${(args.generatedAt ?? new Date()).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, .6, 4.8, 8.8, 11, false, C.white);
   if (textHeight(args.clientName, 8.8, size, true) > 1.9) d.section("Prepared for", [field("Client", args.clientName)]);
@@ -228,6 +229,12 @@ function roi(d: DeckLayout, p: ContentPlanPayload) {
 export async function createContentPlanDeck(args: PptxExportArgs): Promise<DeckLayout> {
   const d = new DeckLayout(args.clientName);
   await cover(d, args);
+  d.section("12-Month Growth Engagement", [
+    field("Engagement structure", ENGAGEMENT.term),
+    field("Why six months", `${ENGAGEMENT.commitment} ${ENGAGEMENT.caveat}`),
+    field("The on-ramp quarter", ENGAGEMENT.onRamp),
+    field("Beyond the on-ramp", ENGAGEMENT.continuation),
+  ]);
   program(d, args.payload);
   frameworks(d, args);
   customers(d, args.customerInsights);

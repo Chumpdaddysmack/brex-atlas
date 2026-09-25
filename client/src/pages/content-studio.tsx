@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { EngagementTerms } from "@/components/EngagementTerms";
+import { ENGAGEMENT, ENGAGEMENT_TERMS } from "@shared/engagement-terms";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AppShell } from "@/components/AppShell";
 import { Card } from "@/components/ui/card";
@@ -242,7 +244,7 @@ export default function ContentStudio() {
               </p>
             </div>
             {plan?.status === "ready" && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" onClick={copyFullPlan} data-testid="button-copy-full-plan">
                   <Copy className="h-4 w-4 mr-2" /> Copy full plan
                 </Button>
@@ -362,9 +364,10 @@ export default function ContentStudio() {
         {/* Ready */}
         {plan && plan.status === "ready" && planPayload && (
           <>
+            <EngagementTerms />
             <Card className="p-6">
               <div className="font-mono text-xs uppercase tracking-widest text-muted-foreground mb-2">
-                12-week thesis
+                On-ramp quarter · 12-week thesis
               </div>
               <p className="text-lg leading-relaxed">{planPayload.summary}</p>
               <div className="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -966,7 +969,8 @@ function renderChannelMarkdown(channel: string, pieces: ContentPiece[], _payload
 function renderFullPlanMarkdown(payload: ContentPlanPayload, clientName: string): string {
   const lines: string[] = [];
   lines.push(`# ${clientName} — 12-week content strategy plan\n`);
-  lines.push(`## Thesis\n${payload.summary}\n`);
+  lines.push(`## ${ENGAGEMENT.title}\n${ENGAGEMENT_TERMS.join("\n\n")}\n\n${ENGAGEMENT.continuation}\n`);
+  lines.push(`## On-ramp quarter thesis\n${payload.summary}\n`);
   lines.push(`## Content pillars`);
   for (const p of payload.contentPillars ?? []) lines.push(`- **${p.name}** — ${p.description}`);
   lines.push("");

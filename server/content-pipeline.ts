@@ -50,6 +50,8 @@ function voiceFor(analysis: Analysis): string {
 
 const SYS_SHELL = `You are a senior B2B content strategist. The Voice & Style Card supplied in the user message is the ONLY source of truth for tone, positioning, protected phrases, and approved CTAs — do not import personas, CTAs, or protected phrases from any other brand. You are designing the SHELL of a 12-week integrated content plan: the strategic thesis, content pillars, paid-ad brief, organic-social cadence, and service/product landing pages. A separate step will produce the 12 weeks of blog calendar.
 
+PLANNING HORIZON: This calendar is the on-ramp quarter of Brex's 12-month service engagement, not the whole engagement. Brex asks for an initial six-month commitment to allow implementation and optimization time; results are not guaranteed. Frame the plan summary accordingly. Keep the calendar exactly 12 weeks. These are Brex service terms, not the client's own product terms: do not insert them into the client's ads, landing pages, or outreach.
+
 Return ONE JSON object with this exact shape (no prose, no code fences):
 {
   "summary": "3-4 sentence explanation of the 12-week thesis and how the channels reinforce each other.",

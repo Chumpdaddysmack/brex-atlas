@@ -57,11 +57,13 @@ import { DemoReport } from "@/components/DemoReport";
 import { ReportVisual, ReportDetails } from "@/components/ReportVisuals";
 import { buildReportVisuals } from "@shared/report-visuals";
 import { CompanyIntroduction } from "@/components/CompanyIntroduction";
+import { EngagementTerms } from "@/components/EngagementTerms";
+import { ENGAGEMENT, ENGAGEMENT_TERMS, currentOfferSow } from "@shared/engagement-terms";
 
 const STEPS = [
   { key: "extracting", label: "Website teardown", icon: ScanSearch, min: 0 },
   { key: "competitors", label: "Competitor set", icon: Target, min: 35 },
-  { key: "strategy", label: "Strategy & 90-day plan", icon: Lightbulb, min: 60 },
+  { key: "strategy", label: "Strategy & on-ramp quarter", icon: Lightbulb, min: 60 },
   { key: "sow", label: "Scope of work", icon: FileText, min: 85 },
   { key: "frameworks", label: "Strategic frameworks", icon: Sparkles, min: 90 },
 ];
@@ -691,7 +693,7 @@ function StrategySection({ strategy }: { strategy: Strategy }) {
         index="03"
         eyebrow="Strategy"
         title="The recommended play"
-        description="ICP, positioning gaps, messaging shifts, content pillars, channel mix, and a 90-day plan."
+        description="ICP, positioning gaps, messaging shifts, content pillars, channel mix, and the 90-day on-ramp to a 12-month engagement."
       />
 
       <div className="grid lg:grid-cols-3 gap-4">
@@ -836,7 +838,8 @@ function StrategySection({ strategy }: { strategy: Strategy }) {
 
       {/* 90-day plan */}
       <div className="mt-4">
-        <div className="text-xs font-mono text-muted-foreground mb-2">90-DAY PLAN</div>
+        <div className="text-xs font-mono text-muted-foreground mb-2">{ENGAGEMENT.onRampTitle}</div>
+        <p className="text-sm text-muted-foreground mb-4">{ENGAGEMENT.onRamp}</p>
         <div className="grid md:grid-cols-3 gap-4">
           {strategy.ninetyDayPlan?.map((phase, i) => (
             <Card key={i} className="p-5">
@@ -890,15 +893,17 @@ function RationaleBlock({ rationale }: { rationale: StrategicRationale }) {
 // -------- SOW --------
 
 function SOWSection({ sow, clientName }: { sow: SOW; clientName: string }) {
+  sow = currentOfferSow(sow);
   return (
     <section>
       <SectionHeader
         index="04"
         eyebrow="Scope of work"
         title="Priced engagement — ready to send"
-        description={`A modular fractional CMO SOW for ${clientName}. Three tiers, phase deliverables, team, and terms.`}
+        description={`A 12-month fractional CMO engagement for ${clientName}, with an initial six-month commitment.`}
       />
 
+      <EngagementTerms />
       <Card className="p-6 mb-4">
         <div className="text-xs font-mono text-muted-foreground mb-2">EXECUTIVE SUMMARY</div>
         <p className="text-sm leading-relaxed">{sow.engagementSummary}</p>
@@ -951,6 +956,7 @@ function SOWSection({ sow, clientName }: { sow: SOW; clientName: string }) {
       {/* Phases */}
       <div className="mb-6">
         <div className="text-xs font-mono text-muted-foreground mb-2">ENGAGEMENT PHASES</div>
+        <p className="text-sm text-muted-foreground mb-4">Saved delivery phases below. Any 90-day plan is the on-ramp quarter; subsequent quarterly plans build on performance and agreed priorities.</p>
         <div className="grid md:grid-cols-2 gap-4">
           {sow.phases?.map((p, i) => (
             <Card key={i} className="p-5">
@@ -1035,7 +1041,7 @@ function renderMarkdown(a: Analysis): string {
   const ext = a.extraction ? (JSON.parse(a.extraction) as Extraction) : null;
   const comps = a.competitors ? (JSON.parse(a.competitors) as Competitor[]) : null;
   const strat = a.strategy ? (JSON.parse(a.strategy) as Strategy) : null;
-  const sow = a.sow ? (JSON.parse(a.sow) as SOW) : null;
+  const sow = a.sow ? currentOfferSow(JSON.parse(a.sow) as SOW) : null;
 
   if (ext) {
     parts.push(`## 01 · Website teardown`);
@@ -1069,7 +1075,8 @@ function renderMarkdown(a: Analysis): string {
     parts.push(`**Quick wins (30d):**\n${strat.quickWins.map((v) => `- ${v}`).join("\n")}`);
     parts.push(`**Channel mix:**`);
     strat.channelMix.forEach((c) => parts.push(`- **${c.channel}** (${c.priority}) — ${c.role}`));
-    parts.push(`**90-day plan:**`);
+    parts.push(`### ${ENGAGEMENT.onRampTitle}`);
+    parts.push(ENGAGEMENT.onRamp);
     strat.ninetyDayPlan.forEach((p) => {
       parts.push(`- **${p.phase} (${p.weeks})** — ${p.focus}`);
       p.outcomes.forEach((o) => parts.push(`  - ${o}`));
@@ -1079,6 +1086,7 @@ function renderMarkdown(a: Analysis): string {
 
   if (sow) {
     parts.push(`## 04 · Scope of work`);
+    parts.push(ENGAGEMENT_TERMS.join("\n\n"), ENGAGEMENT.continuation);
     parts.push(sow.engagementSummary);
     parts.push(`### Price tiers`);
     sow.priceTiers.forEach((t) => {

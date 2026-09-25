@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { ENGAGEMENT } from "@shared/engagement-terms";
 import type {
   ContentPlanPayload,
   SwotAnalysis,
@@ -112,6 +113,13 @@ export function streamContentPlanPdf({
   try {
     // -------- Cover page --------
     renderCover(doc, clientName, clientUrl ?? null, scope);
+
+    sectionHeader(doc, "12-Month Engagement | On-Ramp Quarter");
+    bodyParagraph(doc, ENGAGEMENT.term);
+    bodyParagraph(doc, ENGAGEMENT.commitment);
+    bodyParagraph(doc, ENGAGEMENT.onRamp);
+    bodyParagraph(doc, ENGAGEMENT.continuation);
+    bodyParagraph(doc, ENGAGEMENT.caveat);
 
     // -------- Content by scope --------
     if (scope === "summary") {
