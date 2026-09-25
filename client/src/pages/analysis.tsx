@@ -59,6 +59,7 @@ import { buildReportVisuals } from "@shared/report-visuals";
 import { CompanyIntroduction } from "@/components/CompanyIntroduction";
 import { EngagementTerms } from "@/components/EngagementTerms";
 import { ENGAGEMENT, ENGAGEMENT_TERMS, currentOfferSow } from "@shared/engagement-terms";
+import { PACKAGE_SCOPE_NOTE, packageMonthlyLabel, packageRange, packageSavingsRange } from "@shared/service-packages";
 
 const STEPS = [
   { key: "extracting", label: "Website teardown", icon: ScanSearch, min: 0 },
@@ -899,7 +900,7 @@ function SOWSection({ sow, clientName }: { sow: SOW; clientName: string }) {
       <SectionHeader
         index="04"
         eyebrow="Scope of work"
-        title="Priced engagement — ready to send"
+        title="Brex service packages"
         description={`A 12-month fractional CMO engagement for ${clientName}, with an initial six-month commitment.`}
       />
 
@@ -910,9 +911,10 @@ function SOWSection({ sow, clientName }: { sow: SOW; clientName: string }) {
       </Card>
 
       {/* Price tiers */}
+      <p className="text-sm text-muted-foreground mb-5" data-testid="package-scope-note">{PACKAGE_SCOPE_NOTE} Confirm package fit and final scope before sending a proposal.</p>
       <div className="grid md:grid-cols-3 gap-4 mb-6">
         {sow.priceTiers?.map((tier, i) => {
-          const featured = i === 1;
+          const featured = BREX_TIERS[i]?.key === sow.recommendedTier;
           return (
             <Card
               key={i}
@@ -925,14 +927,14 @@ function SOWSection({ sow, clientName }: { sow: SOW; clientName: string }) {
             >
               {featured && (
                 <Badge className="absolute -top-2 right-4" variant="default">
-                  Recommended
+                  Suggested · review required
                 </Badge>
               )}
               <div className="text-xs font-mono text-muted-foreground mb-1">
                 TIER 0{i + 1}
               </div>
               <div className="font-serif text-xl mb-1">{tier.name}</div>
-              <div className="font-serif text-3xl text-accent mb-3">{tier.monthly}</div>
+              <div className="font-serif text-xl text-accent mb-3">{tier.monthly}</div>
               <div className="text-xs text-muted-foreground mb-4">
                 Best for: {tier.bestFor}
               </div>
@@ -1119,17 +1121,19 @@ function BrexVsMarketMatrix() {
       </div>
 
       {/* Tier comparison table */}
-      <Card className="p-0 overflow-hidden mb-4">
+      <p className="text-sm text-muted-foreground mb-3">{PACKAGE_SCOPE_NOTE}</p>
+      <div className="overflow-x-auto mb-4">
+      <Card className="p-0 overflow-hidden min-w-[760px]">
         <div className="bg-primary/95 text-primary-foreground grid grid-cols-12 gap-2 px-4 py-3 text-xs font-mono uppercase tracking-wider">
           <div className="col-span-3">Brex Tier</div>
           <div className="col-span-2">Brex Price</div>
           <div className="col-span-3">Industry Mid-Market</div>
           <div className="col-span-2">vs Industry Mid</div>
-          <div className="col-span-2">Bundle Savings</div>
+          <div className="col-span-2">Final Fee</div>
         </div>
         {BREX_TIERS.map((tier, idx) => {
           const industryMid = (tier.industryLow + tier.industryHigh) / 2;
-          const vsMid = computeSavings(tier.monthly, industryMid);
+          const vsMid = packageSavingsRange(tier, industryMid);
           return (
             <div
               key={tier.key}
@@ -1145,8 +1149,8 @@ function BrexVsMarketMatrix() {
                 </div>
               </div>
               <div className="col-span-2">
-                <div className="font-serif text-2xl text-accent">
-                  ${tier.monthly.toLocaleString()}
+                <div className="font-semibold text-sm text-accent">
+                  {packageRange(tier)}
                 </div>
                 <div className="text-xs text-muted-foreground">per month</div>
               </div>
@@ -1161,32 +1165,30 @@ function BrexVsMarketMatrix() {
               </div>
               <div className="col-span-2">
                 <div
-                  className={`font-serif text-2xl ${
-                    vsMid.deltaPct >= 0 ? "text-emerald-600" : "text-red-600"
-                  }`}
+                  className="font-semibold text-sm"
                 >
-                  {vsMid.label}
+                  {vsMid}
                 </div>
                 <div className="text-xs text-muted-foreground">vs mid</div>
               </div>
               <div className="col-span-2">
-                <div className="font-semibold text-teal-700">
-                  −{tier.discountPct}%
-                </div>
+                <div className="font-semibold">Scope-based</div>
                 <div className="text-xs text-muted-foreground">
-                  vs ${tier.aLaCarteMonthly.toLocaleString()} à la carte
+                  Confirmed in proposal
                 </div>
               </div>
             </div>
           );
         })}
       </Card>
+      </div>
 
       {/* Per-service line items */}
       <div className="text-xs font-mono text-muted-foreground mb-2">
         TACTICAL CMO LINE ITEMS · ${BREX_BLENDED_HOURLY}/HR BLENDED SENIOR RATE
       </div>
-      <Card className="p-0 overflow-hidden">
+      <div className="overflow-x-auto">
+      <Card className="p-0 overflow-hidden min-w-[760px]">
         <div className="bg-primary/95 text-primary-foreground grid grid-cols-12 gap-2 px-4 py-2 text-xs font-mono uppercase tracking-wider">
           <div className="col-span-4">Service</div>
           <div className="col-span-2">Brex</div>
@@ -1238,9 +1240,9 @@ function BrexVsMarketMatrix() {
         })}
       </Card>
 
+      </div>
       <p className="text-xs text-muted-foreground italic mt-3">
-        Bundle discounts (17% Advisor, 24% Strategist, 32% Fractional) reflect
-        commitment and utilization efficiency. Industry ranges compiled from 2026
+        Brex ranges are scope-based, not a guaranteed discount. Industry ranges compiled from 2026
         pricing surveys: Treetop Fractional Executive Report, MarkCMO, Averi,
         Pitchkitchen, O-CMO, RankedCMO, Digital Applied, Windmill Growth,
         Remarkable Agency, and Troo Inbound. Full citations in the exported
@@ -1833,9 +1835,7 @@ function AssumptionsDialog({ analysis }: { analysis: Analysis }) {
             <Select value={form.preferredTier} onValueChange={(v) => setForm({ ...form, preferredTier: v })}>
               <SelectTrigger data-testid="dialog-assumption-tier"><SelectValue placeholder="No preference" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="advisor">Advisor — 17% discount</SelectItem>
-                <SelectItem value="strategist">Strategist — 24% discount</SelectItem>
-                <SelectItem value="fractional">Fractional — 32% discount</SelectItem>
+                {BREX_TIERS.map(t => <SelectItem key={t.key} value={t.key}>{t.name} · {packageMonthlyLabel(t)}</SelectItem>)}
                 <SelectItem value="unknown">Not sure yet</SelectItem>
               </SelectContent>
             </Select>

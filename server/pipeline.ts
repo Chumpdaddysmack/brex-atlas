@@ -7,6 +7,7 @@ import { generateCustomerInsights } from "./customer-insights";
 import { injectRationale } from "./rationale";
 import { generateCompanyProfile } from "./company-profile";
 import { ENGAGEMENT_PROMPT, currentOfferSow } from "@shared/engagement-terms";
+import { PACKAGE_PROMPT, PRICING_VERSION, packageFor } from "@shared/service-packages";
 import type { SwotAnalysis, PestelAnalysis, PortersFiveForces, CustomerInsights, Strategy, SOW, Extraction, Competitor, Assumptions } from "@shared/schema";
 
 // Format the assumptions blob into a bracketed prompt block. Empty/null yields "".
@@ -27,7 +28,7 @@ function formatAssumptions(raw: unknown): string {
   if (a.grossMarginPct != null) rows.push(`- Gross margin: ${a.grossMarginPct}%`);
   if (a.revenueGrowthTargetPct != null) rows.push(`- Revenue growth target (next 12 mo): ${a.revenueGrowthTargetPct}%`);
   if (a.topCompetitors) rows.push(`- Top competitors named by client: ${a.topCompetitors}`);
-  if (a.preferredTier && a.preferredTier !== "unknown") rows.push(`- Client's preferred engagement tier: ${a.preferredTier} (Advisor=17% / Strategist=24% / Fractional=32% bundle discount)`);
+  if (packageFor(a.preferredTier)) rows.push(`- Client's preferred engagement tier: ${packageFor(a.preferredTier)!.name}`);
   if (rows.length === 0) return "";
   return `\n\n=== CLIENT-PROVIDED ASSUMPTIONS (ground your ROI math, growth targets, and tier recommendations in these) ===\n${rows.join("\n")}\n`;
 }
@@ -218,12 +219,12 @@ export async function runPipeline(id: string) {
     });
 
     // Stage 4: Scope of Work — tier preference from assumptions steers tier recommendation
-    const sow = currentOfferSow(await llmJson(
+    const sow = currentOfferSow({ ...await llmJson(
       SYS_SOW,
       `Client: ${record.clientName}\nBudget band: ${record.budgetBand ?? "(not specified)"}\nRevenue band: ${record.revenueBand ?? "(not specified)"}${assumptionsBlock}\n\nSTRATEGY:\n${JSON.stringify(strategy).slice(0, 6000)}`,
       10000,
       SCHEMA_SOW,
-    ));
+    ), pricingVersion: PRICING_VERSION });
 
     await storage.updateAnalysis(id, {
       progress: 90,
@@ -450,6 +451,8 @@ Return ONLY valid JSON:
 
 const SYS_SOW = `You are Kenneth Peavy at Brex Consulting building a professional Scope of Work. It must feel like a real fractional CMO engagement — modular, priced in tiers, with clear phase deliverables.
 
+${PACKAGE_PROMPT}
+
 MANDATORY ENGAGEMENT FRAME:
 ${ENGAGEMENT_PROMPT}
 Write four quarterly SOW phases spanning the full 12 months: Q1 On-ramp (Months 1-3), Q2 Optimize (Months 4-6), Q3 Scale (Months 7-9), Q4 Consolidate and plan ahead (Months 10-12).
@@ -462,17 +465,10 @@ Return ONLY valid JSON:
     { "name": "Q1 On-ramp", "weeks": "Months 1-3", "deliverables": ["string", ...], "outcomes": ["string", ...] }
     // exactly 4 quarterly phases, ending with Q4 Months 10-12
   ],
-  "team": ["Senior Fractional CMO (Kenneth Peavy) — 10 hrs/wk", "..."],   // 3-5 team roles with hours
-  "priceTiers": [
-    { "name": "Foundation", "monthly": "$X,XXX/mo", "inclusions": ["string", ...], "bestFor": "string" },
-    { "name": "Growth", "monthly": "$X,XXX/mo", "inclusions": ["string", ...], "bestFor": "string" },
-    { "name": "Scale", "monthly": "$X,XXX/mo", "inclusions": ["string", ...], "bestFor": "string" }
-  ],
+  "team": ["Senior Fractional CMO (Kenneth Peavy): responsibilities and allocation subject to the selected package", "..."],   // planning roles; do not invent hours or promise every role in every package
+  "priceTiers": [ ...the three exact catalog packages above... ],
+  "recommendedTier": "advisor | strategist | fractional | null",
   "termsNotes": ["12-month growth engagement with an initial six-month commitment", "The 90-day roadmap is the on-ramp quarter", "Results and timing are not guaranteed", "Monthly retainer, invoiced in advance"]
 }
 
-Pricing guidance for a US mid-market fractional CMO engagement:
-- Foundation: $6,500 - $9,500/mo
-- Growth: $12,500 - $18,500/mo
-- Scale: $22,500 - $35,000/mo
-Adjust based on the client's revenue band and stated budget. If budget is low, weight Foundation heavier. If budget is high or revenue is $20M+, weight Scale.`;
+Monthly ranges are set by the Brex catalog above. The final fee and additional scope must be separately approved, never silently bundled.`;

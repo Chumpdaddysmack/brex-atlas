@@ -4,6 +4,7 @@ import type { ContentPlanPayload, SwotAnalysis, PestelAnalysis, PortersFiveForce
 import { DeckLayout, C, clean, textHeight, scaled, type Block } from "./pptx-layout";
 import { fetchProspectLogo } from "./logo-fetch";
 import { BREX_TIERS, BREX_LINE_ITEMS, BREX_BLENDED_HOURLY, computeSavings } from "@shared/brex-pricing";
+import { PRICING_VERSION, packageRange } from "@shared/service-packages";
 import { PRICING_BENCHMARKS, BENCHMARK_SOURCES, formatMoney } from "./pricing-benchmarks";
 import { compatiblePptx } from "./pptx-package";
 import { ENGAGEMENT } from "@shared/engagement-terms";
@@ -135,11 +136,12 @@ function customers(d: DeckLayout, c?: CustomerInsights | null) {
 
 function pricing(d: DeckLayout) {
   d.table("Brex vs. Market | Retainers", ["Engagement", "Brex / mo", "Market low–high / mo"], [3.2, 2.1, 3.5],
-    BREX_TIERS.map(t => [t.name, money(t.monthly), `${money(t.industryLow)}–${money(t.industryHigh)}`]),
-    "Existing catalog prices; market benchmarks are indicative");
+    BREX_TIERS.map(t => [t.name, packageRange(t), `${money(t.industryLow)}–${money(t.industryHigh)}`]),
+    "Approved monthly ranges; final fees depend on agreed scope. Market benchmarks are indicative.");
   BREX_TIERS.forEach(t => d.section(t.name, [
     field("Best for", t.bestFor),
-    field("Monthly investment", `${money(t.monthly)} · à la carte equivalent ${money(t.aLaCarteMonthly)} · bundle discount ${t.discountPct}%`),
+    field("Monthly investment", `${packageRange(t)} per month. Final fee subject to agreed scope.`),
+    field("Scope", "Baseline service mix shown. Final fee and deliverables require approval; additional work and third-party costs are scoped separately."),
     ...t.includes.map((v, i) => field(`Included ${i + 1}`, v)),
     ...t.industrySourceUrls.map(url => ({ label: "Source", text: new URL(url).hostname, url })),
   ]));
@@ -190,7 +192,8 @@ function roi(d: DeckLayout, p: ContentPlanPayload) {
     ["Total revenue", money(o.totalRevenue)], ["Closed-won deals", String(o.totalClosedWon)],
     ["Gross profit / program cost", `${o.roiMultiple.toFixed(2)}x`],
     ["Cost per lead", money(o.brexCostPerLead)], ["Payback", o.paybackMonth ? `Month ${o.paybackMonth}` : "Beyond 12 months"],
-  ], "Modeled projections, not guaranteed outcomes");
+  ], a.pricingVersion === PRICING_VERSION ? "Modeled projections, not guaranteed outcomes"
+    : "Saved forecast predates current package ranges. Regenerate and review ROI in Atlas before use.");
   d.section("ROI | Assumptions & Limitations", [field("Read before using these projections", r.disclaimer || "Projections depend on the report assumptions, execution quality, and market conditions. Actual results may differ.")]);
   const chart = (title: string, subtitle: string, data: { name: string; labels: string[]; values: number[] }[], currency = false, bar = false) => {
     const s = d.slide(title, subtitle);

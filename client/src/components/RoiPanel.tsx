@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2, RefreshCw, TrendingUp, DollarSign, Target, Clock, SlidersHorizontal, X, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { RoiAssumptions } from "@shared/schema";
+import { PRICING_VERSION } from "@shared/service-packages";
 import {
   LineChart,
   Line,
@@ -198,8 +199,11 @@ export function RoiPanel({ planId, initialRoi }: RoiPanelProps) {
             12-Month ROI Projections
           </h2>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Estimates inferred from your client analysis and SOW pricing. Tune assumptions if the deal economics look off, or regenerate to re-infer from the analysis.
+            Planning estimates, not a quote. New scenarios use an explicitly labeled package-range midpoint; confirm the final fee, delivery budget, and the client's own deal economics before relying on ROI.
           </p>
+          {assumptions.pricingVersion !== PRICING_VERSION && <p className="text-sm text-amber-700 dark:text-amber-300 mt-2 max-w-2xl" data-testid="roi-legacy-pricing">
+            This saved forecast predates the current package ranges. Its numbers have not been changed. Regenerate to use the new pricing assumptions, then review the result.
+          </p>}
         </div>
         <div className="flex items-center gap-2">
           <Button

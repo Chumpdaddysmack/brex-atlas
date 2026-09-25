@@ -8,6 +8,8 @@
 // Auth: Private App access token from env var HUBSPOT_ACCESS_TOKEN.
 // On Railway, set this to your pat-na2-... token.
 
+import { packageFor, packageMonthlyLabel } from "@shared/service-packages";
+
 const HUBSPOT_API = "https://api.hubapi.com";
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
 
@@ -22,12 +24,8 @@ const TIER_TO_STAGE: Record<string, string> = {
   "full-fractional": "qualifiedtobuy",
 };
 
-// Fit tier → placeholder deal amount ($)
-const TIER_TO_AMOUNT: Record<string, number> = {
-  "advisor": 2500,
-  "strategist": 5000,
-  "full-fractional": 10000,
-};
+// New leads only: lower-bound monthly estimate, not an approved contract value.
+// Existing deals are never repriced by this mapping.
 
 // Fit tier → hs_lead_status value on contact
 const TIER_TO_LEAD_STATUS: Record<string, string> = {
@@ -204,8 +202,8 @@ async function createDeal(
     input.company ||
     (input.url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0]);
   const tierLabels: Record<string, string> = {
-    "advisor": "Advisor Fit",
-    "strategist": "Strategist Fit",
+    "advisor": "Advisor CMO Fit",
+    "strategist": "Strategist CMO Fit",
     "full-fractional": "Full Fractional CMO Fit",
   };
   const tierLabel = tierLabels[input.fitTier] || "Fit";
@@ -222,13 +220,14 @@ async function createDeal(
     `Revenue: ${input.revenueBand}`,
     `Primary goal: ${input.primaryGoal}`,
     `URL diagnosed: ${input.url}`,
+    packageFor(input.fitTier) ? `Service range: ${packageMonthlyLabel(packageFor(input.fitTier)!)}. Deal amount is the lower-bound monthly estimate only, not a final quote or total contract value. Confirm scope and fee before quoting.` : "",
   ].filter(Boolean).join("\n");
 
   const dealProps = {
     dealname: `Atlas Lead — ${companyOrDomain} — ${tierLabel}`,
     pipeline: DEFAULT_PIPELINE_ID,
     dealstage: TIER_TO_STAGE[input.fitTier],
-    amount: TIER_TO_AMOUNT[input.fitTier],
+    amount: packageFor(input.fitTier)?.monthly,
     dealtype: "newbusiness",
     hubspot_owner_id: KENNY_OWNER_ID,
     closedate: closeDate.toISOString(),

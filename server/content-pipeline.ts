@@ -8,6 +8,8 @@ import { storage } from "./storage";
 import { generateValidatedBlogBatch, normalizeBlogCalendar } from "./blog-calendar";
 import { llmJson, SCHEMA_SHELL, SCHEMA_BLOG_BATCH, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
 import { ROI_INFERENCE_SYSTEM_PROMPT, calculateRoiProjections, FALLBACK_ASSUMPTIONS } from "./roi-calc";
+import { applyPackageCost } from "./roi-calc";
+import { parseCurrentSow } from "@shared/service-packages";
 import { generateSitemap, crossLinkContentToSitemap } from "./sitemap";
 import type { RoiAssumptions } from "@shared/schema";
 import { BREX_VOICE } from "./voice/brex";
@@ -410,19 +412,17 @@ export async function runContentPlanGeneration(planId: string) {
     });
 
     try {
-      // roiSys and analysisContext must include the SOW so the LLM can
-      // anchor avgDealSize on the client's own priceTiers. See
-      // ROI_INFERENCE_SYSTEM_PROMPT for the derivation rules.
+      // Brex fees are the cost side, not this prospect's customer deal value.
       const analysisContext = JSON.stringify({
         clientName: analysis.clientName,
         clientUrl: analysis.clientUrl,
         extraction: analysis.extraction,
         strategy: analysis.strategy,
-        sow: analysis.sow, // CRITICAL: priceTiers drive ACV anchoring.
+        sow: parseCurrentSow(analysis.sow),
         competitors: analysis.competitors,
       }).slice(0, 12000); // Larger cap now that SOW is included.
 
-      const roiUser = `# Client Analysis\n${analysisContext}\n\n# Content Plan Summary\n${(payload.summary ?? "").slice(0, 800)}\n\nInfer realistic ROI assumptions for a 12-month content marketing engagement. Follow the priceTiers anchoring rule if a SOW is present.`;
+      const roiUser = `# Client Analysis\n${analysisContext}\n\n# Content Plan Summary\n${(payload.summary ?? "").slice(0, 800)}\n\nInfer realistic ROI assumptions for this client's business. Brex package fees are costs only, not the client's average customer deal size.`;
 
       const assumptions = (await llmJson(
         ROI_INFERENCE_SYSTEM_PROMPT,
@@ -431,10 +431,10 @@ export async function runContentPlanGeneration(planId: string) {
         SCHEMA_ROI_ASSUMPTIONS,
       )) as RoiAssumptions;
 
-      payload.roiProjections = calculateRoiProjections(assumptions, payload);
+      payload.roiProjections = calculateRoiProjections(applyPackageCost(assumptions, analysis), payload);
     } catch (roiErr) {
       console.error("[roi-inference] failed, using fallback", roiErr);
-      payload.roiProjections = calculateRoiProjections(FALLBACK_ASSUMPTIONS, payload);
+      payload.roiProjections = calculateRoiProjections(applyPackageCost(FALLBACK_ASSUMPTIONS, analysis), payload);
     }
 
     // -------- SEO/GEO Site Architecture --------

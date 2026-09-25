@@ -1,7 +1,6 @@
 // =============================================================
-// Brex Consulting — Locked Pricing (Tactical CMO line items + tiers)
-// Approved 2026-08-26. Blended hourly $225. Bundle discounts:
-// Advisor 17%, Strategist 24%, Fractional 32%.
+// Brex Consulting — Catalog (tactical line items + monthly tier ranges)
+// Tier ranges approved 2026-09-25. Final fees depend on agreed scope.
 // Sources are cited so every claim is defensible.
 // =============================================================
 
@@ -246,16 +245,15 @@ export const BREX_LINE_ITEMS: BrexLineItem[] = [
 ];
 
 // =============================================================
-// Bundled tiers (built from line items, then discounted)
-// Advisor 17%, Strategist 24%, Fractional 32% off à la carte
+// Monthly package ranges. Inclusions describe the baseline service mix;
+// volume, cadence, and responsibilities must be confirmed in the final scope.
 // =============================================================
 
 export type BrexTier = {
   key: "advisor" | "strategist" | "fractional";
   name: string;
-  monthly: number; // Brex price
-  aLaCarteMonthly: number; // sum of monthly-equivalent line items
-  discountPct: number; // savings vs à la carte
+  monthly: number; // Range minimum, not a final quote
+  monthlyMax: number;
   bestFor: string;
   includes: string[];
   industryLow: number;
@@ -269,8 +267,7 @@ export const BREX_TIERS: BrexTier[] = [
     key: "advisor",
     name: "Advisor CMO",
     monthly: 3500,
-    aLaCarteMonthly: 4200,
-    discountPct: 17,
+    monthlyMax: 5000,
     bestFor:
       "Founders and CEOs who need senior clarity, a documented roadmap, and monthly recalibration before scaling spend.",
     includes: [
@@ -292,8 +289,7 @@ export const BREX_TIERS: BrexTier[] = [
     key: "strategist",
     name: "Strategist CMO",
     monthly: 6500,
-    aLaCarteMonthly: 8600,
-    discountPct: 24,
+    monthlyMax: 8000,
     bestFor:
       "Companies ready to formalize positioning, build content authority, and enable an in-house team with a senior CMO in the room.",
     includes: [
@@ -317,8 +313,7 @@ export const BREX_TIERS: BrexTier[] = [
     key: "fractional",
     name: "Full Fractional CMO",
     monthly: 9500,
-    aLaCarteMonthly: 13900,
-    discountPct: 32,
+    monthlyMax: 15500,
     bestFor:
       "Growth-stage B2B companies replacing a full-time CMO hire with senior owner-operator leadership and full-stack execution.",
     includes: [

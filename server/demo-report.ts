@@ -2,7 +2,7 @@ import type { Analysis, ContentPlan } from "@shared/schema";
 import type { DemoGroup, DemoItem, DemoReport, DemoSection } from "@shared/demo-report";
 import { buildReportVisuals } from "@shared/report-visuals";
 import { readCompanyProfile } from "@shared/company-profile";
-import { ENGAGEMENT, currentOfferText } from "@shared/engagement-terms";
+import { ENGAGEMENT, currentOfferText, currentOfferSow } from "@shared/engagement-terms";
 
 // Explicit allowlist: never return the original JSON blobs, internal notes,
 // full calendars, draft copy, price tiers, or modelled financial outcomes.
@@ -33,7 +33,7 @@ function sourced(label: string, value: any, sources: any): DemoItem | null {
 }
 export function buildDemoReport(analysis: Analysis, plan: ContentPlan | null): DemoReport {
   const e = parse(analysis.extraction), competitors = parse(analysis.competitors);
-  const s = parse(analysis.strategy), sow = parse(analysis.sow), swot = parse(analysis.swot);
+  const s = parse(analysis.strategy), rawSow = parse(analysis.sow), sow = rawSow ? currentOfferSow(rawSow) : null, swot = parse(analysis.swot);
   const pestel = parse(analysis.pestel), porters = parse(analysis.porters), ci = parse(analysis.customerInsights);
   const p = parse(plan?.planJson);
   const sections: DemoSection[] = [];

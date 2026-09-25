@@ -29,6 +29,8 @@ import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowRight, Sparkles, Target, FileText, LayoutList } from "lucide-react";
 import type { Analysis } from "@shared/schema";
+import { BREX_TIERS } from "@shared/brex-pricing";
+import { packageMonthlyLabel } from "@shared/service-packages";
 
 const intakeSchema = z.object({
   clientName: z.string().min(2, "Client name required"),
@@ -444,9 +446,7 @@ export default function Home() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="advisor">Advisor — 17% discount</SelectItem>
-                          <SelectItem value="strategist">Strategist — 24% discount</SelectItem>
-                          <SelectItem value="fractional">Fractional — 32% discount</SelectItem>
+                          {BREX_TIERS.map(t => <SelectItem key={t.key} value={t.key}>{t.name} · {packageMonthlyLabel(t)}</SelectItem>)}
                           <SelectItem value="unknown">Not sure yet</SelectItem>
                         </SelectContent>
                       </Select>

@@ -22,6 +22,9 @@ import type { RoiAssumptions } from "@shared/schema";
 import type { ContentPlanPayload } from "@shared/schema";
 import { buildDemoReport } from "./demo-report";
 import { CompanyProfileError, researchAndSaveCompanyProfile } from "./company-profile";
+import { currentOfferSow } from "@shared/engagement-terms";
+import { parseCurrentSow } from "@shared/service-packages";
+import { applyPackageCost } from "./roi-calc";
 
 // Defensive parse for Customer Insights JSON — same pattern as PDF export uses
 // for SWOT/PESTEL. A corrupt row must not crash a whole export.
@@ -134,7 +137,8 @@ export async function registerRoutes(
   app.get("/api/analyses/:id", async (req, res) => {
     const row = await storage.getAnalysis(req.params.id);
     if (!row) return res.status(404).json({ error: "Not found" });
-    res.json(row);
+    const sow = parseCurrentSow(row.sow);
+    res.json({ ...row, sow: sow ? JSON.stringify(currentOfferSow(sow)) : row.sow });
   });
 
   // List all
@@ -373,17 +377,17 @@ export async function registerRoutes(
     }
 
     try {
-      // Include SOW so the LLM can anchor avgDealSize on priceTiers.
+      // Brex SOW prices are program costs, never the prospect's customer revenue.
       const analysisContext = JSON.stringify({
         clientName: analysis.clientName,
         clientUrl: analysis.clientUrl,
         extraction: analysis.extraction,
         strategy: analysis.strategy,
-        sow: analysis.sow, // CRITICAL: priceTiers drive ACV anchoring.
+        sow: parseCurrentSow(analysis.sow),
         competitors: analysis.competitors,
       }).slice(0, 12000);
 
-      const roiUser = `# Client Analysis\n${analysisContext}\n\n# Content Plan Summary\n${(payload.summary ?? "").slice(0, 800)}\n\nInfer realistic ROI assumptions for a 12-month content marketing engagement. Follow the priceTiers anchoring rule if a SOW is present.`;
+      const roiUser = `# Client Analysis\n${analysisContext}\n\n# Content Plan Summary\n${(payload.summary ?? "").slice(0, 800)}\n\nInfer realistic ROI assumptions for this client's business. Brex package fees are costs only, not the client's average customer deal size.`;
 
       let assumptions: RoiAssumptions;
       try {
@@ -398,7 +402,7 @@ export async function registerRoutes(
         assumptions = FALLBACK_ASSUMPTIONS;
       }
 
-      const projections = calculateRoiProjections(assumptions, payload);
+      const projections = calculateRoiProjections(applyPackageCost(assumptions, analysis), payload);
       payload.roiProjections = projections;
 
       await storage.updateContentPlan(plan.id, { planJson: JSON.stringify(payload) });
@@ -442,6 +446,7 @@ export async function registerRoutes(
     };
 
     const merged: RoiAssumptions = {
+      pricingVersion: baseline.pricingVersion,
       avgDealSize: clamp(overrides.avgDealSize, 500, 10_000_000, baseline.avgDealSize),
       dealType: overrides.dealType === "acv" || overrides.dealType === "one-time"
         ? overrides.dealType

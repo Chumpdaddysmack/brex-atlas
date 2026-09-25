@@ -9,7 +9,7 @@ Approved September 25, 2026.
 - Results and timing vary. This is not a guarantee of a specific outcome or payback date.
 - The existing 90-day roadmap and 12-week publishing calendar are the on-ramp quarter, covering months 1–3.
 - Months 4–12 build on that foundation through ongoing execution, measurement, optimization, and quarterly planning.
-- Monthly pricing and billing remain unchanged. No new cancellation, renewal, notice, or penalty terms are implied.
+- Billing cadence remains unchanged. Monthly pricing follows the approved ranges in `service-packages.md`. No new cancellation, renewal, notice, or penalty terms are implied.
 
 ## Implementation
 

@@ -24,6 +24,7 @@ import {
   computeSavings,
   positioningColor,
 } from "@shared/brex-pricing";
+import { PACKAGE_SCOPE_NOTE, PRICING_VERSION, packageSavingsRange } from "@shared/service-packages";
 import {
   drawPillarDonut,
   drawBenchmarkRow,
@@ -713,9 +714,7 @@ function renderBrexPricingMatrix(
     .font(FONTS.sans)
     .fontSize(10)
     .text(
-      "Head-to-head comparison of Brex Consulting's bundled retainer tiers and per-service pricing against " +
-        "mid-market industry benchmarks from 2026 fractional CMO and agency pricing surveys. Every Brex tier and " +
-        "line item is set at or below the mid-market floor while maintaining senior owner-operator delivery.",
+      "Brex's approved monthly service ranges, compared with indicative market benchmarks. " + PACKAGE_SCOPE_NOTE,
       { lineGap: 3 },
     );
   doc.moveDown(0.6);
@@ -731,7 +730,7 @@ function renderBrexPricingMatrix(
   const tierLayouts = BREX_TIERS.map(tier => {
     doc.font(FONTS.sansBold).fontSize(11);
     const nameHeight = doc.heightOfString(tier.name, { width: tierColW - 16 });
-    const description = tier.bestFor.slice(0, 100) + (tier.bestFor.length > 100 ? "…" : "");
+    const description = tier.bestFor;
     doc.font(FONTS.sans).fontSize(7.5);
     const descriptionHeight = doc.heightOfString(description, { width: tierColW - 16, lineGap: 1 });
     return { nameHeight, description, height: Math.max(74, Math.ceil(8 + nameHeight + 5 + descriptionHeight + 8)) };
@@ -743,7 +742,7 @@ function renderBrexPricingMatrix(
     { text: "Brex Price", x: tableX + tierColW, width: priceColW - 8 },
     { text: "Industry Mid-Market", x: tableX + tierColW + priceColW, width: industryColW - 8 },
     { text: "Savings vs Mid", x: tableX + tierColW + priceColW + industryColW, width: savingsColW - 8 },
-    { text: "Bundle Savings", x: tableX + tierColW + priceColW + industryColW + savingsColW, width: bundleColW - 8 },
+    { text: "Final Fee", x: tableX + tierColW + priceColW + industryColW + savingsColW, width: bundleColW - 8 },
   ];
   doc.font(FONTS.sansBold).fontSize(9);
   const headerH = Math.ceil(Math.max(...headerCells.map(cell =>
@@ -774,7 +773,7 @@ function renderBrexPricingMatrix(
     }
     const y = doc.y;
     const industryMid = (tier.industryLow + tier.industryHigh) / 2;
-    const vsMid = computeSavings(tier.monthly, industryMid);
+    const vsMid = packageSavingsRange(tier, industryMid);
 
     // Row background
     doc
@@ -806,15 +805,15 @@ function renderBrexPricingMatrix(
     doc
       .fillColor(BRAND.accent)
       .font(FONTS.sansBold)
-      .fontSize(14)
-      .text(`$${tier.monthly.toLocaleString()}`, tableX + tierColW, y + 12, {
+      .fontSize(11)
+      .text(`$${tier.monthly.toLocaleString()}\nto $${tier.monthlyMax.toLocaleString()}`, tableX + tierColW, y + 12, {
         width: priceColW - 8,
       });
     doc
       .fillColor(BRAND.muted)
       .font(FONTS.sans)
       .fontSize(8)
-      .text("per month", tableX + tierColW, y + 30, { width: priceColW - 8 });
+      .text("per month", tableX + tierColW, y + 43, { width: priceColW - 8 });
 
     // Industry range
     doc
@@ -839,19 +838,19 @@ function renderBrexPricingMatrix(
       );
 
     // Savings vs mid (big green %)
-    const savingsColor = vsMid.deltaPct >= 0 ? "#059669" : "#DC2626";
+    const savingsColor = BRAND.text;
     doc
       .fillColor(savingsColor)
       .font(FONTS.sansBold)
-      .fontSize(16)
-      .text(vsMid.label, tableX + tierColW + priceColW + industryColW, y + 12, {
+      .fontSize(10)
+      .text(vsMid, tableX + tierColW + priceColW + industryColW, y + 12, {
         width: savingsColW - 8,
       });
     doc
       .fillColor(BRAND.muted)
       .font(FONTS.sans)
       .fontSize(7.5)
-      .text("vs industry mid", tableX + tierColW + priceColW + industryColW, y + 32, {
+      .text("vs industry mid", tableX + tierColW + priceColW + industryColW, y + 45, {
         width: savingsColW - 8,
       });
 
@@ -859,9 +858,9 @@ function renderBrexPricingMatrix(
     doc
       .fillColor("#0F766E")
       .font(FONTS.sansBold)
-      .fontSize(14)
+      .fontSize(10)
       .text(
-        `−${tier.discountPct}%`,
+        "Scope-based",
         tableX + tierColW + priceColW + industryColW + savingsColW,
         y + 14,
         { width: bundleColW - 8 },
@@ -871,9 +870,9 @@ function renderBrexPricingMatrix(
       .font(FONTS.sans)
       .fontSize(7)
       .text(
-        `vs $${tier.aLaCarteMonthly.toLocaleString()} à la carte`,
+        "Confirmed in proposal",
         tableX + tierColW + priceColW + industryColW + savingsColW,
-        y + 32,
+        y + 45,
         { width: bundleColW - 8, lineGap: 1 },
       );
 
@@ -1015,7 +1014,7 @@ function renderBrexPricingMatrix(
       .fontSize(8)
       .text(
         `Blended hourly rate: $${BREX_BLENDED_HOURLY}/hr (senior fractional CMO, mid-market band $200–$500/hr per 2026 pricing surveys). ` +
-          "Bundle discounts (17% Advisor, 24% Strategist, 32% Fractional) reflect commitment and utilization efficiency.",
+          "Monthly package ranges vary with agreed scope; no fixed bundle discount is promised.",
         { lineGap: 2 },
       );
   }
@@ -2043,7 +2042,9 @@ function renderRoiSection(
     .font(FONTS.sansOblique)
     .fontSize(9)
     .text(
-      "Conservative projections modeled from client-specific assumptions inferred by our analysis.",
+      assumptions.pricingVersion === PRICING_VERSION
+        ? "Planning estimates, not guaranteed outcomes. Confirm the fee, full delivery budget, and client deal economics."
+        : "Saved forecast: predates the current package ranges. These figures are unchanged; regenerate and review ROI in Atlas before using them as a current proposal.",
       leftMargin,
       doc.y,
       { width: pageWidth },

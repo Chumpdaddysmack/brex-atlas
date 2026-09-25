@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ENGAGEMENT, ENGAGEMENT_TERMS, currentOfferText, currentOfferSow } from "./engagement-terms";
 import type { SOW } from "./schema";
+import { canonicalPriceTiers, PACKAGE_SCOPE_NOTE } from "./service-packages";
 
 test("legacy minimums become six-month commitments without confusing the annual horizon", () => {
   for (const term of ["3-month minimum engagement", "three month commitment", "3-month minimum term",
@@ -18,7 +19,7 @@ test("on-ramp timelines, project terms, pricing, and billing are not stretched t
     assert.equal(currentOfferText(text), text);
   }
 });
-test("existing SOWs get current terms without mutating saved findings or prices", () => {
+test("existing SOWs get current terms and packages without mutating saved data", () => {
   const sow: SOW = {
     engagementSummary: "A 3-month engagement with company-specific priorities.",
     phases: [{ name: "Foundation", weeks: "Weeks 1-4", deliverables: ["Positioning workshop"], outcomes: ["Clear message"] }],
@@ -29,9 +30,9 @@ test("existing SOWs get current terms without mutating saved findings or prices"
   const updated = currentOfferSow(sow);
   assert.equal(JSON.stringify(sow), before);
   assert.deepEqual(updated.phases, sow.phases);
-  assert.deepEqual(updated.priceTiers, sow.priceTiers);
+  assert.deepEqual(updated.priceTiers, canonicalPriceTiers());
   assert.equal(updated.engagementSummary, "A 12-month engagement with company-specific priorities.");
-  assert.deepEqual(updated.termsNotes, [...ENGAGEMENT_TERMS, "Monthly retainer, invoiced in advance"]);
+  assert.deepEqual(updated.termsNotes, [...ENGAGEMENT_TERMS, "Monthly retainer, invoiced in advance", PACKAGE_SCOPE_NOTE]);
   assert.deepEqual(currentOfferSow(updated), updated);
 });
 test("terms explicitly explain quarter one and avoid a six-month results guarantee", () => {

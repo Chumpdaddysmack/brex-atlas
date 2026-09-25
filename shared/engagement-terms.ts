@@ -1,4 +1,5 @@
 import type { SOW } from "./schema";
+import { standardizePackages } from "./service-packages";
 
 // Approved September 25, 2026. Retainer proposal policy only: not a change to
 // diagnostic/project fees, signed agreements, billing cadence, or ROI formulas.
@@ -39,5 +40,5 @@ export function currentOfferSow(sow: SOW): SOW {
     .filter(v => typeof v === "string" && !ENGAGEMENT_TERMS.includes(v) &&
       !/initial six-month commitment|(?:6|six)[ -]month\s+(?:minimum|commitment)|12[ -]month\s+(?:growth\s+)?engagement/i.test(v));
   updated.termsNotes = [...ENGAGEMENT_TERMS, ...retained];
-  return updated;
+  return standardizePackages(updated);
 }

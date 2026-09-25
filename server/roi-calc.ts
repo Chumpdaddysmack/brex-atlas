@@ -21,6 +21,22 @@ import type {
   RoiProjections,
   ContentPlanPayload,
 } from "@shared/schema";
+import { PRICING_VERSION, packageFor, parseCurrentSow } from "@shared/service-packages";
+
+/** Deterministic catalog cost for newly inferred scenarios. Manual overrides
+ * and already saved forecasts remain untouched. Never change avgDealSize. */
+export function applyPackageCost(assumptions: RoiAssumptions, analysis: { sow?: unknown; assumptions?: unknown }): RoiAssumptions {
+  let intake: any = {};
+  try { intake = typeof analysis.assumptions === "string" ? JSON.parse(analysis.assumptions) : analysis.assumptions ?? {}; } catch {}
+  const preferred = packageFor(intake?.preferredTier);
+  const recommended = packageFor(parseCurrentSow(analysis.sow)?.recommendedTier);
+  const tier = preferred ?? recommended ?? packageFor("strategist")!;
+  const monthly = (tier.monthly + tier.monthlyMax) / 2;
+  const basis = preferred ? "Client-preferred package" : recommended ? "Suggested package, subject to review" : "Illustrative planning assumption, not a recommendation";
+  return { ...assumptions, pricingVersion: PRICING_VERSION, programCost12Mo: monthly * 12,
+    rationale: { ...assumptions.rationale, programCost:
+      `${basis}: ${tier.name}, using the illustrative range midpoint of $${monthly.toLocaleString("en-US")}/month × 12 = $${(monthly * 12).toLocaleString("en-US")}. Approved range: $${tier.monthly.toLocaleString("en-US")}–$${tier.monthlyMax.toLocaleString("en-US")}/month. This midpoint is not a final quote. Additional execution, media, software, and third-party costs are excluded and must be budgeted before relying on ROI. This is a 12-month scenario, not the six-month minimum obligation.` } };
+}
 
 const POSTS_PER_MONTH = 40; // 10 posts/wk × 4 weeks
 const PROJECTION_MONTHS = 12;
@@ -138,14 +154,12 @@ export function calculateRoiProjections(
 // pipeline (server/content-pipeline.ts) and the on-demand recompute route
 // (server/routes.ts). If you change the ROI methodology, change it here.
 //
-// CRITICAL: The client's own SOW/priceTiers is the strongest ACV signal we have.
-// If Brex sold a $6,500/mo retainer, ACV is $78k — not a generic $25k benchmark.
-// Failing to anchor on priceTiers was the source of the "AI thinks the client
-// will lose money" bug (ROI multiple of 0.96x on a plan that should model 2–3x).
+// Brex service fees belong only on the cost side. A prospect's customer revenue
+// must come from that prospect's economics, never from the Brex SOW.
 // -----------------------------------------------------------------------------
 export const ROI_INFERENCE_SYSTEM_PROMPT = `You are a B2B revenue analyst inferring realistic, defensible ROI assumptions for a 12-month content marketing engagement.
 
-Input: a client business analysis (industry, ICP, offerings, positioning, competitors) AND — critically — the client's own Statement of Work (\`sow.priceTiers\` and \`sow.engagementSummary\`).
+Input: a client business analysis (industry, ICP, offerings, positioning, competitors) and Brex's proposed service packages (\`sow.priceTiers\`).
 
 Output: numerical assumptions grounded in that specific client's economics.
 
@@ -153,21 +167,9 @@ Output: numerical assumptions grounded in that specific client's economics.
 ═ HOW TO DERIVE avgDealSize — DO NOT USE GENERIC BENCHMARKS ═
 ════════════════════════════════════════════════════════════
 
-If the analysis contains \`sow.priceTiers\` (an array of pricing tiers with a
-\`monthlyPrice\` or \`price\` string like "$6,500/mo"):
-
-  1. Parse the numeric monthly price from each tier.
-  2. Take the MIDDLE tier's monthly price (or the tier tagged "Recommended" if
-     present) as the anchor monthly retainer.
-  3. Multiply by 12 to get ACV.
-  4. Set dealType = "acv".
-  5. Set grossMargin = 0.60–0.70 (services retainer margin).
-
-Example: priceTiers = [{$3,500/mo}, {$6,500/mo, Recommended}, {$9,500/mo}]
-         → anchor = $6,500/mo → avgDealSize = $78,000 → dealType = "acv".
-
-Only if \`sow.priceTiers\` is missing or unparseable should you fall back to
-generic benchmarks. In that case say so explicitly in the dealSize rationale.
+The SOW priceTiers are what BREX charges the prospect. They are NOT what the prospect charges its customers.
+Derive avgDealSize and dealType from the prospect's own products, services, buyer segment, and stated customer economics. Use verified customer pricing when available. If missing, identify the number explicitly as an unverified estimate to validate with the client; do not imply it was researched or supplied.
+Never multiply a Brex service fee by 12 to infer a prospect's customer ACV.
 
 ════════════════════════════════════════════════════════════
 ═ OTHER FIELDS ═
@@ -183,7 +185,7 @@ generic benchmarks. In that case say so explicitly in the dealSize rationale.
 - monthlyVisitorsPerPost: 30–80 for well-optimized SEO/AEO posts at maturity. Use the higher end for niches where the client is the framework owner or has a defensible category (e.g. trademarked methodology, thought-leader founder).
 - monthsToRank: 3–5. Use 3 for established sites with existing domain authority, 4–5 for newer content programs.
 - contentDecayFactor: 0.88–0.92.
-- programCost12Mo: Read this from \`sow.priceTiers\` too — take the SAME anchor tier and multiply by 12. If not available, use the mid-market retainer band $75k–$120k.
+- programCost12Mo: Brex's catalog cost will be set deterministically after inference. Use 87000 only as an illustrative Strategist CMO range-midpoint placeholder, not a quote, recommendation, or all-in delivery budget.
 - paidCacBaseline: B2B CPL, $200–$800.
 
 ════════════════════════════════════════════════════════════
@@ -191,12 +193,8 @@ generic benchmarks. In that case say so explicitly in the dealSize rationale.
 ════════════════════════════════════════════════════════════
 
 Every field's rationale must reference the SPECIFIC client analysis (their offerings,
-ICP, priceTiers, diagnostic model, etc.), not generic benchmarks. One tight sentence each.
-
-DO NOT default to the lowest end of every range "just to be conservative" — that
-produces a projection so pessimistic it makes profitable engagements look like
-losers, which is worse than being aggressive. Use the middle of the range unless
-you have a specific reason (from the analysis) to go lower.`;
+ICP, diagnostic model, etc.). Distinguish evidence from estimates and missing information.
+Do not tune assumptions to achieve a desirable ROI. Negative or uncertain projections are valid planning outcomes.`;
 
 // Fallback assumptions if LLM inference fails
 export const FALLBACK_ASSUMPTIONS: RoiAssumptions = {
@@ -211,7 +209,7 @@ export const FALLBACK_ASSUMPTIONS: RoiAssumptions = {
   monthlyVisitorsPerPost: 45,
   monthsToRank: 4,
   contentDecayFactor: 0.9,
-  programCost12Mo: 90000,
+  programCost12Mo: 87000,
   paidCacBaseline: 350,
   rationale: {
     dealSize:
@@ -221,6 +219,6 @@ export const FALLBACK_ASSUMPTIONS: RoiAssumptions = {
     trafficRamp:
       "4-month ramp reflects typical time-to-rank for well-optimized SEO/AEO content in competitive B2B categories.",
     programCost:
-      "12-month equivalent of the Brex mid-market fractional CMO retainer plus content operations.",
+      "Illustrative Strategist CMO range midpoint of $7,250/month for 12 months, not a final quote. Additional scope and third-party costs excluded; validate before relying on ROI.",
   },
 };

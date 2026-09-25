@@ -143,6 +143,8 @@ export type Strategy = {
 };
 
 export type SOW = {
+  pricingVersion?: string;
+  recommendedTier?: "advisor" | "strategist" | "fractional" | null;
   engagementSummary: string;
   phases: {
     name: string;
@@ -609,6 +611,7 @@ export type SitemapPayload = {
 // client's analysis (industry, ICP, deal size signals). Confidence tier flags
 // how much we trust each assumption so the UI can show "benchmark" vs "est."
 export type RoiAssumptions = {
+  pricingVersion?: string;
   // Deal economics (client-specific)
   avgDealSize: number;          // USD, one-time or ACV
   dealType: "one-time" | "acv";
