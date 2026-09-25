@@ -54,6 +54,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useDemoMode, DemoModeSwitch } from "@/components/DemoMode";
 import { DemoReport } from "@/components/DemoReport";
+import { ReportVisual, ReportDetails } from "@/components/ReportVisuals";
+import { buildReportVisuals } from "@shared/report-visuals";
 
 const STEPS = [
   { key: "extracting", label: "Website teardown", icon: ScanSearch, min: 0 },
@@ -245,6 +247,11 @@ export default function AnalysisPage() {
 
   const isDone = analysis.status === "done";
   const isErr = analysis.status === "error";
+  const visuals = buildReportVisuals({
+    clientName: analysis.clientName, extraction: analysis.extraction,
+    strategy: analysis.strategy, competitors: analysis.competitors,
+    swot: analysis.swot, customerInsights: analysis.customerInsights,
+  });
 
   return (
     <AppShell>
@@ -310,7 +317,7 @@ export default function AnalysisPage() {
         {/* Results — tabbed */}
         {(analysis.extraction || analysis.competitors || analysis.strategy || analysis.sow) && (
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid grid-cols-5 w-full max-w-3xl">
+            <TabsList className="flex flex-wrap justify-start h-auto gap-1 w-full sm:grid sm:grid-cols-5 max-w-3xl">
               <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
               <TabsTrigger value="strategy" data-testid="tab-strategy">Strategy</TabsTrigger>
               <TabsTrigger value="sow" data-testid="tab-sow">SOW</TabsTrigger>
@@ -319,19 +326,27 @@ export default function AnalysisPage() {
             </TabsList>
 
             <TabsContent value="overview" className="space-y-8 pt-6">
+              <ReportVisual kind="positioning" data={visuals} />
+              <ReportDetails id="positioning" label="Read the full website and positioning analysis">
               <SectionErrorBoundary label="Website extraction">
                 {analysis.extraction && (
                   <ExtractionSection extraction={safeParse(analysis.extraction)!} />
                 )}
               </SectionErrorBoundary>
+              </ReportDetails>
+              <ReportVisual kind="competitors" data={visuals} />
+              <ReportDetails id="competitors" label="Read the full competitive analysis and campaign angles">
               <SectionErrorBoundary label="Competitors">
                 {analysis.competitors && (
                   <CompetitorsSection competitors={safeParse(analysis.competitors)!} />
                 )}
               </SectionErrorBoundary>
+              </ReportDetails>
             </TabsContent>
 
             <TabsContent value="strategy" className="space-y-8 pt-6">
+              <ReportVisual kind="roadmap" data={visuals} />
+              <ReportDetails id="strategy" label="Read the complete strategy, roadmap, outcomes, and rationale">
               <SectionErrorBoundary label="Strategy">
                 {analysis.strategy ? (
                   <StrategySection strategy={safeParse(analysis.strategy)!} />
@@ -339,6 +354,7 @@ export default function AnalysisPage() {
                   <Card className="p-6 text-sm text-muted-foreground">Strategy still generating…</Card>
                 )}
               </SectionErrorBoundary>
+              </ReportDetails>
             </TabsContent>
 
             <TabsContent value="sow" className="space-y-8 pt-6">
@@ -352,6 +368,8 @@ export default function AnalysisPage() {
             </TabsContent>
 
             <TabsContent value="frameworks" className="space-y-8 pt-6">
+              <ReportVisual kind="swot" data={visuals} />
+              <ReportDetails id="frameworks" label="Read full SWOT evidence, PESTEL, and Five Forces">
               <SectionErrorBoundary label="Strategic Frameworks">
                 <FrameworksSection
                   swot={safeParse<SwotAnalysis>(analysis.swot)}
@@ -364,9 +382,12 @@ export default function AnalysisPage() {
                   errorMessage={(analysis as any).errorMessage}
                 />
               </SectionErrorBoundary>
+              </ReportDetails>
             </TabsContent>
 
             <TabsContent value="buyer" className="space-y-8 pt-6">
+              <ReportVisual kind="journey" data={visuals} />
+              <ReportDetails id="buyer" label="Read the complete buyer intelligence and supporting analysis">
               <SectionErrorBoundary label="Customer Insights">
                 <CustomerInsightsSection
                   ci={safeParse<CustomerInsights>(analysis.customerInsights)}
@@ -376,6 +397,7 @@ export default function AnalysisPage() {
                   errorMessage={(analysis as any).errorMessage}
                 />
               </SectionErrorBoundary>
+              </ReportDetails>
             </TabsContent>
           </Tabs>
         )}

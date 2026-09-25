@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Eye, LockKeyhole, ArrowUpRight, Loader2 } from "lucide-react";
 import type { DemoGroup, DemoReport as DemoPayload } from "@shared/demo-report";
+import { ReportVisual } from "./ReportVisuals";
 
 const groups: { key: DemoGroup; label: string }[] = [
   { key: "overview", label: "Overview" }, { key: "strategy", label: "Strategy & scope" },
@@ -52,8 +53,14 @@ export function DemoReport({ analysisId, content = false }: { analysisId: string
         </TabsList>
         {groups.map(g => <TabsContent key={g.key} value={g.key} className="mt-5 space-y-4">
           <p className="text-sm text-muted-foreground">Opening examples only. Additional findings and implementation detail are reserved for the full view.</p>
+          {q.data.visuals && <div className="space-y-6">
+            {g.key === "overview" && <><ReportVisual kind="positioning" data={q.data.visuals} /><ReportVisual kind="competitors" data={q.data.visuals} /></>}
+            {g.key === "strategy" && <ReportVisual kind="roadmap" data={q.data.visuals} />}
+            {g.key === "frameworks" && <ReportVisual kind="swot" data={q.data.visuals} />}
+            {g.key === "buyer" && <ReportVisual kind="journey" data={q.data.visuals} />}
+          </div>}
           <div className="grid gap-4 md:grid-cols-2">
-            {q.data.sections.filter(s => s.group === g.key).map(section => <Card key={section.id} className="p-5 flex flex-col gap-4 min-w-0" data-testid={`demo-section-${section.id}`}>
+            {q.data.sections.filter(s => s.group === g.key && !(q.data.visuals && ["positioning", "competitor", "roadmap", "swot"].includes(s.id))).map(section => <Card key={section.id} className="p-5 flex flex-col gap-4 min-w-0" data-testid={`demo-section-${section.id}`}>
               <h2 className="font-semibold text-lg">{section.title}</h2>
               {section.items.length ? <div className="space-y-4">
                 {section.items.map((item, i) => <div key={i}>

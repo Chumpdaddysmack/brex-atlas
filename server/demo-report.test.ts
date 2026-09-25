@@ -37,7 +37,7 @@ test("demo projection contains complete opening examples and leaves full data un
 test("demo payload excludes internal fields, remaining findings, full copy, and finances", () => {
   const result = buildDemoReport(analysis, plan);
   assert.ok(!JSON.stringify(result).includes("PRIVATE_"));
-  assert.deepEqual(Object.keys(result).sort(), ["clientName", "clientUrl", "id", "mode", "sections", "status", "version"]);
+  assert.deepEqual(Object.keys(result).sort(), ["clientName", "clientUrl", "id", "mode", "sections", "status", "version", "visuals"]);
 });
 test("selected citations are retained and unsafe URLs rejected", () => {
   assert.deepEqual(buildDemoReport(analysis, plan).sections.find(s => s.id === "pestel")?.items[0].sources,

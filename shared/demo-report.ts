@@ -1,3 +1,4 @@
+import type { ReportVisuals } from "./report-visuals";
 export type DemoGroup = "overview" | "strategy" | "frameworks" | "buyer" | "content";
 export interface DemoItem {
   label: string;
@@ -19,4 +20,5 @@ export interface DemoReport {
   clientUrl: string;
   status: string;
   sections: DemoSection[];
+  visuals?: ReportVisuals;
 }
