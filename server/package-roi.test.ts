@@ -15,9 +15,9 @@ test("each preferred package uses an explicit midpoint scenario, never changes c
     assert.equal(result.pricingVersion, PRICING_VERSION);
   }
 });
-test("current recommendations select a scenario; missing or legacy recommendations remain illustrative", () => {
+test("model-written recommendations never select a financial scenario; explicit preferences still can", () => {
   const sow = { pricingVersion: PRICING_VERSION, recommendedTier: "advisor" };
-  assert.equal(applyPackageCost(FALLBACK_ASSUMPTIONS, { sow }).programCost12Mo, 51000);
+  assert.equal(applyPackageCost(FALLBACK_ASSUMPTIONS, { sow }).programCost12Mo, 87000);
   assert.equal(applyPackageCost(FALLBACK_ASSUMPTIONS, { sow, assumptions: { preferredTier: "fractional" } }).programCost12Mo, 150000);
   const unknown = applyPackageCost(FALLBACK_ASSUMPTIONS, { sow: { recommendedTier: "advisor" } });
   assert.equal(unknown.programCost12Mo, 87000);

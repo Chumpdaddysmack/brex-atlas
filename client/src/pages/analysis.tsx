@@ -60,6 +60,8 @@ import { CompanyIntroduction } from "@/components/CompanyIntroduction";
 import { EngagementTerms } from "@/components/EngagementTerms";
 import { ENGAGEMENT, ENGAGEMENT_TERMS, currentOfferSow } from "@shared/engagement-terms";
 import { PACKAGE_SCOPE_NOTE, packageMonthlyLabel, packageRange, packageSavingsRange } from "@shared/service-packages";
+import { TierAssessmentPanel } from "@/components/TierAssessment";
+import { ReportSharing } from "@/components/ReportSharing";
 
 const STEPS = [
   { key: "extracting", label: "Website teardown", icon: ScanSearch, min: 0 },
@@ -292,6 +294,7 @@ export default function AnalysisPage() {
             {analysis.revenueBand && <Badge variant="secondary">{analysis.revenueBand}</Badge>}
             {analysis.budgetBand && <Badge variant="secondary">{analysis.budgetBand}</Badge>}
             {isDone && <AssumptionsDialog analysis={analysis} />}
+            {isDone && <ReportSharing analysisId={analysis.id}/>}
           </div>
         </div>
 
@@ -364,6 +367,7 @@ export default function AnalysisPage() {
             </TabsContent>
 
             <TabsContent value="sow" className="space-y-8 pt-6">
+              <TierAssessmentPanel analysisId={analysis.id}/>
               <SectionErrorBoundary label="Scope of Work">
                 {analysis.sow ? (
                   <SOWSection sow={safeParse(analysis.sow)!} clientName={analysis.clientName} />
@@ -507,7 +511,7 @@ function SectionHeader({
   );
 }
 
-function ExtractionSection({ extraction }: { extraction: Extraction }) {
+export function ExtractionSection({ extraction }: { extraction: Extraction }) {
   return (
     <section>
       <SectionHeader
@@ -608,7 +612,7 @@ function ExtractionSection({ extraction }: { extraction: Extraction }) {
 
 // -------- Competitors --------
 
-function CompetitorsSection({ competitors }: { competitors: Competitor[] }) {
+export function CompetitorsSection({ competitors }: { competitors: Competitor[] }) {
   return (
     <section>
       <SectionHeader
@@ -687,7 +691,7 @@ function CompetitorsSection({ competitors }: { competitors: Competitor[] }) {
 
 // -------- Strategy --------
 
-function StrategySection({ strategy }: { strategy: Strategy }) {
+export function StrategySection({ strategy }: { strategy: Strategy }) {
   return (
     <section>
       <SectionHeader
@@ -1398,7 +1402,7 @@ function FrameworksSection({
   );
 }
 
-function SwotView({ swot }: { swot: SwotAnalysis }) {
+export function SwotView({ swot }: { swot: SwotAnalysis }) {
   const quadrants: Array<{
     key: "strengths" | "weaknesses" | "opportunities" | "threats";
     label: string;
@@ -1453,7 +1457,7 @@ function SwotView({ swot }: { swot: SwotAnalysis }) {
   );
 }
 
-function PestelView({ pestel }: { pestel: PestelAnalysis }) {
+export function PestelView({ pestel }: { pestel: PestelAnalysis }) {
   const factors: Array<{ key: PestelFinding["factor"]; label: string }> = [
     { key: "political", label: "Political & Regulatory" },
     { key: "economic", label: "Economic" },
@@ -1531,7 +1535,7 @@ function PestelView({ pestel }: { pestel: PestelAnalysis }) {
   );
 }
 
-function PortersView({ porters }: { porters: PortersFiveForces }) {
+export function PortersView({ porters }: { porters: PortersFiveForces }) {
   const orderedForces = [
     porters.forces.find((f) => f.force === "rivalry"),
     porters.forces.find((f) => f.force === "newEntrants"),
@@ -1868,7 +1872,7 @@ function AssumptionsDialog({ analysis }: { analysis: Analysis }) {
 }
 
 // -------- Customer Insights section --------
-function CustomerInsightsSection({
+export function CustomerInsightsSection({
   ci,
   status,
   analysisId,

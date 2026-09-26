@@ -25,6 +25,7 @@ import { CompanyProfileError, researchAndSaveCompanyProfile } from "./company-pr
 import { currentOfferSow } from "@shared/engagement-terms";
 import { parseCurrentSow } from "@shared/service-packages";
 import { applyPackageCost } from "./roi-calc";
+import { registerClientReportRoutes } from "./client-report";
 
 // Defensive parse for Customer Insights JSON — same pattern as PDF export uses
 // for SWOT/PESTEL. A corrupt row must not crash a whole export.
@@ -47,6 +48,7 @@ export async function registerRoutes(
   // These endpoints intentionally never touch real client data or paid-tier
   // research; see server/widget.ts.
   registerWidgetRoutes(app);
+  registerClientReportRoutes(app);
 
   // PUBLIC widget page — serves the standalone HTML at /excavate so it can be
   // iframed from brexconsulting.com. In production the built file lives at

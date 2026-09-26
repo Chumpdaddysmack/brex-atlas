@@ -25,7 +25,7 @@ export function canonicalPriceTiers(): SOW["priceTiers"] {
 export const PACKAGE_PROMPT = `BREX SERVICE CATALOG (approved ranges, not market benchmarks):
 ${JSON.stringify(canonicalPriceTiers())}
 Use exactly these three package names, monthly ranges, and baseline inclusions. Do not invent, narrow, or discount these ranges. Never select a final fee without an approved scope.
-Set recommendedTier to advisor, strategist, fractional, or null. Recommend only when justified by the client's goals, delivery needs, and budget; do not automatically recommend the middle tier. Respect an explicit preferred tier, but flag any scope mismatch. If the budget cannot cover the appropriate package, flag it for human review instead of lowering the price.
+Set recommendedTier to null. The separate evidence assessment and human approval determine service fit; do not automatically recommend the middle tier or infer fit from revenue, headcount, or a CMO title. A preferred tier is a preference, not verified suitability. If the budget cannot cover the requested remit, flag it for human review instead of lowering the price.
 ${PACKAGE_SCOPE_NOTE}
 Tailor strategic priorities and quarterly planning to the client. Volume and final deliverables require scope approval. Do not promise the complete plan at the Advisor fee. Never call these packages Foundation, Growth, or Scale; those words may still describe roadmap phases.
 Do not restate package prices in the summary, team, phase deliverables, or terms: priceTiers is the authoritative commercial table. Recommendations are subject to Kenneth's review.`;
@@ -60,7 +60,9 @@ export function standardizePackages(sow: SOW): SOW {
   updated.priceTiers = canonicalPriceTiers();
   // Do not reinterpret an old model recommendation as a recommendation for a
   // materially different catalog package.
-  updated.recommendedTier = !isLegacy && packageFor(sow.recommendedTier) ? sow.recommendedTier : null;
+  // Recommendations now live in the evidence assessment, not model-written SOW
+  // JSON. Keep legacy and newly generated guesses out of all proposal views.
+  updated.recommendedTier = null;
   updated.pricingVersion = PRICING_VERSION;
   updated.termsNotes = [...(Array.isArray(updated.termsNotes) ? updated.termsNotes : [])
     .filter(t => t !== PACKAGE_SCOPE_NOTE), PACKAGE_SCOPE_NOTE];

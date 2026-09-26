@@ -21,7 +21,7 @@ import type {
   RoiProjections,
   ContentPlanPayload,
 } from "@shared/schema";
-import { PRICING_VERSION, packageFor, parseCurrentSow } from "@shared/service-packages";
+import { PRICING_VERSION, packageFor } from "@shared/service-packages";
 
 /** Deterministic catalog cost for newly inferred scenarios. Manual overrides
  * and already saved forecasts remain untouched. Never change avgDealSize. */
@@ -29,10 +29,9 @@ export function applyPackageCost(assumptions: RoiAssumptions, analysis: { sow?: 
   let intake: any = {};
   try { intake = typeof analysis.assumptions === "string" ? JSON.parse(analysis.assumptions) : analysis.assumptions ?? {}; } catch {}
   const preferred = packageFor(intake?.preferredTier);
-  const recommended = packageFor(parseCurrentSow(analysis.sow)?.recommendedTier);
-  const tier = preferred ?? recommended ?? packageFor("strategist")!;
+  const tier = preferred ?? packageFor("strategist")!;
   const monthly = (tier.monthly + tier.monthlyMax) / 2;
-  const basis = preferred ? "Client-preferred package" : recommended ? "Suggested package, subject to review" : "Illustrative planning assumption, not a recommendation";
+  const basis = preferred ? "Client-preferred package" : "Illustrative planning assumption, not a recommendation";
   return { ...assumptions, pricingVersion: PRICING_VERSION, programCost12Mo: monthly * 12,
     rationale: { ...assumptions.rationale, programCost:
       `${basis}: ${tier.name}, using the illustrative range midpoint of $${monthly.toLocaleString("en-US")}/month × 12 = $${(monthly * 12).toLocaleString("en-US")}. Approved range: $${tier.monthly.toLocaleString("en-US")}–$${tier.monthlyMax.toLocaleString("en-US")}/month. This midpoint is not a final quote. Additional execution, media, software, and third-party costs are excluded and must be budgeted before relying on ROI. This is a 12-month scenario, not the six-month minimum obligation.` } };

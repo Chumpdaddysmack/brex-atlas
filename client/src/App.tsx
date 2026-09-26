@@ -11,6 +11,7 @@ import History from "@/pages/history";
 import ContentStudio from "@/pages/content-studio";
 import Login from "@/pages/login";
 import { DemoModeProvider } from "@/components/DemoMode";
+import ClientReportPage from "@/pages/client-report";
 
 type AuthStatus = { authenticated: boolean };
 
@@ -61,7 +62,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <AuthGate />
+        {window.location.pathname.replace(/\/$/,"")==="/report" ? <ClientReportPage/> : <AuthGate />}
       </TooltipProvider>
     </QueryClientProvider>
   );

@@ -14,7 +14,7 @@ The engagement spans 12 months with an initial six-month commitment. The 90-day 
 
 Final fees depend on agreed scope, delivery volume, and complexity. Existing catalog inclusions describe the baseline service mix, not unlimited fulfillment or a guarantee that every strategic recommendation is included at every tier. Additional work, media spend, software, and third-party expenses require separate scoping and approval. Old fixed-discount claims have been removed.
 
-`shared/brex-pricing.ts` stores the approved package names, range endpoints, and baseline inclusions. `shared/service-packages.ts` provides canonical labels, proposal normalization, and generation instructions. AI may suggest a package for review, but cannot invent a fee, narrow the range, or silently add scope. There is no automatic middle-tier recommendation.
+`shared/brex-pricing.ts` stores the approved package names, range endpoints, and baseline inclusions. `shared/service-packages.ts` provides canonical labels, proposal normalization, and generation instructions. The evidence assessment in `shared/tier-assessment.ts` now determines a candidate package from documented discovery facts, with human approval required before publication. Model-written SOW package guesses are suppressed. No system component may invent a fee, narrow the range, or silently add scope. There is no automatic middle-tier recommendation.
 
 ## Saved proposals and exports
 
@@ -24,7 +24,7 @@ The internal `fractional` key and widget/CRM `full-fractional` key are preserved
 
 ## Forecasts and new lead estimates
 
-New or explicitly regenerated ROI scenarios use the preferred package, or a current valid model suggestion. With neither, Strategist CMO is an explicitly labeled illustrative planning scenario, not a recommendation. The scenario uses the range midpoint: Advisor $4,250/month, Strategist $7,250/month, or Full Fractional $12,500/month. These are assumptions, not final quotes.
+New or explicitly regenerated ROI scenarios use the explicitly preferred package. Without a preference, Strategist CMO is an explicitly labeled illustrative planning scenario, not a recommendation. A model-written SOW suggestion never selects the scenario; the new evidence assessment does not silently rewrite ROI. The scenario uses the range midpoint: Advisor $4,250/month, Strategist $7,250/month, or Full Fractional $12,500/month. These are assumptions, not final quotes.
 
 Brex fees are program costs, not the prospect's average customer deal size. The latter must come from the prospect's own economics or be labeled as an unverified estimate. ROI cost rationale discloses excluded delivery and third-party costs. Manual cost overrides remain available. Existing forecasts are not silently changed and are flagged as predating the current ranges.
 

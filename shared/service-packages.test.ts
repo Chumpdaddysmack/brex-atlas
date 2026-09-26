@@ -30,8 +30,8 @@ test("old proposals use catalog scope and ranges, not arbitrary model fees, with
   assert.deepEqual(result.phases, input.phases);
   assert.deepEqual(standardizePackages(result), result);
 });
-test("only a current, valid recommendation is presented, never a hardcoded middle tier", () => {
-  assert.equal(standardizePackages({ ...legacy(), pricingVersion: PRICING_VERSION, recommendedTier: "advisor" }).recommendedTier, "advisor");
+test("model-written SOW recommendations are not presented as evidence-approved recommendations", () => {
+  assert.equal(standardizePackages({ ...legacy(), pricingVersion: PRICING_VERSION, recommendedTier: "advisor" }).recommendedTier, null);
   assert.equal(standardizePackages({ ...legacy(), recommendedTier: "strategist" }).recommendedTier, null);
   assert.equal(standardizePackages({ ...legacy(), pricingVersion: PRICING_VERSION, recommendedTier: "invalid" as any }).recommendedTier, null);
 });
