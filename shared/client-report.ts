@@ -9,6 +9,14 @@ export const BOOKING_URL = "https://meetings-na2.hubspot.com/kenny-peavy";
 export function reportCtaLabel(mode: "full" | "demo") {
   return mode === "full" ? "Schedule your report presentation" : "Discuss your report";
 }
+export function reportPublishRequirements(input:{hasPreview:boolean;reviewed:boolean;protect:boolean;code:string}) {
+  const missing:string[]=[];
+  if(!input.hasPreview) missing.push("Open “Review client preview” and review the report.");
+  if(!input.reviewed) missing.push("Approve the preview using “Approve preview and return” or the confirmation checkbox.");
+  if(input.protect&&input.code.length<8) missing.push("Enter an access code with at least 8 characters.");
+  if(input.protect&&input.code.length>80) missing.push("Use an access code with no more than 80 characters.");
+  return missing;
+}
 export const publishReportSchema = z.object({
   mode: z.enum(["full", "demo"]), reviewed: z.literal(true), previewHash:z.string().regex(/^[a-f0-9]{64}$/),
   accessCode: z.string().min(8).max(80).optional(),
