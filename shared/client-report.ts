@@ -6,6 +6,9 @@ import type { ReportVisuals } from "./report-visuals";
 
 export const REPORT_DAYS = 10;
 export const BOOKING_URL = "https://meetings-na2.hubspot.com/kenny-peavy";
+export function reportCtaLabel(mode: "full" | "demo") {
+  return mode === "full" ? "Schedule your report presentation" : "Discuss your report";
+}
 export const publishReportSchema = z.object({
   mode: z.enum(["full", "demo"]), reviewed: z.literal(true), previewHash:z.string().regex(/^[a-f0-9]{64}$/),
   accessCode: z.string().min(8).max(80).optional(),

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogHeader } from "@/components/ui/dialog";
 import { ClientReportView } from "@/pages/client-report";
 import type { ShareSummary, SharedReport } from "@shared/client-report";
-import { BOOKING_URL } from "@shared/client-report";
+import { BOOKING_URL, reportCtaLabel } from "@shared/client-report";
 import { Share2, Copy, ExternalLink } from "lucide-react";
 
 export function ReportSharing({analysisId}:{analysisId:string}) {
@@ -31,7 +31,7 @@ export function ReportSharing({analysisId}:{analysisId:string}) {
         <div className="grid sm:grid-cols-2 gap-4">
           <label className="text-sm font-medium">Report version<select data-testid="share-mode" className="mt-2 block w-full rounded-md border p-2 bg-background" value={mode} onChange={e=>{setMode(e.target.value as any);setPreview(null);setReviewed(false);}}>
             <option value="full">Full client report</option><option value="demo">Demo excerpts only</option></select></label>
-          <div className="text-sm rounded-lg bg-muted/40 p-3"><p className="font-medium">Discuss your report</p><a href={BOOKING_URL} target="_blank" rel="noreferrer" className="text-xs underline break-all">Existing Brex booking page</a><p className="text-xs text-muted-foreground mt-1">Expired links offer “Request renewed access.”</p></div>
+          <div className="text-sm rounded-lg bg-muted/40 p-3"><p className="font-medium" data-testid="sharing-cta-label">{reportCtaLabel(mode)}</p><a href={BOOKING_URL} target="_blank" rel="noreferrer" className="text-xs underline break-all">Existing Brex booking page</a><p className="text-xs text-muted-foreground mt-1">Expired links offer “Request renewed access.”</p></div>
         </div>
         <p className="text-sm text-muted-foreground">Includes the saved report visuals and content plan. Full links include an evidence-approved service recommendation, if available. Internal intake notes, editing controls, raw SOW drafts, and unapproved ROI forecasts are excluded.</p>
         <Button variant="outline" data-testid="preview-client-report" disabled={loadPreview.isPending} onClick={()=>loadPreview.mutate()}>{loadPreview.isPending?"Preparing preview…":"Review client preview"}<ExternalLink className="ml-2 w-4 h-4"/></Button>

@@ -10,7 +10,7 @@ import { ReportVisual, ReportDetails } from "@/components/ReportVisuals";
 import { EngagementTerms } from "@/components/EngagementTerms";
 import { RecommendationCard } from "@/components/TierAssessment";
 import { ExtractionSection, CompetitorsSection, StrategySection, SwotView, PestelView, PortersView, CustomerInsightsSection } from "./analysis";
-import { BOOKING_URL, type SharedReport } from "@shared/client-report";
+import { BOOKING_URL, reportCtaLabel, type SharedReport } from "@shared/client-report";
 import { safeHttp } from "@shared/tier-assessment";
 import { ArrowUpRight, Sun, Moon, LockKeyhole } from "lucide-react";
 import { Logo } from "@/components/Logo";
@@ -38,8 +38,8 @@ export function ClientReportView({data,preview=false}:{data:SharedReport;preview
     <header className="border-b"><div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
       <div><Logo className="h-7"/><p className="text-xs font-medium mt-2">Growth Excavation Report</p>
         <p className="text-xs text-muted-foreground mt-1">{preview?"Unpublished preview":r.mode==="demo"?"Selected report preview":"Private client report"}</p></div>
-      <div className="flex items-center gap-2"><Button size="icon" variant="ghost" aria-label="Toggle color theme" data-testid="report-theme" onClick={()=>{document.documentElement.classList.toggle("dark",!dark);setDark(!dark);}}>{dark?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>}</Button>
-        <Button asChild data-testid="report-cta"><a href={data.bookingUrl} target="_blank" rel="noreferrer">Discuss your report<ArrowUpRight className="ml-2 w-4 h-4"/></a></Button></div>
+      <div className="flex items-center gap-2 max-w-full"><Button size="icon" variant="ghost" className="shrink-0" aria-label="Toggle color theme" data-testid="report-theme" onClick={()=>{document.documentElement.classList.toggle("dark",!dark);setDark(!dark);}}>{dark?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>}</Button>
+        <Button asChild className="h-auto min-h-9 py-2 whitespace-normal text-center" data-testid="report-cta"><a href={data.bookingUrl} target="_blank" rel="noreferrer">{reportCtaLabel(r.mode)}<ArrowUpRight className="ml-2 w-4 h-4 shrink-0"/></a></Button></div>
     </div></header>
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
       <div><p className="text-xs uppercase tracking-widest text-primary">{r.mode==="demo"?"Demonstration preview":"Growth Excavation Report"}</p>
@@ -59,8 +59,8 @@ export function ClientReportView({data,preview=false}:{data:SharedReport;preview
           {demo&&<div className="grid md:grid-cols-2 gap-4">{demo.sections.filter(s=>s.group===(key==="recommendation"?"strategy":key)).map(s=><Card key={s.id} className="p-5 space-y-3 min-w-0"><h2 className="font-semibold">{s.title}</h2>{s.items.map((i,n)=><div key={n}><p className="text-xs font-semibold text-primary">{i.label}</p><p className="text-sm leading-relaxed mt-1 whitespace-pre-line break-words">{i.text}</p>{i.sources?.map(src=><a key={src.url} href={safeHttp(src.url)??undefined} target="_blank" rel="noreferrer" className="text-xs underline">{src.title}</a>)}</div>)}{!s.items.length&&<p className="text-sm text-muted-foreground">No excerpt available in this section.</p>}<p className="text-xs text-muted-foreground border-t pt-3">Full report: {s.fullReport}</p></Card>)}</div>}
         </ReportBoundary></TabsContent>)}
       </Tabs>
-      <footer className="border-t pt-6 flex flex-wrap gap-4 items-center justify-between"><div><h2 className="font-semibold">Turn the findings into priorities</h2><p className="text-sm text-muted-foreground mt-1">Walk through the opportunities and agree on the next practical move.</p></div>
-        <Button asChild><a href={data.bookingUrl} target="_blank" rel="noreferrer">Discuss your report<ArrowUpRight className="ml-2 h-4 w-4"/></a></Button></footer>
+      <footer className="border-t pt-6 flex flex-wrap gap-4 items-center justify-between"><div><h2 className="font-semibold">{full?"Your live report presentation":"Turn the findings into priorities"}</h2><p className="text-sm text-muted-foreground mt-1">{full?"Review the findings together, validate assumptions, and connect the priorities to your growth goals.":"Walk through the opportunities and agree on the next practical move."}</p></div>
+        <Button asChild className="h-auto min-h-9 py-2 whitespace-normal text-center max-w-full" data-testid="report-footer-cta"><a href={data.bookingUrl} target="_blank" rel="noreferrer">{reportCtaLabel(r.mode)}<ArrowUpRight className="ml-2 h-4 w-4 shrink-0"/></a></Button></footer>
     </main>
   </div>;
 }
