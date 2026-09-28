@@ -9,6 +9,7 @@
 // On Railway, set this to your pat-na2-... token.
 
 import { packageFor, packageMonthlyLabel } from "@shared/service-packages";
+import { widgetAttributionProperties } from "@shared/widget-attribution";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
@@ -157,33 +158,36 @@ function buildContactProperties(input: AtlasWidgetSyncInput) {
 }
 
 async function findContactByEmail(email: string): Promise<string | null> {
-  try {
-    const r = await hs<any>("POST", "/crm/v3/objects/contacts/search", {
+  // A failed lookup is not evidence of a new contact. Propagate errors rather
+  // than trying to create a duplicate or replacing first-touch attribution.
+  const r = await hs<any>("POST", "/crm/v3/objects/contacts/search", {
       filterGroups: [{
         filters: [{ propertyName: "email", operator: "EQ", value: email }],
       }],
       properties: ["email"],
       limit: 1,
     });
-    return r?.results?.[0]?.id ?? null;
-  } catch (err) {
-    console.error("[hubspot] findContactByEmail failed:", err);
-    return null;
-  }
+  return r?.results?.[0]?.id ?? null;
 }
 
 async function upsertContact(input: AtlasWidgetSyncInput): Promise<string> {
   const props = buildContactProperties(input);
   const existingId = await findContactByEmail(input.email);
   if (existingId) {
-    await hs("PATCH", `/crm/v3/objects/contacts/${existingId}`, { properties: props });
+    // Read the contact directly instead of relying on the search index's
+    // potentially stale property values. Fail closed if this read fails.
+    const current = await hs<{properties:{original_lead_source?:string|null}}>(
+      "GET", `/crm/v3/objects/contacts/${encodeURIComponent(existingId)}?properties=original_lead_source`);
+    await hs("PATCH", `/crm/v3/objects/contacts/${existingId}`, {
+      properties: {...props,...widgetAttributionProperties(current.properties.original_lead_source)},
+    });
     return existingId;
   }
-  // Set lead_source_tag + original_lead_source only on create
+  // New contacts get both hidden defaults. Existing source values above are
+  // omitted from PATCH entirely, rather than written back or overwritten.
   const createProps = {
     ...props,
-    lead_source_tag: "Atlas Excavator Widget",
-    original_lead_source: "Website",
+    ...widgetAttributionProperties(),
     lifecyclestage: input.fitTier === "not-a-fit" ? "subscriber" : "lead",
   };
   const created = await hs<any>("POST", "/crm/v3/objects/contacts", { properties: createProps });

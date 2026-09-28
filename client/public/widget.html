@@ -448,6 +448,10 @@
 
     <!-- Lead capture (shown BEFORE unlock) -->
     <div class="lead-card" id="lead-card">
+      <!-- Hidden attribution defaults; the server enforces canonical values
+           and preserves an existing Original Lead Source in HubSpot. -->
+      <input type="hidden" id="lead-source-tag" name="lead_source_tag" value="Atlas Excavator Widget" />
+      <input type="hidden" id="original-lead-source" name="original_lead_source" value="Website" />
       <h3>Get your preview recap</h3>
       <p>Enter your work email to request your Atlas recap and unlock an inferred strength and possible constraint. This preview is not a researched website audit.</p>
       <div class="lead-row">
@@ -745,6 +749,8 @@
         body: JSON.stringify({
           diagnosticId: state.diagnosticId,
           email, company,
+          lead_source_tag: $('lead-source-tag').value,
+          original_lead_source: $('original-lead-source').value,
           ...(state.config?.marketingConsent?.version ? {
             marketingConsent: $('marketing-consent').checked,
             marketingConsentVersion: state.config.marketingConsent.version,
