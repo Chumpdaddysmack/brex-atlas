@@ -14,7 +14,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 let client: SupabaseClient | null = null;
-export function widgetDb(): SupabaseClient {
+function db(): SupabaseClient {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error(
       "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set. Widget persistence disabled.",
@@ -29,8 +29,6 @@ export function widgetDb(): SupabaseClient {
   }
   return client;
 }
-
-const db = widgetDb;
 
 // Hash IP so we can rate-limit / correlate without storing raw IPs (light PII posture)
 export function hashIp(ip: string): string {

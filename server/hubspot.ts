@@ -299,34 +299,3 @@ export function hubspotContactUrl(contactId: string): string {
 export function hubspotDealUrl(dealId: string): string {
   return `https://app-na2.hubspot.com/contacts/242249577/deal/${dealId}`;
 }
-
-// Research snapshots deliberately do not touch old scores, diagnostic IDs,
-// tiers, lifecycle stage or deal creation. This isolates legacy recap triggers.
-export async function syncSnapshotToHubSpot(input:{
-  email:string;company:string;url:string;snapshotId:string;snapshotUrl:string;requestedAt:string;
-}):Promise<AtlasWidgetSyncResult> {
-  if(!HUBSPOT_TOKEN)return {contactId:null,dealId:null,status:"skipped",error:"HubSpot unavailable"};
-  try{
-    const id=await findContactByEmail(input.email);
-    let existing:Record<string,string|null>={};
-    if(id){
-      const current=await hs<{properties:Record<string,string|null>}>("GET",
-        `/crm/v3/objects/contacts/${encodeURIComponent(id)}?properties=original_lead_source,company,website,atlas_snapshot_id,atlas_snapshot_url`);
-      existing=current.properties;
-    }
-    const props:Record<string,string>={
-      email:input.email,...widgetAttributionProperties(existing.original_lead_source),
-      ...(!existing.company?{company:input.company}:{}),
-      ...(!existing.website?{website:input.url}:{}),
-      atlas_snapshot_url:input.snapshotUrl,
-      atlas_snapshot_id:input.snapshotId,
-      atlas_snapshot_requested_at:input.requestedAt,
-    };
-    // An HTTP retry must not change the enrollment trigger timestamp.
-    if(id&&existing.atlas_snapshot_id===input.snapshotId&&existing.atlas_snapshot_url===input.snapshotUrl)
-      return {contactId:id,dealId:null,status:"synced"};
-    const saved=await hs<any>(id?"PATCH":"POST",
-      `/crm/v3/objects/contacts${id?`/${encodeURIComponent(id)}`:""}`,{properties:props});
-    return {contactId:id||saved.id,dealId:null,status:"synced"};
-  }catch{return {contactId:null,dealId:null,status:"failed",error:"Snapshot contact sync failed"};}
-}

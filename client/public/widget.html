@@ -1,216 +1,807 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<meta name="referrer" content="no-referrer">
-<title>Company &amp; Positioning Snapshot | Brex Atlas</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Brex Atlas Excavator — Live Preview</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root {
-  --navy-deep:#0F1824; --navy:#2A4365; --sky:#00A6FB; --teal:#1B998B;
-  --rust:#C02B0A; --text:#0F1824; --muted:#536778; --border:#DDE8EE;
-  --bg:#fff; --soft:#F7FAFC; --radius:14px;
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0;background:transparent;color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased}
-.widget{max-width:880px;margin:0 auto;padding:28px 24px 40px}
-.card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:32px;box-shadow:0 6px 20px rgba(15,24,36,.08)}
-.eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy);margin:0 0 12px}
-h1{font-size:clamp(26px,4.5vw,34px);line-height:1.15;letter-spacing:-.035em;margin:0 0 16px;overflow-wrap:anywhere}
-h2{font-size:21px;letter-spacing:-.025em;line-height:1.3;margin:0 0 14px}
-h3{font-size:17px;margin:0 0 10px}
-p{font-size:15px;line-height:1.65;margin:0 0 16px}
-.muted,.lede{color:var(--muted)}
-.lede{max-width:64ch;margin-bottom:24px}
-.field{margin-bottom:20px}
-.field label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}
-input[type=url],input[type=text],input[type=email]{width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:10px;font:inherit;font-size:16px;background:var(--bg);color:var(--text)}
-input:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--sky);outline-offset:3px}
-input::placeholder{color:#697b8a}
-.choice{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.6;cursor:pointer}
-.choice input{width:18px;height:18px;flex:none;margin-top:2px;accent-color:var(--navy)}
-.actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:20px}
-.btn{display:inline-flex;justify-content:center;align-items:center;padding:14px 22px;min-height:48px;border:0;border-radius:10px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;line-height:1.4}
-.primary{background:var(--rust);color:#fff;box-shadow:0 4px 14px rgba(192,43,10,.18)}
-.primary:hover:not(:disabled){background:#a52209}
-.secondary{background:var(--soft);border:1px solid var(--border);color:var(--navy)}
-.btn:disabled{background:#e2e7eb;color:#627280;cursor:not-allowed;box-shadow:none}
-.fine{font-size:12px;line-height:1.65;color:var(--muted)}
-.error{background:#fff3f1;border:1px solid #e5b6ab;color:#8c230c;padding:14px;border-radius:10px;font-size:14px;line-height:1.6;margin:16px 0}
-.hidden{display:none!important}
-.loader{text-align:center;padding:35px 0}
-.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--navy);border-radius:50%;margin:0 auto 24px;animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.snapshot-head{border-bottom:1px solid var(--border);padding-bottom:24px;margin-bottom:24px}
-.snapshot-meta{font-size:12px;color:var(--muted);line-height:1.8}
-.company-link,.citation{color:#165574;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
-.intro p{margin-bottom:12px}
-.citations{display:block;margin-top:5px;font-size:12px;line-height:1.7}
-.citation{margin-right:12px}
-.finding{background:var(--soft);border-left:3px solid var(--sky);padding:22px;margin:26px 0 20px;border-radius:0 10px 10px 0}
-.reasoning{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-.reasoning>div{border-top:1px solid var(--border);padding-top:18px}
-.reasoning .eyebrow{color:var(--muted);letter-spacing:.04em;font-size:11px}
-.limits{margin-top:22px;font-size:12px;color:var(--muted);line-height:1.7}
-.limits ul{padding-left:18px;margin:6px 0}
-.cta{margin-top:24px;padding-top:24px;border-top:1px solid var(--border)}
-.lead-card{background:linear-gradient(135deg,var(--navy-deep),var(--navy));color:#fff;padding:28px;border-radius:var(--radius);margin-top:20px}
-.lead-card p{color:#d3dfeb}
-.lead-row{display:grid;grid-template-columns:1fr auto;gap:12px;margin:18px 0}
-.lead-card .fine{color:#d3dfeb;margin:10px 0 0}
-.success{background:#edf7f4;border:1px solid #b6d8ca;color:#173f36;padding:22px;border-radius:12px;margin-top:20px}
-.success p{margin-bottom:10px}
-.saved-url{width:100%;margin-top:8px;font-size:12px!important}
-.footer-note{font-size:12px;line-height:1.7;color:var(--muted);margin:18px 2px}
-@media(max-width:600px){
- .widget{padding:20px 16px 32px}.card{padding:22px}.reasoning{grid-template-columns:1fr;gap:14px}
- .lead-card{padding:22px}.lead-row{grid-template-columns:1fr}.actions .btn{width:100%}
- .finding{padding:18px}.snapshot-head{padding-bottom:18px}h2{font-size:20px}
-}
-@media(prefers-reduced-motion:reduce){.spinner{animation:none}}
+  /* ---------- Brex tokens (verified palette) ---------- */
+  :root {
+    --navy-deep:  #0F1824;
+    --navy:       #2A4365;
+    --sky:        #00A6FB;
+    --teal:       #1B998B;
+    --marigold:   #F4BD11;
+    --rust:       #C02B0A;
+    --muted:      #607382;
+    --chip:       #EDF2F7;
+    --blue-light: #DDE8EE;
+    --border:     #DDE8EE;
+    --bg:         #FFFFFF;
+    --bg-soft:    #F7FAFC;
+    --text:       #0F1824;
+    --text-muted: #607382;
+    --radius:     10px;
+    --radius-lg:  14px;
+    --shadow-sm:  0 1px 2px rgba(15,24,36,.06);
+    --shadow-md:  0 6px 20px rgba(15,24,36,.08);
+    --shadow-lg:  0 18px 48px rgba(15,24,36,.14);
+  }
+  * { box-sizing: border-box; }
+  /* Transparent iframe canvas; keep --bg white for readable cards and inputs. */
+  html, body { margin: 0; padding: 0; background: transparent; color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--navy); text-decoration: none; }
+  a:hover { color: var(--sky); }
+
+  /* ---------- Shell ---------- */
+  .widget {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 28px 24px 40px;
+  }
+  @media (max-width: 600px) { .widget { padding: 20px 16px 32px; } }
+
+  /* ---------- Card ---------- */
+  .card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    box-shadow: var(--shadow-md);
+  }
+  @media (max-width: 600px) { .card { padding: 22px; } }
+
+  h1.hero {
+    font-size: clamp(24px, 4.5vw, 32px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin: 0 0 10px;
+    color: var(--navy-deep);
+  }
+  p.lede {
+    font-size: 15px; color: var(--text-muted); line-height: 1.55;
+    margin: 0 0 24px; max-width: 60ch;
+  }
+
+  /* ---------- Form ---------- */
+  .field { margin-bottom: 18px; }
+  .field label {
+    display: block; font-size: 13px; font-weight: 600; color: var(--navy-deep);
+    margin-bottom: 8px; letter-spacing: -0.005em;
+  }
+  .field .hint { font-weight: 400; color: var(--text-muted); margin-left: 6px; font-size: 12px; }
+
+  input[type="url"], input[type="text"], input[type="email"] {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--bg);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus {
+    outline: none;
+    border-color: var(--sky);
+    box-shadow: 0 0 0 3px rgba(0,166,251,.15);
+  }
+  input::placeholder { color: #A0AEC0; }
+
+  .chips {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .chip {
+    display: inline-flex; align-items: center;
+    padding: 8px 14px;
+    background: var(--chip);
+    border: 1.5px solid transparent;
+    border-radius: 999px;
+    font-size: 13px; font-weight: 500;
+    color: var(--navy-deep);
+    cursor: pointer;
+    transition: all .12s ease;
+    user-select: none;
+  }
+  .chip:hover { background: var(--blue-light); }
+  .chip.active {
+    background: var(--navy);
+    color: #fff;
+    border-color: var(--navy);
+  }
+
+  /* ---------- CTA button ---------- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 14px 24px;
+    font-family: inherit; font-size: 15px; font-weight: 600;
+    border: none; border-radius: var(--radius);
+    cursor: pointer;
+    transition: transform .08s, background .15s, box-shadow .15s;
+  }
+  .btn-primary {
+    background: var(--rust);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(192,43,10,.28);
+  }
+  .btn-primary:hover:not(:disabled) { background: #a52209; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(192,43,10,.32); }
+  .btn-primary:disabled { background: #C4C9CE; cursor: not-allowed; box-shadow: none; color: #7F8792; }
+  .btn-ghost {
+    background: transparent; color: var(--navy-deep); border: 1.5px solid var(--border);
+  }
+  .btn-ghost:hover { background: var(--chip); border-color: var(--navy); }
+
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  .actions small { color: var(--text-muted); font-size: 12px; }
+
+  /* ---------- Loading state ---------- */
+  .loader {
+    text-align: center; padding: 20px 0;
+  }
+  .loader-ring {
+    width: 54px; height: 54px;
+    border: 4px solid var(--blue-light);
+    border-top-color: var(--sky);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 22px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader h3 { font-size: 18px; font-weight: 700; margin: 0 0 6px; color: var(--navy-deep); }
+  .loader-phase {
+    font-size: 14px; color: var(--text-muted); font-weight: 500;
+    min-height: 22px; transition: opacity .3s;
+  }
+
+  /* ---------- Results ---------- */
+  .verdict-strip {
+    display: flex; align-items: center; gap: 20px;
+    padding: 20px 24px;
+    background: linear-gradient(135deg, var(--navy-deep) 0%, var(--navy) 100%);
+    color: #fff;
+    border-radius: var(--radius-lg);
+    margin-bottom: 22px;
+  }
+  @media (max-width: 500px) {
+    .verdict-strip { flex-direction: column; align-items: flex-start; padding: 20px; }
+  }
+  .score-ring {
+    position: relative; flex-shrink: 0;
+    width: 90px; height: 90px;
+  }
+  .score-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .score-ring .bg-ring { stroke: rgba(255,255,255,.15); fill: none; stroke-width: 8; }
+  .score-ring .fg-ring { stroke: var(--sky); fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+  .score-ring .score-text {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 26px; font-weight: 800; letter-spacing: -0.02em;
+  }
+  .verdict-body { flex: 1; min-width: 0; }
+  .verdict-label {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .verdict-label.critical      { background: rgba(192,43,10,.22); color: #FEB3A2; }
+  .verdict-label.developing    { background: rgba(244,189,17,.22); color: var(--marigold); }
+  .verdict-label.solid         { background: rgba(0,166,251,.22); color: #7DD3FC; }
+  .verdict-label.top-quartile  { background: rgba(27,153,139,.25); color: #6EE7D8; }
+  .verdict-headline { font-size: 16px; font-weight: 500; line-height: 1.5; color: #E2E8F0; }
+
+  .benchmark-strip {
+    font-size: 13px; color: var(--text-muted);
+    margin-bottom: 22px; padding: 12px 16px;
+    background: var(--bg-soft); border-left: 3px solid var(--sky);
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+  .benchmark-strip b { color: var(--navy-deep); font-weight: 700; }
+
+  /* ---------- Sub-score cards ---------- */
+  .subscores {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 560px) { .subscores { grid-template-columns: 1fr; } }
+  .subscore {
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+  }
+  .subscore-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    margin-bottom: 10px;
+  }
+  .subscore-label {
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+  .subscore-val {
+    font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--navy-deep);
+    font-variant-numeric: tabular-nums;
+  }
+  .subscore-bar {
+    height: 5px; background: var(--chip); border-radius: 999px; margin-bottom: 12px; overflow: hidden;
+  }
+  .subscore-fill { height: 100%; border-radius: 999px; transition: width 1s ease; }
+  .subscore-fill.low  { background: var(--rust); }
+  .subscore-fill.mid  { background: var(--marigold); }
+  .subscore-fill.high { background: var(--teal); }
+  .subscore-finding { font-size: 13.5px; color: var(--text); line-height: 1.55; }
+
+  /* ---------- SWOT teaser (locked) ---------- */
+  .swot-teaser {
+    padding: 22px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, var(--bg-soft) 0%, var(--bg) 100%);
+    border: 1px solid var(--border);
+    margin-bottom: 22px;
+    position: relative;
+  }
+  .swot-teaser h3 {
+    font-size: 16px; font-weight: 700; margin: 0 0 4px; color: var(--navy-deep);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .swot-teaser .sublabel {
+    font-size: 12px; color: var(--text-muted); margin-bottom: 16px; font-weight: 500;
+  }
+  .swot-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  @media (max-width: 500px) { .swot-grid { grid-template-columns: 1fr; } }
+  .swot-quad {
+    padding: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .swot-quad h4 {
+    font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    margin: 0 0 10px; color: var(--navy);
+  }
+  .swot-quad ul { margin: 0; padding: 0; list-style: none; }
+  .swot-quad li {
+    font-size: 13px; color: var(--text); padding: 4px 0; line-height: 1.4;
+    display: flex; gap: 8px;
+  }
+  .swot-quad li::before {
+    content: "›"; color: var(--sky); font-weight: 700; flex-shrink: 0;
+  }
+  .swot-evidence-blur {
+    font-size: 11px; color: transparent;
+    background: linear-gradient(90deg, #CBD5E0 0%, #E2E8F0 50%, #CBD5E0 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    filter: blur(4px);
+    user-select: none;
+    line-height: 1.4;
+    margin-top: 4px;
+    animation: shimmer 2.5s ease-in-out infinite;
+  }
+  @keyframes shimmer { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+  .swot-evidence-blur::before { content: "Evidence unlocked in the paid Growth Excavation Report"; }
+
+  /* ---------- Lead capture ---------- */
+  .lead-card {
+    padding: 24px;
+    background: linear-gradient(135deg, var(--navy-deep) 0%, var(--navy) 100%);
+    border-radius: var(--radius-lg);
+    color: #fff;
+    margin-bottom: 22px;
+  }
+  .lead-card h3 { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
+  .lead-card p { margin: 0 0 16px; font-size: 14px; color: #CBD5E0; line-height: 1.5; }
+  .lead-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .lead-row input {
+    flex: 1; min-width: 200px;
+    background: rgba(255,255,255,.08);
+    border-color: rgba(255,255,255,.15);
+    color: #fff;
+  }
+  .lead-row input::placeholder { color: #94A3B8; }
+  .lead-row input:focus { border-color: var(--sky); background: rgba(255,255,255,.12); }
+  .lead-row .btn-primary { flex-shrink: 0; }
+  .consent-choice { display:flex; align-items:flex-start; gap:10px; margin:16px 0 8px; color:#F7FAFC; font-size:14px; line-height:1.5; cursor:pointer; }
+  .consent-choice input { flex:0 0 20px; width:20px; height:20px; margin:2px 0 0; accent-color:var(--sky); }
+  .consent-choice input:focus-visible { outline:2px solid #fff; outline-offset:3px; }
+  .lead-card .consent-note { margin:0; font-size:12px; color:#CBD5E0; }
+
+  /* Unlocked evidence panel (post lead-capture) */
+  .unlock-panel {
+    padding: 18px;
+    background: var(--bg-soft);
+    border: 1px solid var(--teal);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+  }
+  .unlock-panel .unlock-label {
+    display: inline-block;
+    font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--teal); background: rgba(27,153,139,.1);
+    padding: 3px 8px; border-radius: 4px; margin-bottom: 8px;
+  }
+  .unlock-panel .unlock-title {
+    font-size: 14px; font-weight: 700; color: var(--navy-deep); margin-bottom: 6px;
+  }
+  .unlock-panel .unlock-evidence {
+    font-size: 13px; color: var(--text); line-height: 1.5;
+  }
+
+  /* ---------- Final CTA rail ---------- */
+  .cta-rail {
+    padding: 24px;
+    border: 1.5px solid var(--marigold);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, #FFFBEB 0%, #FFF 100%);
+    text-align: center;
+  }
+  .cta-rail h3 {
+    margin: 0 0 6px; font-size: 20px; font-weight: 800; color: var(--navy-deep);
+    letter-spacing: -0.01em;
+  }
+  .cta-rail p { margin: 0 0 18px; font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+  .cta-rail .actions { justify-content: center; }
+
+  /* ---------- Utility ---------- */
+  .footer-note {
+    margin-top: 22px;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.5;
+  }
+  .error-banner {
+    padding: 12px 16px;
+    background: #FEF2F2;
+    border: 1px solid #FCA5A5;
+    border-radius: var(--radius);
+    color: #991B1B;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
-<main class="widget" id="widget-root">
-  <section id="step-intake" class="card">
-    <p class="eyebrow">Company &amp; Positioning Snapshot</p>
-    <h1>A clearer view of your business.<br>With evidence you can check.</h1>
-    <p class="lede">Explore a source-cited company introduction, one observation about your public positioning, and a question worth discussing. Research, not an inferred score.</p>
-    <form id="research-form">
-      <div class="field"><label for="company-name">Company name</label><input id="company-name" type="text" placeholder="Your company's public name" maxlength="140" required autocomplete="organization"></div>
-      <div class="field"><label for="url-input">Company website</label><input id="url-input" type="text" inputmode="url" placeholder="example.com" maxlength="300" required autocomplete="url"></div>
-      <label class="choice"><input id="company-confirmed" type="checkbox" required><span>I confirm this name and website refer to the company I want researched.</span></label>
-      <div id="error-slot" role="alert"></div>
-      <div class="actions"><button class="btn primary" id="run-btn" type="submit">Research My Company</button><span class="fine">Free · Up to 5 research requests per day</span></div>
-    </form>
-    <p class="fine" style="margin:20px 0 0">Public sources only. No access to private company data or existing client reports. This is an automated research preview, not a consultant-reviewed diagnosis.</p>
-  </section>
-  <section id="step-loading" class="card hidden" aria-live="polite" aria-busy="true">
-    <div class="loader"><div class="spinner" aria-hidden="true"></div><h2>Researching your company</h2>
-      <p class="muted">Gathering public sources and checking the evidence behind your snapshot.</p>
-      <p class="fine">This can take a few minutes. If the evidence is insufficient, we will say so rather than guess.</p>
+<div class="widget" id="widget-root">
+
+  <!-- STEP 1: Intake form -->
+  <div id="step-intake" class="card">
+    <h1 class="hero">See what your marketing is missing &mdash; in 90 seconds.</h1>
+    <p class="lede">
+      Run a live Big Rock Fit Score&trade; against your site. This preview infers from category patterns to show you exactly how the paid Growth Excavation Report&trade; excavates the alignment gaps costing you revenue.
+    </p>
+
+    <div id="error-slot"></div>
+
+    <div class="field">
+      <label for="url-input">Your website <span class="hint">(URL only &mdash; we don't visit it in the preview)</span></label>
+      <input type="url" id="url-input" placeholder="example.com" autocomplete="off" />
     </div>
-  </section>
-  <section id="step-results" class="hidden">
-    <article class="card">
-      <header class="snapshot-head">
-        <p class="eyebrow">Your research preview</p><h1 id="result-company"></h1>
-        <a id="company-link" class="company-link" target="_blank" rel="noopener noreferrer"></a>
-        <div class="snapshot-meta" id="research-date"></div>
-      </header>
-      <section class="intro"><h2>Your company at a glance</h2><div id="introduction"></div></section>
-      <section class="finding"><p class="eyebrow">What we found · Public-source observation</p><h2>One positioning finding</h2><div id="finding"></div></section>
-      <div class="reasoning">
-        <div><p class="eyebrow">What it may mean · Interpretation</p><p id="interpretation"></p></div>
-        <div><p class="eyebrow">What to investigate next</p><p id="question"></p></div>
+
+    <div class="field">
+      <label>Industry</label>
+      <div class="chips" id="industry-chips"></div>
+    </div>
+
+    <div class="field">
+      <label>Annual revenue</label>
+      <div class="chips" id="revenue-chips"></div>
+    </div>
+
+    <div class="field">
+      <label>Primary growth goal</label>
+      <div class="chips" id="goal-chips"></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="run-btn" disabled>
+        Excavate the Big Rock &nbsp;&rsaquo;
+      </button>
+      <small>Free &middot; 5 previews per day</small>
+    </div>
+  </div>
+
+  <!-- STEP 2: Loading -->
+  <div id="step-loading" class="card hidden">
+    <div class="loader">
+      <div class="loader-ring"></div>
+      <h3>Excavating&hellip;</h3>
+      <div class="loader-phase" id="loader-phase">Scanning positioning patterns&hellip;</div>
+    </div>
+  </div>
+
+  <!-- STEP 3: Results -->
+  <div id="step-results" class="hidden">
+    <div class="verdict-strip">
+      <div class="score-ring">
+        <svg viewBox="0 0 100 100">
+          <circle class="bg-ring" cx="50" cy="50" r="42" />
+          <circle class="fg-ring" id="score-ring-fg" cx="50" cy="50" r="42"
+                  stroke-dasharray="263.9" stroke-dashoffset="263.9" />
+        </svg>
+        <div class="score-text" id="score-num">0</div>
       </div>
-      <div class="limits" id="limitations"></div>
-      <section class="cta">
-        <h2>Turn the observation into a conversation.</h2>
-        <p class="muted">Explore what this finding could mean for your business and whether a deeper Growth Excavation Report would be useful.</p>
-        <div class="actions">
-          <a class="btn primary" href="https://meetings-na2.hubspot.com/kenny-peavy" target="_blank" rel="noopener noreferrer">Discuss My Growth Opportunities</a>
-          <button class="btn secondary" id="save-btn" type="button">Save a Text Copy</button>
-        </div>
-      </section>
-    </article>
-    <section class="lead-card" id="lead-card">
-      <input type="hidden" id="lead-source-tag" name="lead_source_tag" value="Atlas Excavator Widget">
-      <input type="hidden" id="original-lead-source" name="original_lead_source" value="Website">
-      <h3>Keep your snapshot handy</h3>
-      <p>Request an email copy with your 10-day access link. Your sources are already visible above, with no signup required.</p>
-      <p class="fine" id="delivery-status">Automatic email delivery is not active yet. Requests are recorded for follow-up; save a text copy now to keep your research.</p>
-      <form id="lead-form">
-        <div class="lead-row"><input type="email" id="lead-email" aria-label="Work email" placeholder="you@company.com" required maxlength="254" autocomplete="email"><button class="btn primary" id="lead-btn">Request Email Copy</button></div>
-        <label class="choice"><input type="checkbox" id="marketing-consent" disabled><span id="marketing-consent-text">Optional marketing permission is loading.</span></label>
-        <p class="fine">Optional marketing permission is separate from this request. Leaving it unchecked does not change your existing email preferences. Email delivery depends on eligibility; you can always save a text copy.</p>
-        <div id="lead-error" role="alert"></div>
-      </form>
-    </section>
-    <div id="success" class="success hidden" role="status"></div>
-    <div class="actions"><button class="btn secondary" id="restart-btn" type="button">Research Another Company</button></div>
-    <p class="footer-note">Automated research preview. Sources may be incomplete or change over time. Source-reported facts and Brex's automated interpretation are presented separately. This is not a completed Growth Excavation Report or a service-tier recommendation.</p>
-  </section>
-</main>
+      <div class="verdict-body">
+        <div class="verdict-label" id="verdict-label">&mdash;</div>
+        <div class="verdict-headline" id="verdict-headline">&mdash;</div>
+      </div>
+    </div>
+
+    <div class="benchmark-strip" id="benchmark-strip"></div>
+
+    <div class="subscores" id="subscore-grid"></div>
+
+    <div class="swot-teaser">
+      <h3>SWOT preview <span style="font-size:11px; padding:3px 8px; background:var(--chip); color:var(--navy); border-radius:4px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase;">Titles only</span></h3>
+      <div class="sublabel">Evidence, competitor cross-refs, and 30-day fixes unlock in the paid report.</div>
+      <div class="swot-grid" id="swot-grid"></div>
+    </div>
+
+    <!-- Lead capture (shown BEFORE unlock) -->
+    <div class="lead-card" id="lead-card">
+      <!-- Hidden attribution defaults; the server enforces canonical values
+           and preserves an existing Original Lead Source in HubSpot. -->
+      <input type="hidden" id="lead-source-tag" name="lead_source_tag" value="Atlas Excavator Widget" />
+      <input type="hidden" id="original-lead-source" name="original_lead_source" value="Website" />
+      <h3>Get your preview recap</h3>
+      <p>Enter your work email to request your Atlas recap and unlock an inferred strength and possible constraint. This preview is not a researched website audit.</p>
+      <div class="lead-row">
+        <input type="email" id="lead-email" aria-label="Work email" placeholder="you@company.com" autocomplete="email" maxlength="254" />
+        <input type="text"  id="lead-company" aria-label="Company (optional)" placeholder="Company (optional)" autocomplete="organization" />
+        <button class="btn btn-primary" id="lead-btn">Send recap &rsaquo;</button>
+      </div>
+      <label class="consent-choice" for="marketing-consent">
+        <input type="checkbox" id="marketing-consent" aria-describedby="consent-note" disabled />
+        <span id="marketing-consent-text">Optional marketing permission is loading.</span>
+      </label>
+      <p class="consent-note" id="consent-note">The checkbox is optional. Leaving it unchecked does not block your recap or change any existing email preferences.</p>
+      <div id="lead-error" role="alert"></div>
+    </div>
+
+    <!-- Unlocked panels (revealed after lead-capture) -->
+    <div id="unlock-slot" class="hidden"></div>
+
+    <!-- Primary CTA rail -->
+    <div class="cta-rail">
+      <h3>Ready to excavate for real?</h3>
+      <p>The Growth Excavation Report&trade; is a $4,995 diagnostic across your site, competitors, and market &mdash; delivered in 5 business days. 50% credit applied to your first month if you retain us.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://meetings-na2.hubspot.com/kenny-peavy" target="_blank" rel="noopener">
+          Book your Growth Excavation Call
+        </a>
+        <a class="btn btn-ghost" href="#" id="restart-btn">Run another preview</a>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      Preview scores are inferred from industry + revenue + goal patterns and are not a real audit. The paid Growth Excavation Report&trade; cites your homepage, actual competitors, and 2026 buyer research for every finding.
+    </div>
+  </div>
+
+</div>
+
 <script>
-(()=>{
-'use strict';
-const $=id=>document.getElementById(id);
-const state={snapshot:null,token:null,expiresAt:null,config:null,busy:false};
-const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const safeUrl=s=>{try{const u=new URL(s);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password?u.href:null;}catch{return null;}};
-function height(){window.parent.postMessage({type:'atlas-widget-height',height:$('widget-root').offsetHeight+60},'*');}
-new ResizeObserver(height).observe(document.body);
-function step(id){['step-intake','step-loading','step-results'].forEach(x=>$(x).classList.toggle('hidden',x!==id));window.scrollTo(0,0);height();}
-function error(id,message){$(id).innerHTML='<div class="error">'+escapeHtml(message)+'</div>';height();}
-async function api(path,body){
- const response=await fetch('/api/widget/snapshot'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(240000)});
- const data=await response.json();if(!response.ok)throw new Error(data.error||'The request could not be completed. Please try again.');return data;
-}
-function claim(c){
- const links=(c.sources||[]).filter(s=>safeUrl(s.url)).map(s=>'<a class="citation" href="'+escapeHtml(safeUrl(s.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(s.title||new URL(s.url).hostname)+'</a>').join('');
- return '<p>'+escapeHtml(c.text)+'<span class="citations">'+links+'</span></p>';
-}
-function render(data){
- state.snapshot=data.snapshot;state.expiresAt=data.expiresAt;
- const s=data.snapshot;
- $('result-company').textContent=s.companyName;
- $('company-link').href=safeUrl(s.companyUrl)||'#';$('company-link').textContent=s.companyUrl;
- $('research-date').textContent='Research checked on '+new Date(s.researchedAt).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'})+' · Link expires '+new Date(data.expiresAt).toLocaleDateString();
- $('introduction').innerHTML=s.introduction.map(claim).join('');
- $('finding').innerHTML=claim(s.finding);$('interpretation').textContent=s.interpretation;$('question').textContent=s.question;
- $('limitations').innerHTML='<strong>Research limitations</strong><ul>'+['Public-source research, not an independent audit.',...(s.limitations||[])].map(t=>'<li>'+escapeHtml(t)+'</li>').join('')+'</ul>';
- $('marketing-consent').checked=false;$('lead-card').classList.remove('hidden');$('success').classList.add('hidden');
- $('lead-error').textContent='';step('step-results');
-}
-$('research-form').addEventListener('submit',async e=>{
- e.preventDefault();if(state.busy)return;state.busy=true;$('error-slot').textContent='';step('step-loading');
- try{
-  const data=await api('',{companyName:$('company-name').value.trim(),url:$('url-input').value.trim(),companyConfirmed:$('company-confirmed').checked});
-  state.token=data.token;render(data);
- }catch(err){step('step-intake');error('error-slot',err.name==='TimeoutError'?'Research took too long. Please try again later. No guessed findings were substituted.':err.message);}
- finally{state.busy=false;}
-});
-$('lead-form').addEventListener('submit',async e=>{
- e.preventDefault();if($('lead-btn').disabled)return;$('lead-btn').disabled=true;$('lead-btn').textContent='Saving request…';$('lead-error').textContent='';
- try{
-  const data=await api('/lead',{token:state.token,email:$('lead-email').value.trim(),
-   lead_source_tag:$('lead-source-tag').value,original_lead_source:$('original-lead-source').value,
-   ...(state.config?.marketingConsent?.version?{marketingConsent:$('marketing-consent').checked,marketingConsentVersion:state.config.marketingConsent.version}:{})});
-  $('success').innerHTML='<h3>Request recorded</h3><p>'+escapeHtml(data.message)+'</p><label for="saved-url">Your snapshot link</label><input class="saved-url" id="saved-url" type="text" readonly value="'+escapeHtml(data.snapshotUrl)+'">';
-  $('success').classList.remove('hidden');$('lead-card').classList.add('hidden');height();
- }catch(err){error('lead-error',err.message);}
- finally{$('lead-btn').disabled=false;$('lead-btn').textContent='Request Email Copy';}
-});
-$('save-btn').addEventListener('click',()=>{
- const s=state.snapshot;if(!s)return;
- const textClaim=c=>c.text+'\n'+c.sources.map(x=>x.title+': '+x.url).join('\n');
- const text=[s.companyName+' | Company & Positioning Snapshot','Research checked: '+s.researchedAt,
-  'Automated public research preview; not consultant-reviewed.',s.companyUrl,'',
-  'YOUR COMPANY AT A GLANCE',...s.introduction.map(textClaim),'','WHAT WE FOUND',textClaim(s.finding),
-  '','WHAT IT MAY MEAN (INTERPRETATION)',s.interpretation,'','WHAT TO INVESTIGATE NEXT',s.question,
-  '','LIMITATIONS',...s.limitations,'','Discuss your growth opportunities: https://meetings-na2.hubspot.com/kenny-peavy'].join('\n\n');
- const u=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=u;a.download='company-positioning-snapshot.txt';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
-});
-$('restart-btn').addEventListener('click',()=>{
- state.snapshot=null;state.token=null;state.expiresAt=null;history.replaceState(null,'',location.pathname+location.search);
- $('research-form').reset();$('lead-form').reset();$('error-slot').textContent='';step('step-intake');
-});
-async function init(){
- try{
-  const r=await fetch('/api/widget/snapshot/config');if(!r.ok)throw new Error();state.config=await r.json();
-  $('delivery-status').classList.toggle('hidden',state.config.emailDeliveryReady===true);
-  if(state.config.marketingConsent?.version){$('marketing-consent-text').textContent=state.config.marketingConsent.text;$('marketing-consent').disabled=false;}
- }catch{$('marketing-consent-text').textContent='Optional signup is unavailable. You may still request your snapshot.';}
- const token=new URLSearchParams(location.hash.slice(1)).get('snapshot');
- if(token){step('step-loading');try{const data=await api('/view',{token});state.token=token;render(data);}catch(err){step('step-intake');error('error-slot',err.message);}}
- height();
-}
-init();
+(() => {
+  'use strict';
+
+  // ---------- State ----------
+  const state = {
+    url: '',
+    industry: null,
+    revenueBand: null,
+    goal: null,
+    config: null,
+    result: null,
+    diagnosticId: null,
+  };
+
+  // ---------- DOM helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const showStep = (id) => {
+    ['step-intake', 'step-loading', 'step-results'].forEach((s) => {
+      $(s).classList.toggle('hidden', s !== id);
+    });
+    // Auto-scroll widget top into iframe view
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Post height to parent for iframe auto-resize
+    postHeight();
+  };
+  const postHeight = () => {
+    try {
+      const h = document.getElementById('widget-root').offsetHeight + 60;
+      window.parent && window.parent.postMessage({ type: 'atlas-widget-height', height: h }, '*');
+    } catch (_) {}
+  };
+  new ResizeObserver(postHeight).observe(document.body);
+
+  // ---------- Load config, render chips ----------
+  async function loadConfig() {
+    try {
+      const res = await fetch('/api/widget/config');
+      state.config = await res.json();
+      if (state.config.marketingConsent?.version && state.config.marketingConsent?.text) {
+        $('marketing-consent-text').textContent = state.config.marketingConsent.text;
+        $('marketing-consent').disabled = false;
+      } else {
+        $('marketing-consent-text').textContent = 'Optional marketing signup is unavailable. You can still request your recap.';
+      }
+      renderChips('industry-chips',  state.config.industries,   (v) => { state.industry = v; validate(); });
+      renderChips('revenue-chips',   state.config.revenueBands, (v) => { state.revenueBand = v; validate(); });
+      renderChips('goal-chips',      state.config.goals,        (v) => { state.goal = v; validate(); });
+    } catch (err) {
+      showError('Could not load widget config. Please refresh.');
+    }
+  }
+  function renderChips(containerId, values, onSelect) {
+    const c = $(containerId);
+    c.innerHTML = '';
+    values.forEach((v) => {
+      const el = document.createElement('div');
+      el.className = 'chip';
+      el.textContent = v;
+      el.addEventListener('click', () => {
+        [...c.children].forEach((n) => n.classList.remove('active'));
+        el.classList.add('active');
+        onSelect(v);
+      });
+      c.appendChild(el);
+    });
+  }
+
+  // ---------- Validation ----------
+  const urlInput = $('url-input');
+  urlInput.addEventListener('input', () => { state.url = urlInput.value.trim(); validate(); });
+  function validate() {
+    const ok = state.url.length > 3 && state.industry && state.revenueBand && state.goal;
+    $('run-btn').disabled = !ok;
+  }
+
+  // ---------- Error ----------
+  function showError(msg, slotId = 'error-slot') {
+    const slot = $(slotId);
+    slot.innerHTML = `<div class="error-banner">${msg}</div>`;
+    setTimeout(() => { slot.innerHTML = ''; }, 6000);
+  }
+
+  // ---------- Loading phases (marketing theatre) ----------
+  const PHASES = [
+    'Scanning positioning patterns…',
+    'Analyzing offer structure…',
+    'Mapping buyer alignment…',
+    'Cross-referencing category benchmarks…',
+    'Excavating the Big Rock…',
+  ];
+  let phaseTimer = null;
+  function startPhases() {
+    let i = 0;
+    $('loader-phase').textContent = PHASES[0];
+    phaseTimer = setInterval(() => {
+      i = (i + 1) % PHASES.length;
+      const el = $('loader-phase');
+      el.style.opacity = '0';
+      setTimeout(() => { el.textContent = PHASES[i]; el.style.opacity = '1'; }, 200);
+    }, 1500);
+  }
+  function stopPhases() { if (phaseTimer) { clearInterval(phaseTimer); phaseTimer = null; } }
+
+  // ---------- Run diagnostic ----------
+  $('run-btn').addEventListener('click', runDiagnostic);
+  async function runDiagnostic() {
+    showStep('step-loading');
+    startPhases();
+    try {
+      const res = await fetch('/api/widget/diagnose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: state.url,
+          industry: state.industry,
+          revenueBand: state.revenueBand,
+          goal: state.goal,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Diagnostic failed.');
+      state.result = data;
+      state.diagnosticId = data.diagnosticId;
+      stopPhases();
+      renderResults(data);
+      showStep('step-results');
+    } catch (err) {
+      stopPhases();
+      showStep('step-intake');
+      showError(err.message || 'Something went wrong. Please try again.');
+    }
+  }
+
+  // ---------- Render results ----------
+  function renderResults(d) {
+    // Score ring
+    const RING_CIRCUM = 263.9;
+    const offset = RING_CIRCUM * (1 - d.overallScore / 100);
+    setTimeout(() => {
+      $('score-ring-fg').setAttribute('stroke-dashoffset', offset);
+    }, 60);
+    animateNumber('score-num', 0, d.overallScore, 900);
+
+    // Verdict
+    const label = $('verdict-label');
+    label.className = 'verdict-label ' + d.verdict;
+    const verdictText = {
+      'critical':     'Critical alignment gap',
+      'developing':   'Developing — real leaks',
+      'solid':        'Solid — with clear upside',
+      'top-quartile': 'Top-quartile alignment',
+    }[d.verdict] || d.verdict;
+    label.textContent = verdictText;
+    $('verdict-headline').textContent = d.headline;
+
+    // Benchmark strip — 'You:' is always driven from overallScore (single
+    // source of truth) so the ring, the verdict, and the benchmark can never
+    // disagree. Guard against a rogue LLM 'you'/'yourScore' field by clamping
+    // to overallScore no matter what the model returned.
+    const you = d.overallScore;
+    const industryAvg = Math.max(0, Math.min(100, Number(d.benchmark.industryAverage) || 55));
+    const topQuartile = Math.max(0, Math.min(100, Number(d.benchmark.topQuartile) || 78));
+    // Also enforce industryAvg < topQuartile (sanity check on LLM output).
+    const bench = industryAvg < topQuartile
+      ? { ind: industryAvg, top: topQuartile }
+      : { ind: Math.min(industryAvg, topQuartile), top: Math.max(industryAvg, topQuartile) };
+    const youVsIndustry = you >= bench.ind
+      ? `<span style="color:var(--teal); font-weight:700;">+${you - bench.ind}</span> vs industry avg`
+      : `<span style="color:var(--rust); font-weight:700;">−${bench.ind - you}</span> vs industry avg`;
+    $('benchmark-strip').innerHTML =
+      `Industry average: <b>${bench.ind}</b> &middot; Top quartile: <b>${bench.top}</b> &middot; You: <b>${you}</b> &nbsp;·&nbsp; ${youVsIndustry}`;
+
+    // Sub-scores — defensive against a rogue payload where subScores comes
+    // back as an object instead of an array (server normalizer catches this,
+    // but we belt-and-suspender it here so a cached bad response can't blank
+    // the whole widget).
+    const grid = $('subscore-grid');
+    grid.innerHTML = '';
+    const subs = Array.isArray(d.subScores) ? d.subScores : Object.values(d.subScores || {});
+    subs.forEach((s, idx) => {
+      const tone = s.score < 50 ? 'low' : s.score < 70 ? 'mid' : 'high';
+      const el = document.createElement('div');
+      el.className = 'subscore';
+      el.innerHTML = `
+        <div class="subscore-head">
+          <div class="subscore-label">${s.label}</div>
+          <div class="subscore-val">${s.score}</div>
+        </div>
+        <div class="subscore-bar"><div class="subscore-fill ${tone}" style="width:0%"></div></div>
+        <div class="subscore-finding">${escapeHtml(s.finding)}</div>
+      `;
+      grid.appendChild(el);
+      setTimeout(() => {
+        el.querySelector('.subscore-fill').style.width = s.score + '%';
+      }, 120 + idx * 100);
+    });
+
+    // SWOT titles + blurred evidence
+    const swot = $('swot-grid');
+    swot.innerHTML = '';
+    const quads = [
+      { key: 'strengths',     label: 'Strengths' },
+      { key: 'weaknesses',    label: 'Weaknesses' },
+      { key: 'opportunities', label: 'Opportunities' },
+      { key: 'threats',       label: 'Threats' },
+    ];
+    quads.forEach((q) => {
+      const items = (d.swotTitles[q.key] || []).map((t) =>
+        `<li>${escapeHtml(t)}<span class="swot-evidence-blur"></span></li>`).join('');
+      const el = document.createElement('div');
+      el.className = 'swot-quad';
+      el.innerHTML = `<h4>${q.label}</h4><ul>${items || '<li>—</li>'}</ul>`;
+      swot.appendChild(el);
+    });
+
+    // Reset lead + unlock slots
+    $('marketing-consent').checked = false;
+    $('lead-card').classList.remove('hidden');
+    $('unlock-slot').classList.add('hidden');
+    $('unlock-slot').innerHTML = '';
+  }
+
+  function animateNumber(id, from, to, duration) {
+    const el = $(id);
+    const start = performance.now();
+    function tick(t) {
+      const p = Math.min(1, (t - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(from + (to - from) * eased);
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ---------- Lead capture ----------
+  $('lead-btn').addEventListener('click', captureLead);
+  async function captureLead() {
+    const email = $('lead-email').value.trim();
+    const company = $('lead-company').value.trim();
+    const errorSlot = $('lead-error');
+    errorSlot.innerHTML = '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      errorSlot.innerHTML = '<div style="margin-top:10px;font-size:12px;color:#FCA5A5;">Please enter a valid work email.</div>';
+      return;
+    }
+    $('lead-btn').disabled = true;
+    $('lead-btn').textContent = 'Unlocking…';
+    try {
+      const res = await fetch('/api/widget/lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          diagnosticId: state.diagnosticId,
+          email, company,
+          lead_source_tag: $('lead-source-tag').value,
+          original_lead_source: $('original-lead-source').value,
+          ...(state.config?.marketingConsent?.version ? {
+            marketingConsent: $('marketing-consent').checked,
+            marketingConsentVersion: state.config.marketingConsent.version,
+          } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not unlock.');
+
+      // Render unlock panels
+      const slot = $('unlock-slot');
+      slot.classList.remove('hidden');
+      slot.innerHTML = `
+        <div class="unlock-panel">
+          <div class="unlock-label">Strength &middot; unlocked</div>
+          <div class="unlock-title">${escapeHtml(data.unlocked.strengthUnlock.title)}</div>
+          <div class="unlock-evidence">${escapeHtml(data.unlocked.strengthUnlock.evidence)}</div>
+        </div>
+        <div class="unlock-panel">
+          <div class="unlock-label" style="color:var(--rust); background:rgba(192,43,10,.08);">Weakness &middot; unlocked</div>
+          <div class="unlock-title">${escapeHtml(data.unlocked.weaknessUnlock.title)}</div>
+          <div class="unlock-evidence">${escapeHtml(data.unlocked.weaknessUnlock.evidence)}</div>
+        </div>
+      `;
+      $('lead-card').classList.add('hidden');
+      postHeight();
+    } catch (err) {
+      errorSlot.innerHTML = `<div style="margin-top:10px;font-size:12px;color:#FCA5A5;">${escapeHtml(err.message)}</div>`;
+    } finally {
+      $('lead-btn').disabled = false;
+      $('lead-btn').textContent = 'Send recap ›';
+    }
+  }
+
+  // ---------- Restart ----------
+  $('restart-btn').addEventListener('click', (e) => {
+    e.preventDefault();
+    state.url = ''; state.industry = null; state.revenueBand = null; state.goal = null;
+    state.result = null; state.diagnosticId = null;
+    $('marketing-consent').checked = false;
+    $('lead-email').value = '';
+    $('lead-company').value = '';
+    urlInput.value = '';
+    document.querySelectorAll('.chip.active').forEach((c) => c.classList.remove('active'));
+    $('run-btn').disabled = true;
+    showStep('step-intake');
+  });
+
+  // ---------- Init ----------
+  loadConfig();
 })();
 </script>
 </body>
