@@ -42,7 +42,7 @@ test("ten-day expiry is enforced at the boundary and fails closed on invalid dat
 });
 test("snapshot routes preserve evidence, privacy, idempotency and failure safety",async()=>{
   const tables:Record<string,any[]>={widget_snapshots:[],widget_snapshot_requests:[]};
-  let syncCount=0,failReceipt=false;
+  let syncCount=0,failReceipt=false,researchError:Error|null=null;
   function db():any{return {from(table:string){
     assert.ok(table in tables,"Never query private report or analysis tables");
     let filters:Record<string,any>={},op="read",payload:any;
@@ -66,7 +66,7 @@ test("snapshot routes preserve evidence, privacy, idempotency and failure safety
     };return chain;
   }};}
   const app=express();app.use(express.json());
-  registerSnapshotRoutes(app,{db,research:async()=>snapshot,sync:async input=>{
+  registerSnapshotRoutes(app,{db,research:async()=>{if(researchError)throw researchError;return snapshot;},sync:async input=>{
     assert.equal(input.company,"Acme Corp");assert.ok(tables.widget_snapshot_requests.length,"Receipt before CRM");
     assert.equal("overallScore" in input,false);syncCount++;return {status:"synced",contactId:"test",dealId:null};
   }});
@@ -92,5 +92,9 @@ test("snapshot routes preserve evidence, privacy, idempotency and failure safety
     tables.widget_snapshots[0].expires_at="2020-01-01T00:00:00Z";
     assert.equal((await post("/view",{token:data.token})).status,410);
     assert.equal((await post("/lead",lead)).status,410);assert.equal(syncCount,1);
+    researchError=new Error("Internal details must not be exposed");
+    const failed=await (await post("",{url:snapshot.companyUrl,companyName:"Acme",companyConfirmed:true})).json();
+    assert.equal(failed.code,"SNAPSHOT_UNAVAILABLE");
+    assert.equal(JSON.stringify(failed).includes("Internal details"),false);
   }finally{await new Promise<void>(r=>server.close(()=>r()));}
 });

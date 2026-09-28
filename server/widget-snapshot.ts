@@ -49,7 +49,16 @@ export function registerSnapshotRoutes(app:Express,deps={research:researchSnapsh
       res.json({snapshot,token,expiresAt});
     }catch(error){
       console.error("[snapshot] research failed",error instanceof Error?error.message:"unknown");
-      res.status(503).json({error:"We could not produce a sufficiently supported snapshot for that company. Check the name and website, or try again later. No guessed findings were substituted."});
+      const message=error instanceof Error?error.message:"";
+      const safeCodes=["RESEARCH_UNAVAILABLE","ENTITY_UNCONFIRMED","UNSUPPORTED_CLAIM",
+        "OFFICIAL_EVIDENCE_MISSING","EVIDENCE_AUDIT_FAILED","RESEARCH_FORMAT_FAILED",
+        "EVIDENCE_AUDIT_UNAVAILABLE","SNAPSHOT_FORMAT_INVALID","STORE_FAILED"];
+      const providerStatus=(error as {status?:number})?.status;
+      const code=safeCodes.includes(message)?message
+        :(error as Error)?.name==="ZodError"?"SNAPSHOT_FORMAT_INVALID"
+        :[400,401,403,404,429,500,502,503,529].includes(providerStatus||0)?`RESEARCH_PROVIDER_${providerStatus}`
+        :"SNAPSHOT_UNAVAILABLE";
+      res.status(503).json({code,error:"We could not produce a sufficiently supported snapshot for that company. Check the name and website, or try again later. No guessed findings were substituted."});
     }finally{active--;}
   });
   async function load(token:string) {
