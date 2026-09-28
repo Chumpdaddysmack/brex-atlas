@@ -58,7 +58,10 @@ export function registerSnapshotRoutes(app:Express,deps={research:researchSnapsh
         :(error as Error)?.name==="ZodError"?"SNAPSHOT_FORMAT_INVALID"
         :[400,401,403,404,429,500,502,503,529].includes(providerStatus||0)?`RESEARCH_PROVIDER_${providerStatus}`
         :"SNAPSHOT_UNAVAILABLE";
-      res.status(503).json({code,error:"We could not produce a sufficiently supported snapshot for that company. Check the name and website, or try again later. No guessed findings were substituted."});
+      const validation=code==="SNAPSHOT_FORMAT_INVALID"
+        ?((error as any).issues||[]).slice(0,6).map((i:any)=>({field:i.path?.join("."),rule:i.code}))
+        :undefined;
+      res.status(503).json({code,...(validation?{validation}:{}),error:"We could not produce a sufficiently supported snapshot for that company. Check the name and website, or try again later. No guessed findings were substituted."});
     }finally{active--;}
   });
   async function load(token:string) {

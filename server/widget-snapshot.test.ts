@@ -35,6 +35,24 @@ test("missing research or rejected evidence audit never falls back to model memo
     structure:async()=>++calls===1?raw:{supported:false},
   }),/EVIDENCE_AUDIT_FAILED/);
 });
+test("generation schema includes limits and one formatting repair keeps the same evidence",async()=>{
+  let calls=0;
+  const actual=await researchSnapshot({companyName:"Acme",url:snapshot.companyUrl},{
+    research:async()=>({answer:"Source-cited research",citations}),
+    structure:async(system,user,tokens,schema:any)=>{
+      calls++;
+      if(calls<=2){
+        assert.equal(schema.properties.introduction.maxItems,4);
+        assert.equal(schema.properties.finding.properties.sourceIndexes.maxItems,3);
+        assert.ok(user.includes("Source-cited research"));
+      }
+      if(calls===1)return {...raw,introduction:[]};
+      if(calls===2){assert.ok(user.includes("formatRepair"));return raw;}
+      return {supported:true};
+    },
+  });
+  assert.equal(actual.companyName,"Acme Corp");assert.equal(calls,3);
+});
 test("ten-day expiry is enforced at the boundary and fails closed on invalid dates",()=>{
   assert.equal(isSnapshotExpired("2026-10-08T00:00:00Z",Date.parse("2026-10-07T23:59:59Z")),false);
   assert.equal(isSnapshotExpired("2026-10-08T00:00:00Z",Date.parse("2026-10-08T00:00:00Z")),true);
