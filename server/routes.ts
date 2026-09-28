@@ -12,6 +12,7 @@ import type { Extraction, Competitor } from "@shared/schema";
 import { runContentPlanGeneration } from "./content-pipeline";
 import { requireAuth } from "./auth";
 import { registerWidgetRoutes } from "./widget";
+import { registerSnapshotRoutes } from "./widget-snapshot";
 import { normalizeBlogCalendar } from "./blog-calendar";
 import { streamContentPlanPdf, type PdfScope } from "./pdf-export";
 import { buildContentPlanPptx } from "./pptx-export";
@@ -48,6 +49,7 @@ export async function registerRoutes(
   // These endpoints intentionally never touch real client data or paid-tier
   // research; see server/widget.ts.
   registerWidgetRoutes(app);
+  registerSnapshotRoutes(app);
   registerClientReportRoutes(app);
 
   // PUBLIC widget page — serves the standalone HTML at /excavate so it can be
