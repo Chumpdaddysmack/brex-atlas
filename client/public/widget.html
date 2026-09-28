@@ -32,7 +32,8 @@
     --shadow-lg:  0 18px 48px rgba(15,24,36,.14);
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; }
+  /* Transparent iframe canvas; keep --bg white for readable cards and inputs. */
+  html, body { margin: 0; padding: 0; background: transparent; color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; }
   a { color: var(--navy); text-decoration: none; }
   a:hover { color: var(--sky); }
 
