@@ -3,6 +3,7 @@ import session from "express-session";
 import { timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { SupabaseSessionStore } from "./session-store-supabase";
+import ws from "ws";
 
 // Extend session type
 declare module "express-session" {
@@ -63,6 +64,9 @@ export function setupAuth(app: Express) {
   if (supabaseUrl && supabaseKey) {
     const client = createClient(supabaseUrl, supabaseKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      // Match the data/report clients: Supabase's realtime constructor requires
+      // an explicit transport on Node 20 even when sessions only use REST.
+      realtime: { transport: ws as any },
     });
     store = new SupabaseSessionStore(client);
     console.log("[auth] using Supabase-backed session store");
