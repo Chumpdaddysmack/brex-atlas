@@ -26,16 +26,7 @@ const payload={
 const listed=api("GET","/automation/v4/flows");
 if(!Array.isArray(listed.results))throw new Error(JSON.stringify(listed));
 const existing=listed.results.find(x=>x.name===payload.name);
-let result=existing?api("GET",`/automation/v4/flows/${existing.id}`):api("POST","/automation/v4/flows",payload);
+const result=existing?api("GET",`/automation/v4/flows/${existing.id}`):api("POST","/automation/v4/flows",payload);
 if(!result.id)throw new Error(JSON.stringify(result));
-// Explicit user approval for activation received September 28, 2026, 2:04 PM PDT.
-if(process.argv.includes("--enable")){
-  const updated=api("PUT",`/automation/v4/flows/${result.id}`,{
-    ...payload,isEnabled:true,revisionId:result.revisionId,
-  });
-  if(updated.status==="error")throw new Error(JSON.stringify(updated));
-  result=api("GET",`/automation/v4/flows/${result.id}`);
-  if(result.isEnabled!==true)throw new Error("Workflow activation was not confirmed.");
-}
 fs.writeFileSync("/home/user/workspace/snapshot-workflow-receipt.json",JSON.stringify(result,null,2));
 console.log(JSON.stringify({id:result.id,name:result.name,isEnabled:result.isEnabled}));
