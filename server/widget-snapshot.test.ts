@@ -70,6 +70,20 @@ test("unreadable official pages never fall back to search-generated prose",async
     structure:async()=>{throw new Error("Must not run");},
   }),/OFFICIAL_EVIDENCE_MISSING/);
 });
+test("citation repair uses the same page text and requires a second passing audit",async()=>{
+  let calls=0;
+  const actual=await researchSnapshot({companyName:"Acme",url:snapshot.companyUrl},{
+    research:async()=>({answer:"Search prose",citations}),readPage,
+    structure:async(_system,user)=>{
+      calls++;
+      if(calls===1)return raw;
+      if(calls===2)return {supported:false,issues:["Correct the selected page citation."]};
+      if(calls===3){assert.ok(user.includes("evidenceRepair"));assert.ok(user.includes("Actual fetched page evidence"));return raw;}
+      return {supported:true,issues:[]};
+    },
+  });
+  assert.equal(actual.companyName,"Acme Corp");assert.equal(calls,4);
+});
 test("ten-day expiry is enforced at the boundary and fails closed on invalid dates",()=>{
   assert.equal(isSnapshotExpired("2026-10-08T00:00:00Z",Date.parse("2026-10-07T23:59:59Z")),false);
   assert.equal(isSnapshotExpired("2026-10-08T00:00:00Z",Date.parse("2026-10-08T00:00:00Z")),true);
