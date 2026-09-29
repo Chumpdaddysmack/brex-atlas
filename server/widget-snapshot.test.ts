@@ -4,6 +4,7 @@ import express from "express";
 import { publicCompanyUrl, normalizeSnapshot, researchSnapshot } from "./widget-snapshot-research";
 import { registerSnapshotRoutes, isSnapshotExpired } from "./widget-snapshot";
 import { WIDGET_MARKETING_CONSENT } from "../shared/widget-consent";
+import { publicIpv4, evidenceText } from "./snapshot-page-evidence";
 
 const citations=[{title:"Acme services",url:"https://acme-corp.com/services"}];
 const raw={entityConfirmed:true,companyName:"Acme Corp",introduction:[
@@ -13,6 +14,12 @@ const raw={entityConfirmed:true,companyName:"Acme Corp",introduction:[
   interpretation:"This emphasis may help buyers understand the company's area of specialization.",
   question:"Which capability matters most to the buyers you want to reach?",limitations:["Revenue and employee count were not verified."]};
 const snapshot=normalizeSnapshot(raw,citations,"https://acme-corp.com/");
+const readPage=async(url:string)=>({url,title:"Acme services",text:"Actual fetched page evidence about Acme Corp."});
+test("page evidence blocks private IPv4 networks and removes executable markup",()=>{
+  for(const ip of ["127.0.0.1","10.0.0.1","169.254.169.254","172.16.1.1","192.168.1.1","100.64.1.1","0.0.0.0","224.0.0.1","::1"])assert.equal(publicIpv4(ip),false);
+  assert.equal(publicIpv4("8.8.8.8"),true);
+  assert.equal(evidenceText("<script>bad()</script><p>Acme &amp; Co &#8482;</p>"),"Acme & Co ™");
+});
 test("public URL validation strips paths and rejects credentials, IPs and private names",()=>{
   assert.equal(publicCompanyUrl("acme-corp.com/private?token=secret"),"https://acme-corp.com/");
   for(const value of ["http://127.0.0.1","http://2130706433","https://[::1]","http://10.0.0.1","http://localhost","file:///etc/passwd","https://user:pass@acme-corp.com","https://acme-corp.com:444","https://host.internal","https://foo.invalid"])assert.equal(publicCompanyUrl(value),null,value);
@@ -32,6 +39,7 @@ test("missing research or rejected evidence audit never falls back to model memo
   let calls=0;
   await assert.rejects(researchSnapshot({companyName:"Acme",url:snapshot.companyUrl},{
     research:async()=>({answer:"Source-cited research",citations}),
+    readPage,
     structure:async()=>++calls===1?raw:{supported:false},
   }),/EVIDENCE_AUDIT_FAILED/);
 });
@@ -39,12 +47,14 @@ test("generation schema includes limits and one formatting repair keeps the same
   let calls=0;
   const actual=await researchSnapshot({companyName:"Acme",url:snapshot.companyUrl},{
     research:async()=>({answer:"Source-cited research",citations}),
+    readPage,
     structure:async(system,user,tokens,schema:any)=>{
       calls++;
       if(calls<=2){
         assert.equal(schema.properties.introduction.maxItems,4);
         assert.equal(schema.properties.finding.properties.sourceIndexes.maxItems,3);
-        assert.ok(user.includes("Source-cited research"));
+        assert.ok(user.includes("Actual fetched page evidence"));
+        assert.equal(user.includes("Source-cited research"),false);
       }
       if(calls===1)return {...raw,introduction:[]};
       if(calls===2){assert.ok(user.includes("formatRepair"));return raw;}
@@ -52,6 +62,13 @@ test("generation schema includes limits and one formatting repair keeps the same
     },
   });
   assert.equal(actual.companyName,"Acme Corp");assert.equal(calls,3);
+});
+test("unreadable official pages never fall back to search-generated prose",async()=>{
+  await assert.rejects(researchSnapshot({companyName:"Acme",url:snapshot.companyUrl},{
+    research:async()=>({answer:"Unverified search claims",citations}),
+    readPage:async()=>null,
+    structure:async()=>{throw new Error("Must not run");},
+  }),/OFFICIAL_EVIDENCE_MISSING/);
 });
 test("ten-day expiry is enforced at the boundary and fails closed on invalid dates",()=>{
   assert.equal(isSnapshotExpired("2026-10-08T00:00:00Z",Date.parse("2026-10-07T23:59:59Z")),false);

@@ -12,9 +12,12 @@ The widget never reads internal analyses, paid reports, or private snapshots.
 No inferred score, service tier or claimed benchmark appears.
 
 Both company facts and positioning must reference the official company domain.
-Source indexes are validated against provider-returned URLs. A second model pass
-checks the candidate against retrieved research; this is an automated consistency
-check, not independent or human verification. Missing research, entity ambiguity,
+Search discovers candidate URLs, then the server reads up to seven official
+pages with bounded size/time and DNS-pinned public-only connections. Redirects
+remain on the official domain; unavailable pages are excluded. Generation uses
+only the fetched page text, not search-generated prose. A second model pass
+checks each claim against its selected page text; this is an automated consistency
+check, not independent or human verification of company claims. Missing research, entity ambiguity,
 unsupported claims or failed audits produce an error, never inferred substitutes.
 
 Links last ten days from generation. Access uses a random 256-bit bearer token,
