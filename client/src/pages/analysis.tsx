@@ -62,6 +62,7 @@ import { ENGAGEMENT, ENGAGEMENT_TERMS, currentOfferSow } from "@shared/engagemen
 import { PACKAGE_SCOPE_NOTE, packageMonthlyLabel, packageRange, packageSavingsRange } from "@shared/service-packages";
 import { TierAssessmentPanel } from "@/components/TierAssessment";
 import { ReportSharing } from "@/components/ReportSharing";
+import { ExecutiveSummary } from "@/components/ExecutiveSummary";
 
 const STEPS = [
   { key: "extracting", label: "Website teardown", icon: ScanSearch, min: 0 },
@@ -335,6 +336,8 @@ export default function AnalysisPage() {
             <TabsContent value="overview" className="space-y-8 pt-6">
               <CompanyIntroduction profile={safeParse<Extraction>(analysis.extraction)?.companyProfile}
                 analysisId={analysis.id} canResearch={isDone} />
+              <ExecutiveSummary input={{clientName:analysis.clientName,extraction:analysis.extraction,
+                strategy:analysis.strategy,swot:analysis.swot,porters:analysis.porters,customerInsights:analysis.customerInsights}}/>
               <ReportVisual kind="positioning" data={visuals} />
               <ReportDetails id="positioning" label="Read the full website and positioning analysis">
               <SectionErrorBoundary label="Website extraction">

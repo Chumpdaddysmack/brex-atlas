@@ -14,6 +14,7 @@ import { BOOKING_URL, reportCtaLabel, type SharedReport } from "@shared/client-r
 import { safeHttp } from "@shared/tier-assessment";
 import { ArrowUpRight, Sun, Moon, LockKeyhole } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { ExecutiveSummary } from "@/components/ExecutiveSummary";
 
 class ReportBoundary extends Component<{children:ReactNode},{error:boolean}> {
   state={error:false}; static getDerivedStateFromError(){return{error:true};}
@@ -50,6 +51,7 @@ export function ClientReportView({data,preview=false}:{data:SharedReport;preview
         <TabsList className="flex flex-wrap h-auto justify-start gap-1 mb-5">{groups.map(([key,name])=><TabsTrigger key={key} value={key} data-testid={`client-tab-${key}`}>{name}</TabsTrigger>)}</TabsList>
         {groups.map(([key])=><TabsContent key={key} value={key} className="space-y-6"><ReportBoundary>
           {key==="overview"&&<CompanyIntroduction profile={full?.extraction?.companyProfile??demo?.companyProfile}/>}
+          {key==="overview"&&(demo?<ExecutiveSummary demo={demo}/>:full?<ExecutiveSummary input={full}/>:null)}
           {key==="overview"&&r.visuals&&<><ReportVisual kind="positioning" data={r.visuals}/>{full?.extraction&&<ReportDetails id="shared-positioning" label="Read the complete positioning analysis"><ExtractionSection extraction={full.extraction}/></ReportDetails>}<ReportVisual kind="competitors" data={r.visuals}/>{full&&full.competitors.length>0&&<ReportDetails id="shared-competitors" label="Read the competitive analysis"><CompetitorsSection competitors={full.competitors}/></ReportDetails>}</>}
           {key==="strategy"&&<><EngagementTerms/>{r.visuals&&<ReportVisual kind="roadmap" data={r.visuals}/>} {full?.strategy&&<ReportDetails id="shared-strategy" label="Read the strategy and on-ramp roadmap"><StrategySection strategy={full.strategy}/></ReportDetails>}</>}
           {key==="frameworks"&&<>{r.visuals&&<ReportVisual kind="swot" data={r.visuals}/>} {full&&<ReportDetails id="shared-frameworks" label="Read the full framework evidence"><div className="space-y-8">{full.swot&&<SwotView swot={full.swot}/>} {full.pestel&&<PestelView pestel={full.pestel}/>} {full.porters&&<PortersView porters={full.porters}/>}</div></ReportDetails>}</>}
