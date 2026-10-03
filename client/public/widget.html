@@ -186,7 +186,7 @@ $('lead-form').addEventListener('submit',async e=>{
   $('success').innerHTML='<h3>Request recorded</h3><p>'+escapeHtml(data.message)+'</p><label for="saved-url">Your snapshot link</label><input class="saved-url" id="saved-url" type="text" readonly value="'+escapeHtml(data.snapshotUrl)+'">';
   $('success').classList.remove('hidden');$('lead-card').classList.add('hidden');height();
  }catch(err){error('lead-error',err.message);}
- finally{$('lead-btn').disabled=false;$('lead-btn').textContent=state.config?.noSendPilot?'Run No-Send Test':state.config?.snapshotEmailConsent?'Email My Snapshot':'Request Email Copy';}
+ finally{$('lead-btn').disabled=false;$('lead-btn').textContent=state.config?.liveTestCapture?'Record My Email Test Request':state.config?.noSendPilot?'Run No-Send Test':state.config?.snapshotEmailConsent?'Email My Snapshot':'Request Email Copy';}
 });
 $('save-btn').addEventListener('click',()=>{
  const s=state.snapshot;if(!s)return;
@@ -219,6 +219,13 @@ async function init(){
    $('delivery-status').classList.remove('hidden');
    $('delivery-status').textContent='Kenny-only no-send test: records your choices and creates your test contact. It does not send an email, change subscriptions, or activate alerts. Your checkbox choice is recorded, but this test request will not be used for a later email.';
    $('lead-btn').textContent='Run No-Send Test';
+  }
+  if(state.config.liveTestCapture){
+   $('lead-heading').textContent='Request your one-email test';
+   $('lead-intro').textContent='Record a fresh request for your snapshot email. The email will be held for final eligibility checks before the approved test send.';
+   $('delivery-status').classList.remove('hidden');
+   $('delivery-status').textContent='Kenny-only test. Submitting records your permission; it does not immediately send an email or change your subscription preferences. Earlier no-send requests cannot be reused.';
+   $('lead-btn').textContent='Record My Email Test Request';
   }
   $('lead-btn').disabled=false;
  }catch{
