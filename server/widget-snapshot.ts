@@ -4,6 +4,7 @@ import { widgetDb, hashIp } from "./widget-store";
 import { publicCompanyUrl, researchSnapshot, type ResearchSnapshot } from "./widget-snapshot-research";
 import { parseWidgetConsent, WIDGET_MARKETING_CONSENT } from "@shared/widget-consent";
 import { syncSnapshotToHubSpot } from "./hubspot";
+import { SNAPSHOT_EMAIL_PERMISSION, parseSnapshotEmailPermission } from "@shared/snapshot-delivery";
 
 const lifetime=10*24*60*60*1000;
 const hash=(token:string)=>createHash("sha256").update(token).digest("hex");
@@ -23,10 +24,14 @@ function noCache(_req:Request,res:Response,next:()=>void) {
 function validToken(t:unknown):t is string {return typeof t==="string"&&/^[a-f0-9]{64}$/.test(t);}
 export function isSnapshotExpired(expiresAt:string,now=Date.now()){return !Number.isFinite(Date.parse(expiresAt))||Date.parse(expiresAt)<=now;}
 export function registerSnapshotRoutes(app:Express,deps={research:researchSnapshot,db:widgetDb,sync:syncSnapshotToHubSpot}) {
+  // Default off. Local preparation only; production activation requires the
+  // new email, subscription gates, billing cap and workflow to be approved.
+  const permissionTrackingEnabled=process.env.SNAPSHOT_PERMISSION_TRACKING_ENABLED==="true";
   app.use("/api/widget/snapshot",noCache);
   app.get("/api/widget/snapshot/config",(_req,res)=>res.json({
     marketingConsent:WIDGET_MARKETING_CONSENT,lifetimeDays:10,
-    emailDeliveryReady:process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true",
+    emailDeliveryReady:!permissionTrackingEnabled&&process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true",
+    ...(permissionTrackingEnabled?{snapshotEmailConsent:SNAPSHOT_EMAIL_PERMISSION}:{}),
   }));
   app.post("/api/widget/snapshot",async(req,res)=>{
     const url=publicCompanyUrl(req.body?.url);
@@ -85,7 +90,12 @@ export function registerSnapshotRoutes(app:Express,deps={research:researchSnapsh
       return res.status(400).json({error:"Enter a valid work email and run a snapshot first."});
     if(!rate(`lead:${hashIp(req.ip||"unknown")}`,15,3600*1000))return res.status(429).json({error:"Too many requests. Please try later."});
     let evidence;
-    try{evidence=parseWidgetConsent(req.body);}catch(e){return res.status(400).json({error:(e as Error).message});}
+    try{
+      evidence={
+        ...parseWidgetConsent(req.body),
+        ...(permissionTrackingEnabled?{snapshotDelivery:parseSnapshotEmailPermission(req.body)}:{}),
+      };
+    }catch(e){return res.status(400).json({error:(e as Error).message});}
     const key=`${hash(token)}:${email}`;
     if(requestLocks.has(key))return res.status(409).json({error:"Your request is already being processed."});
     requestLocks.add(key);
@@ -101,17 +111,29 @@ export function registerSnapshotRoutes(app:Express,deps={research:researchSnapsh
       if(error)throw new Error("CONSENT_STORE_FAILED");
       const {data:receipt,error:receiptError}=await db.from("widget_snapshot_requests").select("*").eq("snapshot_id",row.id).eq("email",email).single();
       if(receiptError||!receipt)throw new Error("CONSENT_READ_FAILED");
+      // Do not retrofit a new choice onto an old immutable receipt. A cached
+      // or previously completed request must never manufacture permission.
+      if(permissionTrackingEnabled&&!receipt.consent_evidence?.snapshotDelivery)
+        return res.status(409).json({error:"This earlier request has no snapshot email permission recorded. Run a fresh snapshot and request a new copy."});
       const snapshotUrl=`https://atlas.brexconsulting.com/widget.html#snapshot=${token}`;
       if(receipt.sync_status!=="synced"){
         const result=await deps.sync({email,company:(row.snapshot as ResearchSnapshot).companyName,url:row.company_url,
-          snapshotId:row.id,snapshotUrl,requestedAt:receipt.requested_at});
+          snapshotId:row.id,snapshotUrl,requestedAt:receipt.requested_at,
+          ...(permissionTrackingEnabled?{permissionTracking:{
+            requestId:receipt.id,expiresAt:row.expires_at,
+            permission:receipt.consent_evidence.snapshotDelivery,
+            marketingChoice:receipt.consent_evidence.decision,
+          }}:{}),
+        });
         const {error:statusError}=await db.from("widget_snapshot_requests").update({
           sync_status:result.status==="synced"?"synced":"failed",contact_id:result.contactId,
         }).eq("id",receipt.id);
         if(result.status!=="synced"||statusError)throw new Error("CRM_SYNC_FAILED");
       }
       res.json({ok:true,snapshotUrl,expiresAt:row.expires_at,
-        message:process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true"
+        message:permissionTrackingEnabled
+          ?"Your snapshot email request and permission have been recorded. This confirmation does not mean an email has been sent. Save this link or a text copy while delivery setup is completed."
+          :process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true"
           ?"Your email-copy request has been recorded. Email delivery is subject to eligibility; save this link so you can return to your snapshot."
           :"Your request has been recorded for follow-up. Automatic email delivery is not active yet. Save this link or download a text copy to keep your snapshot."});
     }catch{

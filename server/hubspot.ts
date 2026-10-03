@@ -10,6 +10,7 @@
 
 import { packageFor, packageMonthlyLabel } from "@shared/service-packages";
 import { widgetAttributionProperties } from "@shared/widget-attribution";
+import { snapshotPermissionProperties, type SnapshotPermissionTracking } from "@shared/snapshot-delivery";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
@@ -304,14 +305,19 @@ export function hubspotDealUrl(dealId: string): string {
 // tiers, lifecycle stage or deal creation. This isolates legacy recap triggers.
 export async function syncSnapshotToHubSpot(input:{
   email:string;company:string;url:string;snapshotId:string;snapshotUrl:string;requestedAt:string;
+  permissionTracking?:SnapshotPermissionTracking;
 }):Promise<AtlasWidgetSyncResult> {
   if(!HUBSPOT_TOKEN)return {contactId:null,dealId:null,status:"skipped",error:"HubSpot unavailable"};
   try{
+    // Validate locally before any CRM side effect. New tracking remains pending
+    // until the separately approved subscription/delivery integration is ready.
+    const trackingProps=input.permissionTracking
+      ?snapshotPermissionProperties(input.permissionTracking):{};
     const id=await findContactByEmail(input.email);
     let existing:Record<string,string|null>={};
     if(id){
       const current=await hs<{properties:Record<string,string|null>}>("GET",
-        `/crm/v3/objects/contacts/${encodeURIComponent(id)}?properties=original_lead_source,company,website,atlas_snapshot_id,atlas_snapshot_url`);
+        `/crm/v3/objects/contacts/${encodeURIComponent(id)}?properties=original_lead_source,company,website,atlas_snapshot_id,atlas_snapshot_url${input.permissionTracking?",atlas_snapshot_request_id":""}`);
       existing=current.properties;
     }
     const props:Record<string,string>={
@@ -321,9 +327,11 @@ export async function syncSnapshotToHubSpot(input:{
       atlas_snapshot_url:input.snapshotUrl,
       atlas_snapshot_id:input.snapshotId,
       atlas_snapshot_requested_at:input.requestedAt,
+      ...trackingProps,
     };
     // An HTTP retry must not change the enrollment trigger timestamp.
-    if(id&&existing.atlas_snapshot_id===input.snapshotId&&existing.atlas_snapshot_url===input.snapshotUrl)
+    if(id&&existing.atlas_snapshot_id===input.snapshotId&&existing.atlas_snapshot_url===input.snapshotUrl
+      &&(!input.permissionTracking||existing.atlas_snapshot_request_id===input.permissionTracking.requestId))
       return {contactId:id,dealId:null,status:"synced"};
     const saved=await hs<any>(id?"PATCH":"POST",
       `/crm/v3/objects/contacts${id?`/${encodeURIComponent(id)}`:""}`,{properties:props});
