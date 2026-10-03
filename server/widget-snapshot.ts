@@ -66,7 +66,10 @@ export function registerSnapshotRoutes(app:Express,deps={research:researchSnapsh
       const validation=code==="SNAPSHOT_FORMAT_INVALID"
         ?((error as any).issues||[]).slice(0,6).map((i:any)=>({field:i.path?.join("."),rule:i.code}))
         :undefined;
-      res.status(503).json({code,...(validation?{validation}:{}),error:"We could not produce a sufficiently supported snapshot for that company. Check the name and website, or try again later. No guessed findings were substituted."});
+      const technical=code==="SNAPSHOT_FORMAT_INVALID"||code==="RESEARCH_FORMAT_FAILED";
+      res.status(503).json({code,...(validation?{validation}:{}),error:technical
+        ?"The research service returned an incomplete response, so we could not display your snapshot. Please try again shortly. This error does not mean your company details are incorrect. No guessed findings were substituted."
+        :"We could not produce a sufficiently supported snapshot for that company. Check the name and website, or try again later. No guessed findings were substituted."});
     }finally{active--;}
   });
   async function load(token:string) {

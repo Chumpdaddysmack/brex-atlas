@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
+import { z } from "zod";
 import { publicCompanyUrl, normalizeSnapshot, researchSnapshot } from "./widget-snapshot-research";
 import { registerSnapshotRoutes, isSnapshotExpired } from "./widget-snapshot";
 import { WIDGET_MARKETING_CONSENT } from "../shared/widget-consent";
@@ -48,7 +49,7 @@ test("generation schema includes limits and one formatting repair keeps the same
   const actual=await researchSnapshot({companyName:"Acme",url:snapshot.companyUrl},{
     research:async()=>({answer:"Source-cited research",citations}),
     readPage,
-    structure:async(system,user,tokens,schema:any)=>{
+    structure:async(system,user,tokens,schema:any,options)=>{
       calls++;
       if(calls<=2){
         assert.equal(schema.properties.introduction.maxItems,4);
@@ -57,11 +58,30 @@ test("generation schema includes limits and one formatting repair keeps the same
         assert.equal(user.includes("Source-cited research"),false);
       }
       if(calls===1)return {...raw,introduction:[]};
-      if(calls===2){assert.ok(user.includes("formatRepair"));return raw;}
+      if(calls===2){assert.ok(user.includes("formatRepair"));assert.equal(options?.forceText,true);return raw;}
       return {supported:true};
     },
   });
   assert.equal(actual.companyName,"Acme Corp");assert.equal(calls,3);
+});
+test("empty structured responses recover via JSON text and still require the evidence audit",async()=>{
+  let calls=0;
+  const recovered=await researchSnapshot({companyName:"Acme",url:snapshot.companyUrl},{
+    research:async()=>({answer:"Discovery only",citations}),readPage,
+    structure:async(_system,user,_tokens,_schema,options)=>{
+      calls++;
+      if(calls===1)return {};
+      if(calls===2){assert.equal(options?.forceText,true);assert.match(user,/Actual fetched page evidence/);return raw;}
+      return {supported:true};
+    },
+  });
+  assert.equal(recovered.companyName,"Acme Corp");assert.equal(calls,3);
+  calls=0;
+  await assert.rejects(researchSnapshot({companyName:"Acme",url:snapshot.companyUrl},{
+    research:async()=>({answer:"Discovery only",citations}),readPage,
+    structure:async()=>{calls++;return {};},
+  }),e=>e instanceof z.ZodError);
+  assert.equal(calls,2,"Malformed text must not cause unlimited retries or a guessed snapshot");
 });
 test("unreadable official pages never fall back to search-generated prose",async()=>{
   await assert.rejects(researchSnapshot({companyName:"Acme",url:snapshot.companyUrl},{
@@ -145,5 +165,11 @@ test("snapshot routes preserve evidence, privacy, idempotency and failure safety
     const failed=await (await post("",{url:snapshot.companyUrl,companyName:"Acme",companyConfirmed:true})).json();
     assert.equal(failed.code,"SNAPSHOT_UNAVAILABLE");
     assert.equal(JSON.stringify(failed).includes("Internal details"),false);
+    researchError=new z.ZodError([{code:"invalid_type",expected:"string",path:["companyName"],message:"fixture"}]);
+    const formatFailure=await (await post("",{url:snapshot.companyUrl,companyName:"Acme",companyConfirmed:true})).json();
+    assert.equal(formatFailure.code,"SNAPSHOT_FORMAT_INVALID");
+    assert.match(formatFailure.error,/research service returned an incomplete response/);
+    assert.doesNotMatch(formatFailure.error,/Check the name and website/);
+    assert.equal(syncCount,1,"Research failure does not create a CRM contact or send email");
   }finally{await new Promise<void>(r=>server.close(()=>r()));}
 });
