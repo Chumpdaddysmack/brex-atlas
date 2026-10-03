@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { z } from "zod";
-import { publicCompanyUrl, normalizeSnapshot, researchSnapshot } from "./widget-snapshot-research";
+import { publicCompanyUrl, normalizeSnapshot, researchSnapshot, snapshotAuditDiagnostic } from "./widget-snapshot-research";
 import { registerSnapshotRoutes, isSnapshotExpired } from "./widget-snapshot";
 import { WIDGET_MARKETING_CONSENT } from "../shared/widget-consent";
 import { publicIpv4, evidenceText } from "./snapshot-page-evidence";
@@ -16,6 +16,26 @@ const raw={entityConfirmed:true,companyName:"Acme Corp",introduction:[
   question:"Which capability matters most to the buyers you want to reach?",limitations:["Revenue and employee count were not verified."]};
 const snapshot=normalizeSnapshot(raw,citations,"https://acme-corp.com/");
 const readPage=async(url:string)=>({url,title:"Acme services",text:"Actual fetched page evidence about Acme Corp."});
+test("backend audit diagnostics preserve rejection reasons while bounding and redacting data",()=>{
+  const log=snapshotAuditDiagnostic({supported:false,issues:[
+    "Source 0 does not support the founding year.",
+    "See https://user:password@example.com/page?token=private#secret and kenny@example.com",
+    "sk-ant-secret-test "+ "a".repeat(64)+"\u001b[31m",
+    "x ".repeat(500),{},42,"additional issue","not included",
+  ]},"after_repair");
+  assert.equal(log.stage,"after_repair");
+  assert.equal(log.supportedType,"boolean");
+  assert.equal(log.issueCount,8);
+  assert.equal(log.issues.length,5);
+  assert.equal(log.issues[0],"Source 0 does not support the founding year.");
+  assert.ok(log.issues.every(s=>s.length<=500));
+  for(const secret of ["password","?token=","#secret","kenny@example.com","sk-ant-secret-test","\u001b"])
+    assert.equal(JSON.stringify(log).includes(secret),false);
+  const malformed=snapshotAuditDiagnostic({input:{supported:true}},"initial");
+  assert.equal(malformed.supported,false);
+  assert.equal(malformed.supportedType,"undefined");
+  assert.equal(malformed.issuesType,"undefined");
+});
 test("page evidence blocks private IPv4 networks and removes executable markup",()=>{
   for(const ip of ["127.0.0.1","10.0.0.1","169.254.169.254","172.16.1.1","192.168.1.1","100.64.1.1","0.0.0.0","224.0.0.1","::1"])assert.equal(publicIpv4(ip),false);
   assert.equal(publicIpv4("8.8.8.8"),true);
