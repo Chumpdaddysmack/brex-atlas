@@ -3,7 +3,8 @@ import { randomBytes, createHash } from "node:crypto";
 import { widgetDb, hashIp } from "./widget-store";
 import { publicCompanyUrl, researchSnapshot, type ResearchSnapshot } from "./widget-snapshot-research";
 import { parseWidgetConsent, WIDGET_MARKETING_CONSENT } from "@shared/widget-consent";
-import { syncSnapshotToHubSpot } from "./hubspot";
+import { syncSnapshotToHubSpot, captureSnapshotNoSend } from "./hubspot";
+import { SNAPSHOT_PILOT_EMAIL } from "./snapshot-subscriptions";
 import { SNAPSHOT_EMAIL_PERMISSION, parseSnapshotEmailPermission } from "@shared/snapshot-delivery";
 
 const lifetime=10*24*60*60*1000;
@@ -23,13 +24,18 @@ function noCache(_req:Request,res:Response,next:()=>void) {
 }
 function validToken(t:unknown):t is string {return typeof t==="string"&&/^[a-f0-9]{64}$/.test(t);}
 export function isSnapshotExpired(expiresAt:string,now=Date.now()){return !Number.isFinite(Date.parse(expiresAt))||Date.parse(expiresAt)<=now;}
-export function registerSnapshotRoutes(app:Express,deps={research:researchSnapshot,db:widgetDb,sync:syncSnapshotToHubSpot}) {
+export function registerSnapshotRoutes(app:Express,deps:{
+  research:typeof researchSnapshot;db:typeof widgetDb;sync:typeof syncSnapshotToHubSpot;
+  pilot?:typeof captureSnapshotNoSend;
+}={research:researchSnapshot,db:widgetDb,sync:syncSnapshotToHubSpot}) {
   // Default off. Local preparation only; production activation requires the
   // new email, subscription gates, billing cap and workflow to be approved.
-  const permissionTrackingEnabled=process.env.SNAPSHOT_PERMISSION_TRACKING_ENABLED==="true";
+  const noSendPilot=process.env.SNAPSHOT_NO_SEND_PILOT_ENABLED==="true";
+  const permissionTrackingEnabled=noSendPilot||process.env.SNAPSHOT_PERMISSION_TRACKING_ENABLED==="true";
   app.use("/api/widget/snapshot",noCache);
   app.get("/api/widget/snapshot/config",(_req,res)=>res.json({
     marketingConsent:WIDGET_MARKETING_CONSENT,lifetimeDays:10,
+    noSendPilot,
     emailDeliveryReady:!permissionTrackingEnabled&&process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true",
     ...(permissionTrackingEnabled?{snapshotEmailConsent:SNAPSHOT_EMAIL_PERMISSION}:{}),
   }));
@@ -91,12 +97,15 @@ export function registerSnapshotRoutes(app:Express,deps={research:researchSnapsh
     const token=req.body?.token,email=typeof req.body?.email==="string"?req.body.email.trim().toLowerCase():"";
     if(!validToken(token)||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))
       return res.status(400).json({error:"Enter a valid work email and run a snapshot first."});
+    if(noSendPilot&&email!==SNAPSHOT_PILOT_EMAIL)
+      return res.status(403).json({error:"This no-send test is limited to the approved test recipient. You can still view or save your snapshot."});
     if(!rate(`lead:${hashIp(req.ip||"unknown")}`,15,3600*1000))return res.status(429).json({error:"Too many requests. Please try later."});
     let evidence;
     try{
       evidence={
         ...parseWidgetConsent(req.body),
         ...(permissionTrackingEnabled?{snapshotDelivery:parseSnapshotEmailPermission(req.body)}:{}),
+        ...(noSendPilot?{noSendPilot:true}:{}),
       };
     }catch(e){return res.status(400).json({error:(e as Error).message});}
     const key=`${hash(token)}:${email}`;
@@ -118,7 +127,16 @@ export function registerSnapshotRoutes(app:Express,deps={research:researchSnapsh
       // or previously completed request must never manufacture permission.
       if(permissionTrackingEnabled&&!receipt.consent_evidence?.snapshotDelivery)
         return res.status(409).json({error:"This earlier request has no snapshot email permission recorded. Run a fresh snapshot and request a new copy."});
+      if(!!receipt.consent_evidence?.noSendPilot!==noSendPilot)
+        return res.status(409).json({error:"Test receipts and live email requests cannot be reused across modes. Run a fresh snapshot."});
       const snapshotUrl=`https://atlas.brexconsulting.com/widget.html#snapshot=${token}`;
+      if(noSendPilot){
+        const result=await (deps.pilot||captureSnapshotNoSend)({requestId:receipt.id,snapshotUrl},db);
+        if(result.status!=="dry_run_completed")
+          return res.status(409).json({sendingEnabled:false,error:"This test is already recorded or needs review. No email send was requested. Do not resubmit; ask for the test status."});
+        return res.json({ok:true,sendingEnabled:false,snapshotUrl,expiresAt:row.expires_at,
+          message:"No-send test complete. Your contact and permission choices were recorded. No email or alert was requested, no subscription was changed, and this test receipt cannot later be used to send."});
+      }
       if(receipt.sync_status!=="synced"){
         const result=await deps.sync({email,company:(row.snapshot as ResearchSnapshot).companyName,url:row.company_url,
           snapshotId:row.id,snapshotUrl,requestedAt:receipt.requested_at,

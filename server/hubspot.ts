@@ -11,6 +11,7 @@
 import { packageFor, packageMonthlyLabel } from "@shared/service-packages";
 import { widgetAttributionProperties } from "@shared/widget-attribution";
 import { snapshotPermissionProperties, type SnapshotPermissionTracking } from "@shared/snapshot-delivery";
+import { runNoSendCapture } from "./snapshot-no-send";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
@@ -303,6 +304,10 @@ export function hubspotDealUrl(dealId: string): string {
 
 // Research snapshots deliberately do not touch old scores, diagnostic IDs,
 // tiers, lifecycle stage or deal creation. This isolates legacy recap triggers.
+export function captureSnapshotNoSend(input:{requestId:string;snapshotUrl:string},db:any) {
+  return runNoSendCapture(input,{db,api:(method,path,body)=>hs(method,path,body)});
+}
+
 export async function syncSnapshotToHubSpot(input:{
   email:string;company:string;url:string;snapshotId:string;snapshotUrl:string;requestedAt:string;
   permissionTracking?:SnapshotPermissionTracking;

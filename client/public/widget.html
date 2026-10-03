@@ -121,8 +121,8 @@ input::placeholder{color:#697b8a}
     <section class="lead-card" id="lead-card">
       <input type="hidden" id="lead-source-tag" name="lead_source_tag" value="Atlas Excavator Widget">
       <input type="hidden" id="original-lead-source" name="original_lead_source" value="Website">
-      <h3>Keep your snapshot handy</h3>
-      <p>Request an email copy with your 10-day access link. Your sources are already visible above, with no signup required.</p>
+      <h3 id="lead-heading">Keep your snapshot handy</h3>
+      <p id="lead-intro">Request an email copy with your 10-day access link. Your sources are already visible above, with no signup required.</p>
       <p class="fine" id="delivery-status">Automatic email delivery is not active yet. Requests are recorded for follow-up; save a text copy now to keep your research.</p>
       <form id="lead-form">
         <div class="lead-row"><input type="email" id="lead-email" aria-label="Work email" placeholder="you@company.com" required maxlength="254" autocomplete="email"><button class="btn primary" id="lead-btn" disabled>Request Email Copy</button></div>
@@ -186,7 +186,7 @@ $('lead-form').addEventListener('submit',async e=>{
   $('success').innerHTML='<h3>Request recorded</h3><p>'+escapeHtml(data.message)+'</p><label for="saved-url">Your snapshot link</label><input class="saved-url" id="saved-url" type="text" readonly value="'+escapeHtml(data.snapshotUrl)+'">';
   $('success').classList.remove('hidden');$('lead-card').classList.add('hidden');height();
  }catch(err){error('lead-error',err.message);}
- finally{$('lead-btn').disabled=false;$('lead-btn').textContent=state.config?.snapshotEmailConsent?'Email My Snapshot':'Request Email Copy';}
+ finally{$('lead-btn').disabled=false;$('lead-btn').textContent=state.config?.noSendPilot?'Run No-Send Test':state.config?.snapshotEmailConsent?'Email My Snapshot':'Request Email Copy';}
 });
 $('save-btn').addEventListener('click',()=>{
  const s=state.snapshot;if(!s)return;
@@ -213,6 +213,13 @@ async function init(){
    $('lead-btn').textContent='Email My Snapshot';
   }
   if(state.config.marketingConsent?.version){$('marketing-consent-text').textContent=state.config.marketingConsent.text;$('marketing-consent').disabled=false;}
+  if(state.config.noSendPilot){
+   $('lead-heading').textContent='Test your snapshot request';
+   $('lead-intro').textContent='This test checks contact creation and permission tracking only. You will not receive an email from this submission.';
+   $('delivery-status').classList.remove('hidden');
+   $('delivery-status').textContent='Kenny-only no-send test: records your choices and creates your test contact. It does not send an email, change subscriptions, or activate alerts. Your checkbox choice is recorded, but this test request will not be used for a later email.';
+   $('lead-btn').textContent='Run No-Send Test';
+  }
   $('lead-btn').disabled=false;
  }catch{
   $('marketing-consent-text').textContent='Email request settings are unavailable. Refresh to try again, or save your snapshot as a text copy.';
