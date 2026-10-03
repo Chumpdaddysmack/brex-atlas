@@ -202,8 +202,9 @@ export async function llmJson(
   user: string,
   maxTokens = 4096,
   schema?: any,
+  options: { forceText?: boolean } = {},
 ): Promise<any> {
-  if (schema) {
+  if (schema && !options.forceText) {
     // tool_use path with real schema — Claude MUST fill required fields
     const tool: any = {
       name: "return_result",
