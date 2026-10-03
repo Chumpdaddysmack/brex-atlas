@@ -6,6 +6,7 @@ import { parseWidgetConsent, WIDGET_MARKETING_CONSENT } from "@shared/widget-con
 import { syncSnapshotToHubSpot, captureSnapshotNoSend } from "./hubspot";
 import { SNAPSHOT_PILOT_EMAIL } from "./snapshot-subscriptions";
 import { SNAPSHOT_EMAIL_PERMISSION, parseSnapshotEmailPermission } from "@shared/snapshot-delivery";
+import { captureSnapshotLiveTest, LIVE_TEST_APPROVAL } from "./snapshot-live-capture";
 
 const lifetime=10*24*60*60*1000;
 const hash=(token:string)=>createHash("sha256").update(token).digest("hex");
@@ -27,15 +28,17 @@ export function isSnapshotExpired(expiresAt:string,now=Date.now()){return !Numbe
 export function registerSnapshotRoutes(app:Express,deps:{
   research:typeof researchSnapshot;db:typeof widgetDb;sync:typeof syncSnapshotToHubSpot;
   pilot?:typeof captureSnapshotNoSend;
+  liveCapture?:typeof captureSnapshotLiveTest;
 }={research:researchSnapshot,db:widgetDb,sync:syncSnapshotToHubSpot}) {
   // Default off. Local preparation only; production activation requires the
   // new email, subscription gates, billing cap and workflow to be approved.
-  const noSendPilot=process.env.SNAPSHOT_NO_SEND_PILOT_ENABLED==="true";
-  const permissionTrackingEnabled=noSendPilot||process.env.SNAPSHOT_PERMISSION_TRACKING_ENABLED==="true";
+  const liveTestCapture=process.env.SNAPSHOT_LIVE_TEST_CAPTURE_ENABLED==="true";
+  const noSendPilot=!liveTestCapture&&process.env.SNAPSHOT_NO_SEND_PILOT_ENABLED==="true";
+  const permissionTrackingEnabled=liveTestCapture||noSendPilot||process.env.SNAPSHOT_PERMISSION_TRACKING_ENABLED==="true";
   app.use("/api/widget/snapshot",noCache);
   app.get("/api/widget/snapshot/config",(_req,res)=>res.json({
     marketingConsent:WIDGET_MARKETING_CONSENT,lifetimeDays:10,
-    noSendPilot,
+    noSendPilot,liveTestCapture,
     emailDeliveryReady:!permissionTrackingEnabled&&process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true",
     ...(permissionTrackingEnabled?{snapshotEmailConsent:SNAPSHOT_EMAIL_PERMISSION}:{}),
   }));
@@ -97,8 +100,8 @@ export function registerSnapshotRoutes(app:Express,deps:{
     const token=req.body?.token,email=typeof req.body?.email==="string"?req.body.email.trim().toLowerCase():"";
     if(!validToken(token)||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))
       return res.status(400).json({error:"Enter a valid work email and run a snapshot first."});
-    if(noSendPilot&&email!==SNAPSHOT_PILOT_EMAIL)
-      return res.status(403).json({error:"This no-send test is limited to the approved test recipient. You can still view or save your snapshot."});
+    if((noSendPilot||liveTestCapture)&&email!==SNAPSHOT_PILOT_EMAIL)
+      return res.status(403).json({error:"This test is limited to the approved test recipient. You can still view or save your snapshot."});
     if(!rate(`lead:${hashIp(req.ip||"unknown")}`,15,3600*1000))return res.status(429).json({error:"Too many requests. Please try later."});
     let evidence;
     try{
@@ -106,6 +109,7 @@ export function registerSnapshotRoutes(app:Express,deps:{
         ...parseWidgetConsent(req.body),
         ...(permissionTrackingEnabled?{snapshotDelivery:parseSnapshotEmailPermission(req.body)}:{}),
         ...(noSendPilot?{noSendPilot:true}:{}),
+        ...(liveTestCapture?{liveEmailTest:LIVE_TEST_APPROVAL}:{}),
       };
     }catch(e){return res.status(400).json({error:(e as Error).message});}
     const key=`${hash(token)}:${email}`;
@@ -129,7 +133,16 @@ export function registerSnapshotRoutes(app:Express,deps:{
         return res.status(409).json({error:"This earlier request has no snapshot email permission recorded. Run a fresh snapshot and request a new copy."});
       if(!!receipt.consent_evidence?.noSendPilot!==noSendPilot)
         return res.status(409).json({error:"Test receipts and live email requests cannot be reused across modes. Run a fresh snapshot."});
+      if((receipt.consent_evidence?.liveEmailTest||null)!==(liveTestCapture?LIVE_TEST_APPROVAL:null))
+        return res.status(409).json({error:"This earlier request cannot be used for the live email test. Run a fresh snapshot."});
       const snapshotUrl=`https://atlas.brexconsulting.com/widget.html#snapshot=${token}`;
+      if(liveTestCapture){
+        const result=await (deps.liveCapture||captureSnapshotLiveTest)({requestId:receipt.id,snapshotUrl},db);
+        if(result.status!=="request_held")
+          return res.status(409).json({sendingEnabled:false,error:"An email test is already recorded or needs review. Do not resubmit; ask for the test status."});
+        return res.json({ok:true,sendingEnabled:false,snapshotUrl,expiresAt:row.expires_at,
+          message:"Your fresh email-test request and permission are recorded. No email has been sent by this submission. The single test email is held for final eligibility checks. Copy the snapshot link below and return it to Kenny's test conversation."});
+      }
       if(noSendPilot){
         const result=await (deps.pilot||captureSnapshotNoSend)({requestId:receipt.id,snapshotUrl},db);
         if(result.status!=="dry_run_completed")
@@ -158,7 +171,9 @@ export function registerSnapshotRoutes(app:Express,deps:{
           ?"Your email-copy request has been recorded. Email delivery is subject to eligibility; save this link so you can return to your snapshot."
           :"Your request has been recorded for follow-up. Automatic email delivery is not active yet. Save this link or download a text copy to keep your snapshot."});
     }catch{
-      res.status(503).json({error:"We could not complete your email-copy request. Your snapshot remains available here; please retry. We have not changed your subscription preferences."});
+      res.status(503).json({error:liveTestCapture
+        ?"We could not confirm the email-test request. No email was sent by this submission. Your snapshot remains available; ask for the test status before submitting again."
+        :"We could not complete your email-copy request. Your snapshot remains available here; please retry. We have not changed your subscription preferences."});
     }finally{requestLocks.delete(key);}
   });
 }
