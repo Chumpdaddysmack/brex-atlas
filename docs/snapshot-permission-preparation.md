@@ -21,7 +21,7 @@ No database migration is required: the original marketing evidence remains at th
 
 ## Mandatory follow-on work before release
 
-This is tracking preparation, not a production-ready sending pipeline. The following are not implemented here:
+This is tracking preparation, not a production-ready sending pipeline. The follow-on local subscription adapter, pure workflow guard, tests, and disabled design are now documented in `snapshot-subscription-preparation.md`; they are not wired to production. The following remain release requirements:
 
 1. Check HubSpot subscription/global opt-out/suppression state and record approved narrow subscription consent without forced resubscription.
 2. Configure and publish the approved results-only draft after review.
