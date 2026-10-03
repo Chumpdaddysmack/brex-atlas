@@ -2,6 +2,8 @@
 
 Prepared October 3, 2026. Status: local implementation and workflow design only. No deployment, subscription changes, contact-status changes, workflow edits, email publishing, enrollments, or sends were performed.
 
+Follow-on checkpoint: `snapshot-no-send-pilot-checkpoint.md` records the later local PostgreSQL ledger implementation, 36-test validation, and creation of a separate disabled, action-free HubSpot test workflow. The existing workflow remains untouched; this document's earlier local-only workflow status is superseded by that checkpoint.
+
 ## Prepared implementation
 
 - `server/snapshot-subscriptions.ts`: injectable HubSpot preference adapter and receipt-based subscription coordinator. The default is dry-run. Controlled execution requires an explicit pilot enablement, Kenny's exact email, a request-time cutoff, valid immutable receipt evidence, and a fresh eligibility read.
