@@ -1,6 +1,23 @@
 # Atlas Snapshot | No-Send Pilot Checkpoint
 
-October 3, 2026. Duplicate protection is implemented and tested locally. A disabled, action-free Kenny-only test workflow has been created in HubSpot. Production database changes and application deployment have not been performed.
+Updated October 3, 2026, after explicit production migration approval at 3:12 PM PDT. Duplicate protection is implemented and tested locally, and its production database schema is now installed. The application has not been deployed or connected to this new schema; the disabled, action-free Kenny-only workflow remains a no-send shell.
+
+## Production database installation
+
+The approved `snapshot_delivery_ledger` migration was applied successfully to Supabase project `dlidmsxiycnjdivzpzax` (Brex Atlas Project), recorded as version `20261003221247`.
+
+Post-installation verification confirmed:
+
+- Both new tables exist and have row-level security enabled.
+- Anonymous and ordinary authenticated roles cannot select from or insert into either table.
+- The backend service role has the required table access.
+- All four functions exist, use invoker security with a fixed search path, deny execution to anonymous/authenticated roles, and allow execution to the backend service role.
+- Request, attempt, event, provider-message, and single-active-email uniqueness indexes are present.
+- Both new tables contain zero rows. No existing customer rows were changed by the migration.
+
+The security advisor returned informational “RLS Enabled No Policy” notices, including the two new tables. This is intentional for these backend-only tables: no client-facing policy grants access, and table/function privileges are also denied to client roles. No WARN or ERROR security findings were returned in this check. [Supabase advisory explanation](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
+
+No workflow was activated, email published, contact enrolled, subscription changed, or app deployed in this installation step.
 
 ## What is in HubSpot
 
@@ -43,14 +60,14 @@ No interface changed, so no new visual QA was required for this backend stage. A
 
 ## Files prepared
 
-- `supabase/migrations/20261003_snapshot_delivery_ledger.sql`: two new tables, indexes, and four service-only functions. Not applied to production.
+- `supabase/migrations/20261003_snapshot_delivery_ledger.sql`: two new tables, indexes, and four service-only functions. Applied to production as `20261003221247`.
 - `server/snapshot-delivery-ledger.ts`: typed RPC adapter and stable receipt digest.
 - `server/snapshot-pilot.ts`: stored-receipt loader and send-disabled test runner.
 - `server/snapshot-delivery-ledger.pg.test.ts`: local PostgreSQL integration tests.
 - `scripts/create-snapshot-no-send-workflow.mjs`: prints a proposal by default; explicit creation option makes an off, action-free workflow and verifies it. It never edits or enables an existing workflow.
 
-## Next approval boundary
+## Remaining rollout boundary
 
-The next concrete installation step is the production Supabase migration: create `widget_snapshot_delivery_attempts` and `widget_snapshot_delivery_events`, plus the four backend-only functions and indexes. It does not alter existing customer rows, grant public access, deploy code, subscribe contacts, enroll contacts, or enable email.
+The production schema installation is complete. The next step is connecting the application to it for a controlled, no-send dry run using a fresh Kenny-only request.
 
-After that installation is verified, the production adapter and provider correlation can be wired under controlled test settings. Application deployment, email publication, coordinated cutover from the old pilot, actual test sends, and public launch remain separate approval boundaries. Do not press “Turn on” or submit a prospect test expecting this new pipeline to run yet.
+The production adapter and provider correlation still need to be wired under controlled test settings. Application deployment, email publication, coordinated cutover from the old pilot, actual test sends, and public launch remain separate approval boundaries. Do not press “Turn on” or submit a prospect test expecting this new pipeline to run yet.
