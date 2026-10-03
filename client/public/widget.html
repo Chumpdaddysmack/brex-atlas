@@ -110,10 +110,10 @@ input::placeholder{color:#697b8a}
       </div>
       <div class="limits" id="limitations"></div>
       <section class="cta">
-        <h2>Turn the observation into a conversation.</h2>
-        <p class="muted">Explore what this finding could mean for your business and whether a deeper Growth Excavation Report would be useful.</p>
+        <h2>See what a deeper analysis could reveal.</h2>
+        <p class="muted">Explore a personalized demo of the Growth Excavation Report and discuss which report package fits your priorities.</p>
         <div class="actions">
-          <a class="btn primary" href="https://meetings-na2.hubspot.com/kenny-peavy" target="_blank" rel="noopener noreferrer">Discuss My Growth Opportunities</a>
+          <a class="btn primary" href="https://meetings-na2.hubspot.com/kenny-peavy" target="_blank" rel="noopener noreferrer">Schedule My Report Demo</a>
           <button class="btn secondary" id="save-btn" type="button">Save a Text Copy</button>
         </div>
       </section>
@@ -121,11 +121,12 @@ input::placeholder{color:#697b8a}
     <section class="lead-card" id="lead-card">
       <input type="hidden" id="lead-source-tag" name="lead_source_tag" value="Atlas Excavator Widget">
       <input type="hidden" id="original-lead-source" name="original_lead_source" value="Website">
-      <h3>Keep your snapshot handy</h3>
-      <p>Request an email copy with your 10-day access link. Your sources are already visible above, with no signup required.</p>
+      <h3 id="lead-heading">Keep your snapshot handy</h3>
+      <p id="lead-intro">Request an email copy with your 10-day access link. Your sources are already visible above, with no signup required.</p>
       <p class="fine" id="delivery-status">Automatic email delivery is not active yet. Requests are recorded for follow-up; save a text copy now to keep your research.</p>
       <form id="lead-form">
-        <div class="lead-row"><input type="email" id="lead-email" aria-label="Work email" placeholder="you@company.com" required maxlength="254" autocomplete="email"><button class="btn primary" id="lead-btn">Request Email Copy</button></div>
+        <div class="lead-row"><input type="email" id="lead-email" aria-label="Work email" placeholder="you@company.com" required maxlength="254" autocomplete="email"><button class="btn primary" id="lead-btn" disabled>Request Email Copy</button></div>
+        <label class="choice hidden" id="snapshot-consent-choice"><input type="checkbox" id="snapshot-email-consent" disabled><span id="snapshot-email-consent-text"></span></label>
         <label class="choice"><input type="checkbox" id="marketing-consent" disabled><span id="marketing-consent-text">Optional marketing permission is loading.</span></label>
         <p class="fine">Optional marketing permission is separate from this request. Leaving it unchecked does not change your existing email preferences. Email delivery depends on eligibility; you can always save a text copy.</p>
         <div id="lead-error" role="alert"></div>
@@ -164,7 +165,7 @@ function render(data){
  $('introduction').innerHTML=s.introduction.map(claim).join('');
  $('finding').innerHTML=claim(s.finding);$('interpretation').textContent=s.interpretation;$('question').textContent=s.question;
  $('limitations').innerHTML='<strong>Research limitations</strong><ul>'+['Public-source research, not an independent audit.',...(s.limitations||[])].map(t=>'<li>'+escapeHtml(t)+'</li>').join('')+'</ul>';
- $('marketing-consent').checked=false;$('lead-card').classList.remove('hidden');$('success').classList.add('hidden');
+ $('marketing-consent').checked=false;$('snapshot-email-consent').checked=false;$('lead-card').classList.remove('hidden');$('success').classList.add('hidden');
  $('lead-error').textContent='';step('step-results');
 }
 $('research-form').addEventListener('submit',async e=>{
@@ -180,11 +181,12 @@ $('lead-form').addEventListener('submit',async e=>{
  try{
   const data=await api('/lead',{token:state.token,email:$('lead-email').value.trim(),
    lead_source_tag:$('lead-source-tag').value,original_lead_source:$('original-lead-source').value,
+   ...(state.config?.snapshotEmailConsent?.version?{snapshotEmailConsent:$('snapshot-email-consent').checked,snapshotEmailConsentVersion:state.config.snapshotEmailConsent.version}:{}),
    ...(state.config?.marketingConsent?.version?{marketingConsent:$('marketing-consent').checked,marketingConsentVersion:state.config.marketingConsent.version}:{})});
   $('success').innerHTML='<h3>Request recorded</h3><p>'+escapeHtml(data.message)+'</p><label for="saved-url">Your snapshot link</label><input class="saved-url" id="saved-url" type="text" readonly value="'+escapeHtml(data.snapshotUrl)+'">';
   $('success').classList.remove('hidden');$('lead-card').classList.add('hidden');height();
  }catch(err){error('lead-error',err.message);}
- finally{$('lead-btn').disabled=false;$('lead-btn').textContent='Request Email Copy';}
+ finally{$('lead-btn').disabled=false;$('lead-btn').textContent=state.config?.noSendPilot?'Run No-Send Test':state.config?.snapshotEmailConsent?'Email My Snapshot':'Request Email Copy';}
 });
 $('save-btn').addEventListener('click',()=>{
  const s=state.snapshot;if(!s)return;
@@ -193,7 +195,7 @@ $('save-btn').addEventListener('click',()=>{
   'Automated public research preview; not consultant-reviewed.',s.companyUrl,'',
   'YOUR COMPANY AT A GLANCE',...s.introduction.map(textClaim),'','WHAT WE FOUND',textClaim(s.finding),
   '','WHAT IT MAY MEAN (INTERPRETATION)',s.interpretation,'','WHAT TO INVESTIGATE NEXT',s.question,
-  '','LIMITATIONS',...s.limitations,'','Discuss your growth opportunities: https://meetings-na2.hubspot.com/kenny-peavy'].join('\n\n');
+  '','LIMITATIONS',...s.limitations,'','Schedule your report demo: https://meetings-na2.hubspot.com/kenny-peavy'].join('\n\n');
  const u=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=u;a.download='company-positioning-snapshot.txt';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
 });
 $('restart-btn').addEventListener('click',()=>{
@@ -204,8 +206,25 @@ async function init(){
  try{
   const r=await fetch('/api/widget/snapshot/config');if(!r.ok)throw new Error();state.config=await r.json();
   $('delivery-status').classList.toggle('hidden',state.config.emailDeliveryReady===true);
+  if(state.config.snapshotEmailConsent?.version){
+   $('snapshot-email-consent-text').textContent=state.config.snapshotEmailConsent.text;
+   $('snapshot-consent-choice').classList.remove('hidden');
+   $('snapshot-email-consent').disabled=false;$('snapshot-email-consent').required=true;
+   $('lead-btn').textContent='Email My Snapshot';
+  }
   if(state.config.marketingConsent?.version){$('marketing-consent-text').textContent=state.config.marketingConsent.text;$('marketing-consent').disabled=false;}
- }catch{$('marketing-consent-text').textContent='Optional signup is unavailable. You may still request your snapshot.';}
+  if(state.config.noSendPilot){
+   $('lead-heading').textContent='Test your snapshot request';
+   $('lead-intro').textContent='This test checks contact creation and permission tracking only. You will not receive an email from this submission.';
+   $('delivery-status').classList.remove('hidden');
+   $('delivery-status').textContent='Kenny-only no-send test: records your choices and creates your test contact. It does not send an email, change subscriptions, or activate alerts. Your checkbox choice is recorded, but this test request will not be used for a later email.';
+   $('lead-btn').textContent='Run No-Send Test';
+  }
+  $('lead-btn').disabled=false;
+ }catch{
+  $('marketing-consent-text').textContent='Email request settings are unavailable. Refresh to try again, or save your snapshot as a text copy.';
+  $('lead-btn').disabled=true;
+ }
  const token=new URLSearchParams(location.hash.slice(1)).get('snapshot');
  if(token){step('step-loading');try{const data=await api('/view',{token});state.token=token;render(data);}catch(err){step('step-intake');error('error-slot',err.message);}}
  height();

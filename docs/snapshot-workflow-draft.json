@@ -1,0 +1,53 @@
+{
+  "kind": "atlas-workflow-design-not-hubspot-api-payload",
+  "name": "Atlas Snapshot Delivery - Consent-Gated Pilot",
+  "deploymentState": "local-only",
+  "isEnabled": false,
+  "existingWorkflowId": "5015673537",
+  "existingWorkflowRevisionObserved": "22",
+  "existingWorkflowMustRemainUnchangedDuringPreparation": true,
+  "pilotRecipient": "kenny@brexconsulting.com",
+  "resultsEmailId": "405101719239",
+  "subscriptionId": "3750294688",
+  "enrollExistingContacts": false,
+  "publicEnrollment": false,
+  "reenrollment": "off until persistent per-request locking and exact-request send binding pass",
+  "entryGates": [
+    "pilot enabled by explicit approval with request-time cutoff",
+    "email exactly matches pilot recipient",
+    "new immutable request receipt, canonical permission version and accepted snapshot permission",
+    "unexpired snapshot with matching receipt ID, URL and original expiry",
+    "latest CRM request equals claimed request",
+    "delivery state pending or ready, no prior sent/delivered event for this request",
+    "fresh v4 category status and global/brand status read",
+    "no global, brand or snapshot-category unsubscribe",
+    "no invalid address, quarantine or hard-bounce suppression"
+  ],
+  "steps": [
+    "Preserve existing promotional preferences regardless of snapshot checkbox.",
+    "If snapshot status NOT_SPECIFIED, use the narrow v3 subscribe endpoint with recorded explicit consent; read back v4 SUBSCRIBED. Never force resubscription.",
+    "Acquire a durable per-contact delivery lock and per-request send claim before promoting readiness. Do not overwrite the snapshot link while an earlier send is in flight.",
+    "Verify native maximum marketing-contact cap is saved; do not treat old headroom as a reservation.",
+    "Only after permission and suppression checks, use the HubSpot Set marketing contact status action.",
+    "Read actual marketing status; stop if false or unknown. Do not bypass a cap.",
+    "Recheck expiry, request identity, opt-outs, suppression, and the claimed request immediately before send.",
+    "Use only the reviewed published results-only email 405101719239 under subscription 3750294688.",
+    "Keep the send claim held through terminal provider acknowledgement; uncertain sends require reconciliation, not blind retries.",
+    "Reconcile request-bound provider events to sent/delivered/blocked/failed. Workflow action completion alone is not delivered."
+  ],
+  "blockedBranch": {
+    "sendEmail": false,
+    "record": "request-level reason in durable delivery ledger; contact projection only if request still current",
+    "fallback": "on-screen snapshot and text copy remain available",
+    "internalNotice": "use an approved internal alert only; never email the prospect to explain a suppression"
+  },
+  "activationBlockers": [
+    "production integration and persistent concurrency/deduplication implementation",
+    "saved account cap readback and controlled cap-blocked test",
+    "review/publish new results-only draft with explicit approval",
+    "replacement pilot configured and read back while off",
+    "old Kenny-only sender paused at approved cutover to avoid duplicate sends",
+    "explicit test-send approval",
+    "successful positive and negative-case tests before any public-launch approval"
+  ]
+}
