@@ -45,6 +45,32 @@ export interface ResearchSnapshot {
   question: string;
   limitations: string[];
 }
+// Backend-only diagnostics: never return rejected claims to the public widget.
+// Bound and redact model-produced text before placing it in operational logs.
+export function snapshotAuditDiagnostic(audit: any, stage: "initial" | "after_repair") {
+  const issues = Array.isArray(audit?.issues) ? audit.issues : [];
+  const redact = (value: string) => value
+    .replace(/https?:\/\/[^\s"'<>]+/gi, raw => {
+      try {
+        const u = new URL(raw);
+        u.username = ""; u.password = ""; u.search = ""; u.hash = "";
+        return u.toString();
+      } catch { return "[url]"; }
+    })
+    .replace(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, "[email]")
+    .replace(/\b(?:sk-ant-|pat-na\d-)[a-z0-9_-]+/gi, "[credential]")
+    .replace(/\b[a-z0-9_-]{48,}\b/gi, "[long-token]")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .slice(0, 500);
+  return {
+    stage,
+    supported: audit?.supported === true,
+    supportedType: typeof audit?.supported,
+    issuesType: Array.isArray(audit?.issues) ? "array" : typeof audit?.issues,
+    issueCount: issues.length,
+    issues: issues.filter((s: unknown): s is string => typeof s === "string").slice(0, 5).map(redact),
+  };
+}
 function sameDomain(a: string, b: string) {
   return new URL(a).hostname.replace(/^www\./,"") === new URL(b).hostname.replace(/^www\./,"");
 }
@@ -152,6 +178,8 @@ This checks consistency with fetched pages, not independent verification of comp
     {type:"object",required:["supported","issues"],properties:{supported:{type:"boolean"},issues:{type:"array",maxItems:5,items:{type:"string"}}}},
   );
   let audit=await auditCandidate();
+  if(audit?.supported!==true)
+    console.warn("[snapshot] evidence audit rejected",JSON.stringify(snapshotAuditDiagnostic(audit,"initial")));
   if(audit?.supported!==true&&Array.isArray(audit?.issues)&&audit.issues.length){
     // One correction from the same fetched text. The audit is repeated and its
     // criteria are not weakened; an unresolved mismatch still fails closed.
@@ -161,6 +189,8 @@ This checks consistency with fetched pages, not independent verification of comp
     }}),2200,outputSchema);
     snapshot=normalizeSnapshot(structured,sources,input.url);
     audit=await auditCandidate();
+    if(audit?.supported!==true)
+      console.warn("[snapshot] evidence audit rejected",JSON.stringify(snapshotAuditDiagnostic(audit,"after_repair")));
   }
   if (audit?.supported !== true) throw new Error("EVIDENCE_AUDIT_FAILED");
   return snapshot;
