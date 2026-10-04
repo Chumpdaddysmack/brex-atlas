@@ -7,6 +7,7 @@ import { syncSnapshotToHubSpot, captureSnapshotNoSend } from "./hubspot";
 import { SNAPSHOT_PILOT_EMAIL } from "./snapshot-subscriptions";
 import { SNAPSHOT_EMAIL_PERMISSION, parseSnapshotEmailPermission } from "@shared/snapshot-delivery";
 import { captureSnapshotLiveTest, LIVE_TEST_APPROVAL } from "./snapshot-live-capture";
+import {captureWebsiteNoSend,WEBSITE_NO_SEND_VERSION,websiteNoSendReady,startWebsiteNoSendWorker} from "./snapshot-website-no-send";
 
 const lifetime=10*24*60*60*1000;
 const hash=(token:string)=>createHash("sha256").update(token).digest("hex");
@@ -29,16 +30,20 @@ export function registerSnapshotRoutes(app:Express,deps:{
   research:typeof researchSnapshot;db:typeof widgetDb;sync:typeof syncSnapshotToHubSpot;
   pilot?:typeof captureSnapshotNoSend;
   liveCapture?:typeof captureSnapshotLiveTest;
+  websiteCapture?:typeof captureWebsiteNoSend;
 }={research:researchSnapshot,db:widgetDb,sync:syncSnapshotToHubSpot}) {
   // Default off. Local preparation only; production activation requires the
   // new email, subscription gates, billing cap and workflow to be approved.
-  const liveTestCapture=process.env.SNAPSHOT_LIVE_TEST_CAPTURE_ENABLED==="true";
-  const noSendPilot=!liveTestCapture&&process.env.SNAPSHOT_NO_SEND_PILOT_ENABLED==="true";
-  const permissionTrackingEnabled=liveTestCapture||noSendPilot||process.env.SNAPSHOT_PERMISSION_TRACKING_ENABLED==="true";
+  const websiteNoSend=process.env.SNAPSHOT_WEBSITE_NO_SEND_ENABLED==="true";
+  const liveTestCapture=!websiteNoSend&&process.env.SNAPSHOT_LIVE_TEST_CAPTURE_ENABLED==="true";
+  const noSendPilot=!websiteNoSend&&!liveTestCapture&&process.env.SNAPSHOT_NO_SEND_PILOT_ENABLED==="true";
+  const permissionTrackingEnabled=websiteNoSend||liveTestCapture||noSendPilot||process.env.SNAPSHOT_PERMISSION_TRACKING_ENABLED==="true";
+  if(websiteNoSend&&!deps.websiteCapture)startWebsiteNoSendWorker();
   app.use("/api/widget/snapshot",noCache);
   app.get("/api/widget/snapshot/config",(_req,res)=>res.json({
     marketingConsent:WIDGET_MARKETING_CONSENT,lifetimeDays:10,
-    noSendPilot,liveTestCapture,
+    noSendPilot,liveTestCapture,websiteNoSend,
+    ...(websiteNoSend?{websiteTestConfigured:websiteNoSendReady()}:{}),
     emailDeliveryReady:!permissionTrackingEnabled&&process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true",
     ...(permissionTrackingEnabled?{snapshotEmailConsent:SNAPSHOT_EMAIL_PERMISSION}:{}),
   }));
@@ -100,8 +105,10 @@ export function registerSnapshotRoutes(app:Express,deps:{
     const token=req.body?.token,email=typeof req.body?.email==="string"?req.body.email.trim().toLowerCase():"";
     if(!validToken(token)||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))
       return res.status(400).json({error:"Enter a valid work email and run a snapshot first."});
-    if((noSendPilot||liveTestCapture)&&email!==SNAPSHOT_PILOT_EMAIL)
+    if((websiteNoSend||noSendPilot||liveTestCapture)&&email!==SNAPSHOT_PILOT_EMAIL)
       return res.status(403).json({error:"This test is limited to the approved test recipient. You can still view or save your snapshot."});
+    if(websiteNoSend&&!websiteNoSendReady())
+      return res.status(503).json({sendingEnabled:false,error:"The website no-send test is not configured yet. Your snapshot remains available; no email or contact change was requested."});
     if(!rate(`lead:${hashIp(req.ip||"unknown")}`,15,3600*1000))return res.status(429).json({error:"Too many requests. Please try later."});
     let evidence;
     try{
@@ -110,6 +117,7 @@ export function registerSnapshotRoutes(app:Express,deps:{
         ...(permissionTrackingEnabled?{snapshotDelivery:parseSnapshotEmailPermission(req.body)}:{}),
         ...(noSendPilot?{noSendPilot:true}:{}),
         ...(liveTestCapture?{liveEmailTest:LIVE_TEST_APPROVAL}:{}),
+        ...(websiteNoSend?{websiteNoSend:WEBSITE_NO_SEND_VERSION}:{}),
       };
     }catch(e){return res.status(400).json({error:(e as Error).message});}
     const key=`${hash(token)}:${email}`;
@@ -135,7 +143,16 @@ export function registerSnapshotRoutes(app:Express,deps:{
         return res.status(409).json({error:"Test receipts and live email requests cannot be reused across modes. Run a fresh snapshot."});
       if((receipt.consent_evidence?.liveEmailTest||null)!==(liveTestCapture?LIVE_TEST_APPROVAL:null))
         return res.status(409).json({error:"This earlier request cannot be used for the live email test. Run a fresh snapshot."});
+      if((receipt.consent_evidence?.websiteNoSend||null)!==(websiteNoSend?WEBSITE_NO_SEND_VERSION:null))
+        return res.status(409).json({error:"An earlier request cannot be reused for this website test. Run a fresh snapshot."});
       const snapshotUrl=`https://atlas.brexconsulting.com/widget.html#snapshot=${token}`;
+      if(websiteNoSend){
+        const result=await (deps.websiteCapture||captureWebsiteNoSend)({requestId:receipt.id,snapshotUrl},db);
+        if(!["queued","duplicate"].includes(result.status))
+          return res.status(409).json({sendingEnabled:false,error:"A website test is already active or needs review. Do not resubmit; ask Kenny to review its status."});
+        return res.json({ok:true,sendingEnabled:false,websiteNoSend:true,snapshotUrl,expiresAt:row.expires_at,
+          message:"Your website test is recorded for read-only checks. No email will be sent, and no HubSpot contact or subscription will be changed. Kenny will review the test result. This test request cannot be used to send a later email."});
+      }
       if(liveTestCapture){
         const result=await (deps.liveCapture||captureSnapshotLiveTest)({requestId:receipt.id,snapshotUrl},db);
         if(result.status!=="request_held")
@@ -171,7 +188,9 @@ export function registerSnapshotRoutes(app:Express,deps:{
           ?"Your email-copy request has been recorded. Email delivery is subject to eligibility; save this link so you can return to your snapshot."
           :"Your request has been recorded for follow-up. Automatic email delivery is not active yet. Save this link or download a text copy to keep your snapshot."});
     }catch{
-      res.status(503).json({error:liveTestCapture
+      res.status(503).json({error:websiteNoSend
+        ?"We could not confirm the website test. No email or HubSpot change was requested. Keep your snapshot link and ask for the test status before resubmitting."
+        :liveTestCapture
         ?"We could not confirm the email-test request. No email was sent by this submission. Your snapshot remains available; ask for the test status before submitting again."
         :"We could not complete your email-copy request. Your snapshot remains available here; please retry. We have not changed your subscription preferences."});
     }finally{requestLocks.delete(key);}

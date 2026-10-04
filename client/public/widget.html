@@ -186,7 +186,7 @@ $('lead-form').addEventListener('submit',async e=>{
   $('success').innerHTML='<h3>Request recorded</h3><p>'+escapeHtml(data.message)+'</p><label for="saved-url">Your snapshot link</label><input class="saved-url" id="saved-url" type="text" readonly value="'+escapeHtml(data.snapshotUrl)+'">';
   $('success').classList.remove('hidden');$('lead-card').classList.add('hidden');height();
  }catch(err){error('lead-error',err.message);}
- finally{$('lead-btn').disabled=false;$('lead-btn').textContent=state.config?.liveTestCapture?'Record My Email Test Request':state.config?.noSendPilot?'Run No-Send Test':state.config?.snapshotEmailConsent?'Email My Snapshot':'Request Email Copy';}
+ finally{$('lead-btn').disabled=false;$('lead-btn').textContent=state.config?.websiteNoSend?'Run Website Test':state.config?.liveTestCapture?'Record My Email Test Request':state.config?.noSendPilot?'Run No-Send Test':state.config?.snapshotEmailConsent?'Email My Snapshot':'Request Email Copy';}
 });
 $('save-btn').addEventListener('click',()=>{
  const s=state.snapshot;if(!s)return;
@@ -227,7 +227,16 @@ async function init(){
    $('delivery-status').textContent='Kenny-only test. Submitting records your permission; it does not immediately send an email or change your subscription preferences. Earlier no-send requests cannot be reused.';
    $('lead-btn').textContent='Record My Email Test Request';
   }
-  $('lead-btn').disabled=false;
+  if(state.config.websiteNoSend){
+   $('lead-heading').textContent='Test your website connection';
+   $('lead-intro').textContent='Record a fresh request and check the website-to-database connection without sending email or changing your HubSpot contact.';
+   $('delivery-status').classList.remove('hidden');
+   $('delivery-status').textContent=state.config.websiteTestConfigured
+     ?'Kenny-only website test. Records your request for read-only checks. No email, contact update, subscription change, or alert will be triggered. This request cannot be used for a later email.'
+     :'The website test is waiting for its approved configuration. You can still view and save your snapshot.';
+   $('lead-btn').textContent='Run Website Test';
+  }
+  $('lead-btn').disabled=state.config.websiteNoSend&&state.config.websiteTestConfigured!==true;
  }catch{
   $('marketing-consent-text').textContent='Email request settings are unavailable. Refresh to try again, or save your snapshot as a text copy.';
   $('lead-btn').disabled=true;

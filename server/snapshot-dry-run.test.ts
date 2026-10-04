@@ -96,6 +96,7 @@ test("stored loader rejects historic, mismatched, and prior test receipts before
     for(const change of [
       (f:any)=>{f.stored.request.consent_evidence.liveEmailTest="old-test";},
       (f:any)=>{f.stored.request.consent_evidence.noSendPilot=true;},
+      (f:any)=>{f.stored.request.consent_evidence.websiteNoSend="kenny-website-no-send-v1";},
       (f:any)=>{f.stored.request.requested_at=new Date(now-60000).toISOString();},
       (f:any)=>{f.stored.snapshot.token_hash="0".repeat(64);},
       (f:any)=>{delete f.stored.request.consent_evidence.snapshotDelivery;},

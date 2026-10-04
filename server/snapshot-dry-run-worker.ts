@@ -12,7 +12,7 @@ export async function stageStoredSnapshot(
   if(!Number.isFinite(after)||after>now)throw new Error("Invalid staging cutoff");
   const receipt=await loadSnapshotPilotReceipt(input.requestId,input.snapshotUrl,async id=>{
     const stored=await read(id);
-    if(stored.request?.consent_evidence?.liveEmailTest||stored.request?.consent_evidence?.noSendPilot)
+    if(stored.request?.consent_evidence?.liveEmailTest||stored.request?.consent_evidence?.noSendPilot||stored.request?.consent_evidence?.websiteNoSend)
       throw new Error("Prior test receipts cannot enter public staging");
     if(Date.parse(stored.request?.requested_at)<=after)throw new Error("Historical receipt");
     return stored;
