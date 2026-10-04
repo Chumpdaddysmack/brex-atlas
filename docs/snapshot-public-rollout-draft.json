@@ -1,0 +1,47 @@
+{
+  "kind": "atlas-rollout-design-not-hubspot-api-payload",
+  "version": 1,
+  "status": "preparation-only-not-launch-ready",
+  "isEnabled": false,
+  "publicEnrollment": false,
+  "enrollExistingContacts": false,
+  "approvalTimestamp": null,
+  "proposedName": "Atlas Snapshot Delivery - Permission-Gated Public",
+  "resultsEmailId": "405101719239",
+  "subscriptionId": "3750294688",
+  "marketingSubscriptionWrites": false,
+  "marketingContactCap": 2000,
+  "automaticPlanUpgrade": false,
+  "internalAlertEnabled": false,
+  "legacySendersMustStayOff": ["5015673537", "5014906568", "5051336409", "5051781861"],
+  "requestEligibility": [
+    "new immutable request after a separately approved activation cutoff; no historic or test receipts",
+    "accepted current snapshot permission, distinct from optional promotional permission",
+    "stored snapshot token hash, request, recipient and original expiry match",
+    "one durable request claim and one active delivery per normalized recipient",
+    "fresh category, global, brand, address, bounce and quarantine read",
+    "explicit snapshot opt-in readback without overriding existing opt-outs",
+    "native marketing contact status confirmed under the saved account cap",
+    "approved results-only email and exact immutable snapshot link",
+    "claim transitions prepared to dispatching before any workflow trigger"
+  ],
+  "dispatchPolicy": {
+    "oneTriggerPerRequest": true,
+    "unrestrictedContactReenrollment": false,
+    "mutableSnapshotFieldsFrozenUntilTerminalReconciliation": true,
+    "manualBulkEnrollment": false,
+    "retryUnknownSendOutcome": false,
+    "noAutomaticCatchupAfterPause": true
+  },
+  "launchBlockers": [
+    "Production worker and durable restart-safe queue, with protected snapshot-link storage",
+    "Public request gate that cannot fall through to legacy CRM-sync behavior",
+    "Automated marketing-status eligibility and serialized cap-admission path",
+    "Durable exact-request to provider-message binding; no recipient/time-only inference",
+    "Authenticated provider read and reconciliation worker with pagination and outage handling",
+    "Shared rate limits and recipient abuse safeguards across restarts and replicas",
+    "Request-level HubSpot workflow contract and safe repeat-request behavior",
+    "No-send boundary tests on the integrated worker plus staged canary approval",
+    "Separate explicit public-launch approval"
+  ]
+}

@@ -188,6 +188,19 @@ test("workflow pure guard passes only a fully verified controlled-test fixture",
   for (const alter of alterations) {const e=workflow();alter(e);assert.equal(evaluateSnapshotWorkflow(e,now).allow,false);}
 });
 
+test("workflow guard compares HubSpot ISO and numeric dates without accepting wrong instants",()=>{
+  const e=workflow();
+  e.contact.atlas_snapshot_expires_at=e.receipt.expiresAt;
+  e.contact.atlas_snapshot_requested_at=e.receipt.requestedAt.replace("Z","+00:00");
+  assert.equal(evaluateSnapshotWorkflow(e,now).allow,true);
+  e.contact.atlas_snapshot_requested_at=String(Date.parse(e.receipt.requestedAt));
+  assert.equal(evaluateSnapshotWorkflow(e,now).allow,true);
+  e.contact.atlas_snapshot_expires_at=new Date(Date.parse(e.receipt.expiresAt)+1).toISOString();
+  assert.equal(evaluateSnapshotWorkflow(e,now).allow,false);
+  e.contact.atlas_snapshot_expires_at="";
+  assert.equal(evaluateSnapshotWorkflow(e,now).allow,false);
+});
+
 test("local workflow manifest is disabled and cannot be mistaken for an API upload", () => {
   const draft=JSON.parse(readFileSync(new URL("../docs/snapshot-workflow-draft.json",import.meta.url),"utf8"));
   assert.equal(draft.kind,"atlas-workflow-design-not-hubspot-api-payload");

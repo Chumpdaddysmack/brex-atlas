@@ -5,6 +5,11 @@ export const SNAPSHOT_RESULTS_EMAIL_ID = "405101719239";
 export const SNAPSHOT_SUPPRESSION_PROPERTIES = [
   "hs_email_optout", "hs_email_bad_address", "hs_email_hard_bounce_reason_enum", "hs_email_quarantined",
 ] as const;
+function crmTimestamp(value:string|null|undefined):number{
+  if(!value)return NaN;
+  return /^\d+$/.test(value)?Number(value)
+    :/^\d{4}-\d{2}-\d{2}T/.test(value)?Date.parse(value):NaN;
+}
 
 export interface WorkflowEvidence {
   pilotEnabled: boolean;
@@ -35,11 +40,11 @@ export function evaluateSnapshotWorkflow(e: WorkflowEvidence, now = Date.now()) 
   if (!e.requestClaimVerified) return stop("request_not_exclusively_claimed");
   if (c.email?.toLowerCase() !== r.email || c.atlas_snapshot_request_id !== r.requestId
       || c.atlas_snapshot_id !== r.snapshotId || c.atlas_snapshot_url !== r.snapshotUrl
-      || Number(c.atlas_snapshot_expires_at) !== Date.parse(r.expiresAt)
+      || crmTimestamp(c.atlas_snapshot_expires_at) !== Date.parse(r.expiresAt)
       || c.atlas_snapshot_email_permission !== "true"
       || c.atlas_snapshot_permission_version !== SNAPSHOT_EMAIL_PERMISSION.version
       || c.atlas_optional_marketing_choice !== r.marketingChoice
-      || c.atlas_snapshot_requested_at !== r.requestedAt) return stop("contact_request_mismatch");
+      || crmTimestamp(c.atlas_snapshot_requested_at) !== Date.parse(r.requestedAt)) return stop("contact_request_mismatch");
   if (!["pending", "ready"].includes(c.atlas_snapshot_delivery_state || "")) return stop("contact_state_not_pending");
   if (!Number.isFinite(e.contactCheckedAt) || e.contactCheckedAt > now || now - e.contactCheckedAt > 60_000
       || !Number.isFinite(p.checkedAt) || p.checkedAt > now || now - p.checkedAt > 60_000
