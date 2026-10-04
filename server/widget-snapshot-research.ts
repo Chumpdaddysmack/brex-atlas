@@ -3,6 +3,7 @@ import { isIP } from "node:net";
 import { pplxAsk } from "./perplexity-search";
 import { llmJson } from "./llm";
 import { readOfficialPage, type PageEvidence } from "./snapshot-page-evidence";
+import type { WidgetAssessment } from "../shared/widget-health";
 
 // Public research only. Never look up internal analyses or approved client reports.
 export function publicCompanyUrl(value: unknown): string | null {
@@ -56,6 +57,7 @@ export interface ResearchSnapshot {
   interpretation: string;
   question: string;
   limitations: string[];
+  assessment?: WidgetAssessment;
 }
 // Backend-only diagnostics: never return rejected claims to the public widget.
 // Bound and redact model-produced text before placing it in operational logs.

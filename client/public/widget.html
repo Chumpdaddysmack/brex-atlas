@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<title>Company &amp; Positioning Snapshot | Brex Atlas</title>
+<title>Marketing Health &amp; Service Fit | Brex Atlas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -28,8 +28,8 @@ p{font-size:15px;line-height:1.65;margin:0 0 16px}
 .lede{max-width:64ch;margin-bottom:24px}
 .field{margin-bottom:20px}
 .field label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}
-input[type=url],input[type=text],input[type=email]{width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:10px;font:inherit;font-size:16px;background:var(--bg);color:var(--text)}
-input:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--sky);outline-offset:3px}
+input[type=url],input[type=text],input[type=email],select{width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:10px;font:inherit;font-size:16px;background:var(--bg);color:var(--text)}
+input:focus-visible,select:focus-visible,summary:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--sky);outline-offset:3px}
 input::placeholder{color:#697b8a}
 .choice{display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.6;cursor:pointer}
 .choice input{width:18px;height:18px;flex:none;margin-top:2px;accent-color:var(--navy)}
@@ -66,10 +66,31 @@ input::placeholder{color:#697b8a}
 .success p{margin-bottom:10px}
 .saved-url{width:100%;margin-top:8px;font-size:12px!important}
 .footer-note{font-size:12px;line-height:1.7;color:white;margin:18px 2px}
+.form-grid,.subscores{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.form-grid .field{min-width:0;margin:0}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+legend{font-size:19px;font-weight:700;margin-bottom:16px}
+.form-stage{margin-top:24px}
+.score-panel{display:flex;gap:28px;align-items:center;background:var(--navy-deep);color:white;padding:28px;border-radius:14px;margin:0 0 24px}
+.score-panel p{color:#d3dfeb}
+.score-ring{width:142px;height:142px;flex:none;border-radius:50%;background:conic-gradient(var(--sky) var(--sweep,0deg),#344456 0);display:grid;place-items:center}
+.score-inner{width:120px;height:120px;border-radius:50%;background:var(--navy-deep);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.score-value{font-size:42px;font-weight:800;line-height:1.2}
+.score-inner small{font-size:12px}
+.subscore{background:var(--soft);border:1px solid var(--border);border-radius:10px;padding:20px;min-width:0}
+.subscore h3{font-size:16px;line-height:1.4}.subscore-value{font-size:27px;font-weight:700;color:var(--navy)}
+.subscore progress{width:100%;height:8px;accent-color:var(--sky);margin:12px 0}
+.assessment details{margin-top:18px}.assessment summary{cursor:pointer;min-height:44px;padding:12px 0;font-size:14px;font-weight:600}
+.assessment li{font-size:14px;line-height:1.7;margin-bottom:10px}
+.tier-card{border-left:3px solid var(--sky);padding:22px;background:var(--soft);margin:24px 0}
+.methodology{border-top:1px solid var(--border);padding-top:8px}
+.progress-label{color:var(--muted);font-size:13px}
+.assessment{margin-bottom:28px;border-bottom:1px solid var(--border);padding-bottom:24px}
 @media(max-width:600px){
  .widget{padding:20px 16px 32px}.card{padding:22px}.reasoning{grid-template-columns:1fr;gap:14px}
  .lead-card{padding:22px}.lead-row{grid-template-columns:1fr}.actions .btn{width:100%}
  .finding{padding:18px}.snapshot-head{padding-bottom:18px}h2{font-size:20px}
+ .form-grid,.subscores{grid-template-columns:1fr}.score-panel{align-items:flex-start;flex-direction:column;padding:22px}
 }
 @media(prefers-reduced-motion:reduce){.spinner{animation:none}}
 </style>
@@ -77,17 +98,46 @@ input::placeholder{color:#697b8a}
 <body>
 <main class="widget" id="widget-root">
   <section id="step-intake" class="card">
-    <p class="eyebrow">Company &amp; Positioning Snapshot</p>
-    <h1>A clearer view of your business.<br>With evidence you can check.</h1>
-    <p class="lede">Explore a source-cited company introduction, one observation about your public positioning, and a question worth discussing. Research, not an inferred score.</p>
+    <p class="eyebrow">Atlas Excavator</p>
+    <h1>How healthy is your marketing?<br>See what to strengthen next.</h1>
+    <p class="lede">Get a transparent marketing health score, a potential CMO service tier, and a source-cited company snapshot. Your answers drive the assessment. Public research adds context, not guessed scores.</p>
     <form id="research-form">
+      <p class="progress-label" id="form-progress" aria-live="polite">Step 1 of 3 · Your company</p>
+      <fieldset id="form-company" class="form-stage">
+      <legend>Your company</legend>
       <div class="field"><label for="company-name">Company name</label><input id="company-name" type="text" placeholder="Your company's public name" maxlength="140" required autocomplete="organization"></div>
       <div class="field"><label for="url-input">Company website</label><input id="url-input" type="text" inputmode="url" placeholder="example.com" maxlength="300" required autocomplete="url"></div>
+      <div class="form-grid">
+        <div class="field"><label for="industry-input">Industry (optional)</label><input id="industry-input" type="text" maxlength="100" placeholder="e.g., B2B professional services"></div>
+        <div class="field"><label for="revenue-input">Annual revenue (optional)</label><select id="revenue-input"><option value="unknown">Not sure / prefer not to say</option value="under1m">Under $1M</option><option value="1m5m">$1M–$5M</option><option value="5m25m">$5M–$25M</option><option value="25mplus">$25M+</option></select></div>
+      </div>
+      <p class="fine" style="margin-top:16px">Industry and revenue provide context. They do not increase your score or automatically determine your tier.</p>
       <label class="choice"><input id="company-confirmed" type="checkbox" required><span>I confirm this name and website refer to the company I want researched.</span></label>
+      </fieldset>
+      <fieldset id="form-health" class="form-stage hidden">
+        <legend>Your marketing practices</legend>
+        <p class="muted">Choose the closest description of what happens today. Each answer earns 0–3 points. “Not sure” is valid; we will leave the overall score pending rather than guess.</p>
+        <div id="health-fields" class="form-grid"></div>
+      </fieldset>
+      <fieldset id="form-fit" class="form-stage hidden">
+        <legend>The support you need</legend>
+        <p class="muted">Optional: these answers help identify a potential service tier, independently of your marketing health score. Skip anything you cannot confirm.</p>
+        <div id="fit-fields" class="form-grid"></div>
+        <div class="form-grid" style="margin-top:20px">
+          <div class="field"><label for="growth-goal">Your growth outcome</label><input id="growth-goal" type="text" maxlength="600" placeholder="e.g., Build a repeatable qualified pipeline"></div>
+          <div class="field"><label for="growth-timeframe">Target timeframe</label><input id="growth-timeframe" type="text" maxlength="100" placeholder="e.g., Over the next 12 months"></div>
+        </div>
+        <p class="fine" style="margin-top:16px">Budget is for CMO leadership, not execution, media, software, or third-party costs. Answers are self-reported, not verified facts. Your results link contains your assessment; share it only with intended recipients.</p>
+      </fieldset>
       <div id="error-slot" role="alert"></div>
-      <div class="actions"><button class="btn primary" id="run-btn" type="submit">Research My Company</button><span class="fine">Free · Up to 5 research requests per day</span></div>
+      <div class="actions">
+        <button class="btn secondary hidden" id="form-back" type="button">Back</button>
+        <button class="btn primary" id="form-next" type="button" disabled>Loading assessment…</button>
+        <button class="btn primary hidden" id="run-btn" type="submit">View My Score &amp; Research</button>
+        <span class="fine">Free · Up to 5 research requests per day</span>
+      </div>
     </form>
-    <p class="fine" style="margin:20px 0 0">Public sources only. No access to private company data or existing client reports. This is an automated research preview, not a consultant-reviewed diagnosis.</p>
+    <p class="fine" style="margin:20px 0 0">Research-informed Brex rubric, not an industry ranking or growth prediction. You can leave assessment answers as “Not sure” and still get your researched snapshot. No signup required to view results.</p>
   </section>
   <section id="step-loading" class="card hidden" aria-live="polite" aria-busy="true">
     <div class="loader"><div class="spinner" aria-hidden="true"></div><h2>Researching your company</h2>
@@ -102,6 +152,7 @@ input::placeholder{color:#697b8a}
         <a id="company-link" class="company-link" target="_blank" rel="noopener noreferrer"></a>
         <div class="snapshot-meta" id="research-date"></div>
       </header>
+      <section class="assessment hidden" id="assessment-results" aria-label="Marketing health and service fit"></section>
       <section class="intro"><h2>Your company at a glance</h2><div id="introduction"></div></section>
       <section class="finding"><p class="eyebrow">What we found · Public-source observation</p><h2>One positioning finding</h2><div id="finding"></div></section>
       <div class="reasoning">
@@ -134,14 +185,14 @@ input::placeholder{color:#697b8a}
     </section>
     <div id="success" class="success hidden" role="status"></div>
     <div class="actions"><button class="btn secondary" id="restart-btn" type="button">Research Another Company</button></div>
-    <p class="footer-note">Automated research preview. Sources may be incomplete or change over time. Source-reported facts and Brex's automated interpretation are presented separately. This is not a completed Growth Excavation Report or a service-tier recommendation.</p>
+    <p class="footer-note">Automated preview, not a completed Growth Excavation Report. Assessment answers are self-reported; website findings carry their own sources. Any potential service tier requires Kenny's review.</p>
   </section>
 </main>
 <script>
 (()=>{
 'use strict';
 const $=id=>document.getElementById(id);
-const state={snapshot:null,token:null,expiresAt:null,config:null,busy:false};
+const state={snapshot:null,token:null,expiresAt:null,config:null,busy:false,formStage:0};
 const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safeUrl=s=>{try{const u=new URL(s);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password?u.href:null;}catch{return null;}};
 function height(){window.parent.postMessage({type:'atlas-widget-height',height:$('widget-root').offsetHeight+60},'*');}
@@ -156,9 +207,48 @@ function claim(c){
  const links=(c.sources||[]).filter(s=>safeUrl(s.url)).map(s=>'<a class="citation" href="'+escapeHtml(safeUrl(s.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(s.title||new URL(s.url).hostname)+'</a>').join('');
  return '<p>'+escapeHtml(c.text)+'<span class="citations">'+links+'</span></p>';
 }
+function selectField(id,label,options){
+ return '<div class="field"><label for="'+id+'">'+escapeHtml(label)+'</label><select id="'+id+'" aria-describedby="'+id+'-answer">'+options.map(o=>'<option value="'+escapeHtml(o[0])+'">'+escapeHtml(o[1])+'</option>').join('')+'</select><p class="fine" id="'+id+'-answer" style="margin:6px 0 0"></p></div>';
+}
+function prepareAssessment(r){
+ $('health-fields').innerHTML=r.questions.map(q=>selectField('health-'+q.key,q.label,[['unknown','Not sure / skip'],...q.options.map((label,i)=>[String(i),i+' points · '+label])])).join('');
+ $('fit-fields').innerHTML=r.tierQuestions.map(q=>selectField('fit-'+q.key,q.label,[['unknown','Not sure / skip'],...q.options.filter(o=>o[0]!=='unknown')])).join('');
+ document.querySelectorAll('#health-fields select,#fit-fields select').forEach(s=>s.addEventListener('change',()=>{$(s.id+'-answer').textContent=s.value==='unknown'?'':s.selectedOptions[0].textContent;height();}));
+ $('form-next').disabled=false;$('form-next').textContent='Assess My Marketing';
+}
+function formStage(n){
+ state.formStage=n;['form-company','form-health','form-fit'].forEach((id,i)=>$(id).classList.toggle('hidden',i!==n));
+ $('form-progress').textContent='Step '+(n+1)+' of 3 · '+['Your company','Marketing health','Service fit'][n];
+ $('form-back').classList.toggle('hidden',n===0);$('form-next').classList.toggle('hidden',n===2);$('run-btn').classList.toggle('hidden',n!==2);
+ $('form-next').textContent=n===0?'Assess My Marketing':'Continue to Service Fit';
+ window.scrollTo(0,0);height();
+}
+$('form-next').addEventListener('click',()=>{
+ if(state.formStage===0&&!$('research-form').reportValidity())return;
+ formStage(Math.min(2,state.formStage+1));
+});
+$('form-back').addEventListener('click',()=>formStage(Math.max(0,state.formStage-1)));
+function assessmentAnswers(){
+ const r=state.config?.healthRubric;if(!r)throw new Error('Assessment settings are unavailable. Refresh and try again.');
+ return {health:Object.fromEntries(r.questions.map(q=>[q.key,$('health-'+q.key).value])),
+  fit:{...Object.fromEntries(r.tierQuestions.map(q=>[q.key,$('fit-'+q.key).value])),growthGoal:$('growth-goal').value.trim(),timeframe:$('growth-timeframe').value.trim()},
+  context:{industry:$('industry-input').value.trim(),revenueBand:$('revenue-input').value}};
+}
+function sourceLink(source){const url=safeUrl(source?.url);return url?'<a class="citation" href="'+escapeHtml(url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(source.title)+'</a>':'';}
+function renderAssessment(a){
+ const root=$('assessment-results');root.classList.toggle('hidden',!a);if(!a){root.textContent='';return;}
+ const h=a.health,f=a.fit,known=h.score!==null;
+ const list=items=>'<ul>'+items.map(x=>'<li>'+escapeHtml(x)+'</li>').join('')+'</ul>';
+ root.innerHTML='<div class="score-panel"><div class="score-ring" style="--sweep:'+(known?Math.max(0,Math.min(100,h.score))*3.6:0)+'deg"><div class="score-inner"><span class="score-value">'+(known?escapeHtml(h.score):'—')+'</span><small>'+(known?'out of 100':'Not scored')+'</small></div></div><div><p class="eyebrow" style="color:#d3dfeb">Marketing health · Self-assessment</p><h2>'+escapeHtml(h.band)+'</h2><p>'+escapeHtml(h.answered)+' of 8 questions answered. '+(known?'Higher scores mean more developed reported practices, not stronger service fit.':'Answer all eight questions for an overall score. Unknown is not treated as zero.')+'</p></div></div>'+
+ '<div class="subscores">'+h.subScores.map(d=>'<section class="subscore"><h3>'+escapeHtml(d.label)+'</h3><span class="subscore-value">'+(d.score===null?'Pending':escapeHtml(d.score)+'/100')+'</span>'+(d.score===null?'':'<progress max="100" value="'+d.score+'" aria-label="'+escapeHtml(d.label)+'"></progress>')+'<details><summary>Answers behind this score</summary>'+list(d.items.map(i=>i.label+' '+i.answer+' ('+(i.points===null?'Unscored':i.points+'/3')+').'))+'</details><span class="citations">'+sourceLink(a.sources.find(s=>s.id===d.source))+'</span></section>').join('')+'</div>'+
+ (h.priorities.length?'<section style="margin-top:24px"><h3>Where to investigate first</h3><p class="fine">Brex suggestions based on your lowest reported practices, not independently verified company weaknesses. Equal scores follow questionnaire order.</p>'+list(h.priorities.map(i=>i.next))+'</section>':'')+
+ '<section class="tier-card"><p class="eyebrow">Potential service tier · Separate from health</p><h2>'+escapeHtml(f.label)+'</h2>'+(f.price?'<p>'+escapeHtml(f.price)+' · Scope-dependent range</p>':'')+'<p>'+escapeHtml(f.reason)+'</p>'+list(f.concerns)+list(f.missing)+'<p class="fine">'+escapeHtml(f.note)+'</p><details><summary>Your service-fit answers</summary>'+list(state.config?.healthRubric?.tierQuestions.map(q=>q.label+' '+(q.options.find(o=>o[0]===a.answers.fit[q.key])?.[1]||'Not provided'))||[])+'<p class="fine">Growth outcome: '+escapeHtml(a.answers.fit.growthGoal||'Not provided')+'<br>Timeframe: '+escapeHtml(a.answers.fit.timeframe||'Not provided')+'</p></details></section>'+
+ '<details class="methodology"><summary>Rubric, evidence, and limitations</summary><p>'+escapeHtml(h.formula)+'</p><p>Brex bands: 0–39 Foundational gaps; 40–59 Developing; 60–79 Established; 80–100 Managed &amp; improving. These are rubric bands, not market percentiles.</p><p>'+escapeHtml(h.note)+'</p>'+a.sources.map(s=>'<p>'+sourceLink(s)+'<br>'+escapeHtml(s.finding)+'<br><span class="fine">'+escapeHtml(s.limitation)+'</span></p>').join('')+'<p class="fine">Rubric '+escapeHtml(a.version)+' · Submitted '+escapeHtml(new Date(a.assessedAt).toLocaleString())+'</p></details>';
+}
 function render(data){
  state.snapshot=data.snapshot;state.expiresAt=data.expiresAt;
  const s=data.snapshot;
+ renderAssessment(s.assessment);
  $('result-company').textContent=s.companyName;
  $('company-link').href=safeUrl(s.companyUrl)||'#';$('company-link').textContent=s.companyUrl;
  $('research-date').textContent='Research checked on '+new Date(s.researchedAt).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'})+' · Link expires '+new Date(data.expiresAt).toLocaleDateString();
@@ -169,9 +259,9 @@ function render(data){
  $('lead-error').textContent='';step('step-results');
 }
 $('research-form').addEventListener('submit',async e=>{
- e.preventDefault();if(state.busy)return;state.busy=true;$('error-slot').textContent='';step('step-loading');
+ e.preventDefault();if(state.formStage<2){$('form-next').click();return;}if(state.busy)return;state.busy=true;$('error-slot').textContent='';step('step-loading');
  try{
-  const data=await api('',{companyName:$('company-name').value.trim(),url:$('url-input').value.trim(),companyConfirmed:$('company-confirmed').checked});
+  const data=await api('',{companyName:$('company-name').value.trim(),url:$('url-input').value.trim(),companyConfirmed:$('company-confirmed').checked,assessment:assessmentAnswers()});
   state.token=data.token;render(data);
  }catch(err){step('step-intake');error('error-slot',err.name==='TimeoutError'?'Research took too long. Please try again later. No guessed findings were substituted.':err.message);}
  finally{state.busy=false;}
@@ -192,6 +282,10 @@ $('save-btn').addEventListener('click',()=>{
  const s=state.snapshot;if(!s)return;
  const textClaim=c=>c.text+'\n'+c.sources.map(x=>x.title+': '+x.url).join('\n');
  const text=[s.companyName+' | Company & Positioning Snapshot','Research checked: '+s.researchedAt,
+  ...(s.assessment?['MARKETING HEALTH',s.assessment.health.score===null?'Needs more information':s.assessment.health.score+'/100 · '+s.assessment.health.band,s.assessment.health.note,
+   ...s.assessment.health.subScores.flatMap(d=>[d.label+': '+(d.score===null?'Pending':d.score+'/100'),...d.items.map(i=>i.label+' '+i.answer)]),
+   'POTENTIAL SERVICE TIER',s.assessment.fit.label,s.assessment.fit.reason,...s.assessment.fit.concerns,...s.assessment.fit.missing,s.assessment.fit.note,
+   'RUBRIC',s.assessment.version,s.assessment.health.formula,...s.assessment.sources.map(x=>x.title+': '+x.url+'\n'+x.finding+'\n'+x.limitation)]:[]),
   'Automated public research preview; not consultant-reviewed.',s.companyUrl,'',
   'YOUR COMPANY AT A GLANCE',...s.introduction.map(textClaim),'','WHAT WE FOUND',textClaim(s.finding),
   '','WHAT IT MAY MEAN (INTERPRETATION)',s.interpretation,'','WHAT TO INVESTIGATE NEXT',s.question,
@@ -200,11 +294,13 @@ $('save-btn').addEventListener('click',()=>{
 });
 $('restart-btn').addEventListener('click',()=>{
  state.snapshot=null;state.token=null;state.expiresAt=null;history.replaceState(null,'',location.pathname+location.search);
- $('research-form').reset();$('lead-form').reset();$('error-slot').textContent='';step('step-intake');
+ $('research-form').reset();$('lead-form').reset();document.querySelectorAll('#health-fields .fine,#fit-fields .fine').forEach(p=>p.textContent='');$('error-slot').textContent='';formStage(0);step('step-intake');
 });
 async function init(){
  try{
   const r=await fetch('/api/widget/snapshot/config');if(!r.ok)throw new Error();state.config=await r.json();
+  if(state.config.healthRubric)prepareAssessment(state.config.healthRubric);
+  else throw new Error('Rubric unavailable');
   $('delivery-status').classList.toggle('hidden',state.config.emailDeliveryReady===true);
   if(state.config.snapshotEmailConsent?.version){
    $('snapshot-email-consent-text').textContent=state.config.snapshotEmailConsent.text;
@@ -246,6 +342,7 @@ async function init(){
   }
   $('lead-btn').disabled=(state.config.websiteNoSend&&state.config.websiteTestConfigured!==true)||(state.config.publicDelivery&&!state.config.emailDeliveryReady);
  }catch{
+  $('form-next').disabled=true;$('form-next').textContent='Refresh to load assessment';error('error-slot','Assessment settings are unavailable. Please refresh. Existing snapshot links may still be viewed.');
   $('marketing-consent-text').textContent='Email request settings are unavailable. Refresh to try again, or save your snapshot as a text copy.';
   $('lead-btn').disabled=true;
  }

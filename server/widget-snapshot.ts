@@ -9,6 +9,7 @@ import { SNAPSHOT_EMAIL_PERMISSION, parseSnapshotEmailPermission } from "@shared
 import { captureSnapshotLiveTest, LIVE_TEST_APPROVAL } from "./snapshot-live-capture";
 import {captureWebsiteNoSend,WEBSITE_NO_SEND_VERSION,websiteNoSendReady,startWebsiteNoSendWorker} from "./snapshot-website-no-send";
 import {PUBLIC_SNAPSHOT_COHORT,sendPublicSnapshot,publicSnapshotConfigured,startPublicSnapshotReconciler,verifyPublicSnapshotSetup,snapshotPublicApi} from "./snapshot-public-delivery";
+import { assessWidget, widgetAssessmentInputSchema, WIDGET_HEALTH_CONFIG } from "../shared/widget-health";
 
 const lifetime=10*24*60*60*1000;
 const hash=(token:string)=>createHash("sha256").update(token).digest("hex");
@@ -54,7 +55,7 @@ export function registerSnapshotRoutes(app:Express,deps:{
       publicSetupCheckedAt=Date.now();
     }
     res.json({
-    marketingConsent:WIDGET_MARKETING_CONSENT,lifetimeDays:10,
+    marketingConsent:WIDGET_MARKETING_CONSENT,lifetimeDays:10,healthRubric:WIDGET_HEALTH_CONFIG,
     noSendPilot,liveTestCapture,websiteNoSend,publicDelivery,
     ...(websiteNoSend?{websiteTestConfigured:websiteNoSendReady()}:{}),
     emailDeliveryReady:publicDelivery?publicSetupReady:!permissionTrackingEnabled&&process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true",
@@ -65,6 +66,9 @@ export function registerSnapshotRoutes(app:Express,deps:{
     const companyName=typeof req.body?.companyName==="string"?req.body.companyName.trim():"";
     if(!url||companyName.length<2||companyName.length>140||req.body?.companyConfirmed!==true)
       return res.status(400).json({error:"Enter the public company website and name, then confirm they refer to the same company."});
+    const assessmentInput = req.body?.assessment === undefined ? null : widgetAssessmentInputSchema.safeParse(req.body.assessment);
+    if (assessmentInput && !assessmentInput.success)
+      return res.status(400).json({error:"Check the assessment answers. Scores must be calculated from valid form choices, not supplied directly."});
     const ip=hashIp(req.ip||"unknown");
     if(active>=2)return res.status(429).json({error:"Research is busy. Please try again shortly."});
     if(!rate(`research:${ip}`,5,24*3600*1000)||!rate("global-research",40,3600*1000))
@@ -73,7 +77,12 @@ export function registerSnapshotRoutes(app:Express,deps:{
     try {
       // Verify persistence configuration before spending on external research.
       const db=deps.db();
-      const snapshot=await deps.research({url,companyName});
+      const researched=await deps.research({url,companyName});
+      // Immutable per-snapshot answer receipt. Never accept client-provided
+      // totals/tier or let web/LLM output populate self-reported answers.
+      const {assessment:_discardUntrustedAssessment,...researchOnly} = researched;
+      const snapshot = { ...researchOnly,
+        ...(assessmentInput?.success ? {assessment: assessWidget(assessmentInput.data)} : {}) };
       const token=randomBytes(32).toString("hex"),expiresAt=new Date(Date.now()+lifetime).toISOString();
       const {error}=await db.from("widget_snapshots").insert({token_hash:hash(token),expires_at:expiresAt,
         company_url:url,ip_hash:ip,snapshot});
