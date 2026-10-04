@@ -213,6 +213,14 @@ async function init(){
    $('lead-btn').textContent='Email My Snapshot';
   }
   if(state.config.marketingConsent?.version){$('marketing-consent-text').textContent=state.config.marketingConsent.text;$('marketing-consent').disabled=false;}
+  if(state.config.publicDelivery){
+   $('lead-heading').textContent='Email yourself this snapshot';
+   $('lead-intro').textContent='Get your source-cited Company & Positioning Snapshot by email, with a private link available for 10 days from creation.';
+   $('delivery-status').classList.remove('hidden');
+   $('delivery-status').textContent='Select the snapshot permission below to request your results. Promotional email permission is optional and separate. Existing opt-outs are respected; duplicate or unresolved requests are held for review.';
+   if(!state.config.emailDeliveryReady)$('delivery-status').textContent='Email delivery is temporarily unavailable. You can still view your snapshot and save a text copy. Please try again later.';
+   $('lead-btn').textContent='Email My Snapshot';
+  }
   if(state.config.noSendPilot){
    $('lead-heading').textContent='Test your snapshot request';
    $('lead-intro').textContent='This test checks contact creation and permission tracking only. You will not receive an email from this submission.';
@@ -236,7 +244,7 @@ async function init(){
      :'The website test is waiting for its approved configuration. You can still view and save your snapshot.';
    $('lead-btn').textContent='Run Website Test';
   }
-  $('lead-btn').disabled=state.config.websiteNoSend&&state.config.websiteTestConfigured!==true;
+  $('lead-btn').disabled=(state.config.websiteNoSend&&state.config.websiteTestConfigured!==true)||(state.config.publicDelivery&&!state.config.emailDeliveryReady);
  }catch{
   $('marketing-consent-text').textContent='Email request settings are unavailable. Refresh to try again, or save your snapshot as a text copy.';
   $('lead-btn').disabled=true;

@@ -6,6 +6,8 @@ import {registerSnapshotRoutes} from "../server/widget-snapshot";
 Object.assign(process.env,{SNAPSHOT_WEBSITE_NO_SEND_ENABLED:"true",SNAPSHOT_QUEUE_ENCRYPTION_KEY:randomBytes(32).toString("hex"),
   SNAPSHOT_WEBSITE_NO_SEND_AFTER:new Date(Date.now()-10000).toISOString(),HUBSPOT_ACCESS_TOKEN:"local-fixture"});
 const snapshots:any[]=[],requests:any[]=[];
+const publicPreview=process.argv.includes("--public");
+if(publicPreview)process.env.SNAPSHOT_PUBLIC_DELIVERY_ENABLED="true";
 const db:any=()=>({from(table:string){
   const filters:Record<string,any>={};let insert:any,upsert:any;
   const chain:any={select(){return chain;},single(){return chain;},maybeSingle(){return chain;},eq(k:string,v:any){filters[k]=v;return chain;},
@@ -20,6 +22,7 @@ const db:any=()=>({from(table:string){
 const app=express();app.use(express.json());
 registerSnapshotRoutes(app,{db,sync:async()=>{throw new Error("No writes permitted");},
   websiteCapture:async()=>({status:"queued"}),
+  ...(publicPreview?{publicDelivery:async()=>({status:"queued",sendingEnabled:true})}:{}),
   research:async input=>({kind:"company-positioning-v1",companyName:"LOCAL QA FIXTURE — "+input.companyName,
     companyUrl:input.url,researchedAt:new Date().toISOString(),
     introduction:[{text:"This is synthetic text for testing the layout, not research about a real company.",sources:[{title:"Example reference",url:"https://example.com"}]}],
@@ -29,4 +32,5 @@ registerSnapshotRoutes(app,{db,sync:async()=>{throw new Error("No writes permitt
     limitations:["Synthetic local QA fixture. No external research, CRM writes, or email sends."]}),
 });
 app.get("/widget.html",(_req,res)=>res.type("html").send(readFileSync("client/public/widget.html","utf8")));
-app.listen(5062,"0.0.0.0",()=>console.log("Local fixture-only widget QA on 5062"));
+const port=publicPreview?5063:5062;
+app.listen(port,"0.0.0.0",()=>console.log("Local fixture-only widget QA on "+port));

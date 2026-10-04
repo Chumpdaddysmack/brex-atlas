@@ -1,0 +1,248 @@
+{
+  "createdAt": "2026-10-04T01:52:24.872Z",
+  "workflows": [
+    {
+      "kind": "status",
+      "id": "5051848423",
+      "hash": "b19a32ccb6f210bf12c77daf7649100b380f73eea41f65146ee79bd1bea99783",
+      "flow": {
+        "id": "5051848423",
+        "isEnabled": true,
+        "flowType": "WORKFLOW",
+        "revisionId": "4",
+        "name": "Atlas Snapshot PUBLIC — Marketing eligibility",
+        "description": "Fresh explicitly requested results only. App validates permission and exclusively claims each request before ready. No scores, promotions, historical enrollment, or subscription overrides. Native maximum remains 2000.",
+        "createdAt": "2026-10-04T01:52:25.290Z",
+        "updatedAt": "2026-10-04T01:59:58.307Z",
+        "startActionId": "1",
+        "nextAvailableActionId": "2",
+        "actions": [
+          {
+            "actionId": "1",
+            "actionTypeVersion": 14,
+            "actionTypeId": "0-31",
+            "fields": {
+              "targetContact": "{{ enrolled_object }}",
+              "marketableType": "MARKETABLE"
+            },
+            "type": "SINGLE_CONNECTION"
+          }
+        ],
+        "enrollmentCriteria": {
+          "shouldReEnroll": true,
+          "listFilterBranch": {
+            "filterBranches": [
+              {
+                "filterBranches": [],
+                "filters": [
+                  {
+                    "property": "atlas_snapshot_permission_version",
+                    "operation": {
+                      "operator": "IS_EQUAL_TO",
+                      "includeObjectsWithNoValueSet": false,
+                      "values": [
+                        "atlas-snapshot-delivery-v1-2026-10-03"
+                      ],
+                      "operationType": "MULTISTRING"
+                    },
+                    "filterType": "PROPERTY"
+                  },
+                  {
+                    "property": "atlas_snapshot_email_permission",
+                    "operation": {
+                      "operator": "IS_EQUAL_TO",
+                      "includeObjectsWithNoValueSet": false,
+                      "value": true,
+                      "operationType": "BOOL"
+                    },
+                    "filterType": "PROPERTY"
+                  },
+                  {
+                    "property": "atlas_snapshot_delivery_state",
+                    "operation": {
+                      "operator": "IS_ANY_OF",
+                      "includeObjectsWithNoValueSet": false,
+                      "values": [
+                        "ready"
+                      ],
+                      "operationType": "ENUMERATION"
+                    },
+                    "filterType": "PROPERTY"
+                  },
+                  {
+                    "property": "hs_marketable_status",
+                    "operation": {
+                      "operator": "IS_EQUAL_TO",
+                      "includeObjectsWithNoValueSet": true,
+                      "value": false,
+                      "operationType": "BOOL"
+                    },
+                    "filterType": "PROPERTY"
+                  }
+                ],
+                "filterBranchType": "AND",
+                "filterBranchOperator": "AND"
+              }
+            ],
+            "filters": [],
+            "filterBranchType": "OR",
+            "filterBranchOperator": "OR"
+          },
+          "unEnrollObjectsNotMeetingCriteria": true,
+          "reEnrollmentTriggersFilterBranches": [
+            {
+              "filterBranches": [],
+              "filters": [
+                {
+                  "property": "atlas_snapshot_delivery_state",
+                  "operation": {
+                    "operator": "IS_ANY_OF",
+                    "includeObjectsWithNoValueSet": false,
+                    "values": [
+                      "ready"
+                    ],
+                    "operationType": "ENUMERATION"
+                  },
+                  "filterType": "PROPERTY"
+                }
+              ],
+              "filterBranchType": "AND",
+              "filterBranchOperator": "AND"
+            }
+          ],
+          "type": "LIST_BASED"
+        },
+        "timeWindows": [],
+        "blockedDates": [],
+        "customProperties": {},
+        "dataSources": [],
+        "crmObjectCreationStatus": "COMPLETE",
+        "suppressionListIds": [],
+        "canEnrollFromSalesforce": false,
+        "type": "CONTACT_FLOW",
+        "objectTypeId": "0-1"
+      }
+    },
+    {
+      "kind": "sender",
+      "id": "5051859668",
+      "hash": "9c85db302c448cbbc0f42b50231e669f0ddbccf20a50c136de28361db90f5016",
+      "flow": {
+        "id": "5051859668",
+        "isEnabled": true,
+        "flowType": "WORKFLOW",
+        "revisionId": "3",
+        "name": "Atlas Snapshot PUBLIC — Results delivery",
+        "description": "Fresh explicitly requested results only. App validates permission and exclusively claims each request before ready. No scores, promotions, historical enrollment, or subscription overrides. Native maximum remains 2000.",
+        "createdAt": "2026-10-04T01:52:26.497Z",
+        "updatedAt": "2026-10-04T02:00:00.286Z",
+        "startActionId": "1",
+        "nextAvailableActionId": "2",
+        "actions": [
+          {
+            "actionId": "1",
+            "actionTypeVersion": 0,
+            "actionTypeId": "0-4",
+            "fields": {
+              "content_id": "405101719239"
+            },
+            "type": "SINGLE_CONNECTION"
+          }
+        ],
+        "enrollmentCriteria": {
+          "shouldReEnroll": true,
+          "listFilterBranch": {
+            "filterBranches": [
+              {
+                "filterBranches": [],
+                "filters": [
+                  {
+                    "property": "atlas_snapshot_permission_version",
+                    "operation": {
+                      "operator": "IS_EQUAL_TO",
+                      "includeObjectsWithNoValueSet": false,
+                      "values": [
+                        "atlas-snapshot-delivery-v1-2026-10-03"
+                      ],
+                      "operationType": "MULTISTRING"
+                    },
+                    "filterType": "PROPERTY"
+                  },
+                  {
+                    "property": "atlas_snapshot_email_permission",
+                    "operation": {
+                      "operator": "IS_EQUAL_TO",
+                      "includeObjectsWithNoValueSet": false,
+                      "value": true,
+                      "operationType": "BOOL"
+                    },
+                    "filterType": "PROPERTY"
+                  },
+                  {
+                    "property": "atlas_snapshot_delivery_state",
+                    "operation": {
+                      "operator": "IS_ANY_OF",
+                      "includeObjectsWithNoValueSet": false,
+                      "values": [
+                        "ready"
+                      ],
+                      "operationType": "ENUMERATION"
+                    },
+                    "filterType": "PROPERTY"
+                  },
+                  {
+                    "property": "hs_marketable_status",
+                    "operation": {
+                      "operator": "IS_EQUAL_TO",
+                      "includeObjectsWithNoValueSet": false,
+                      "value": true,
+                      "operationType": "BOOL"
+                    },
+                    "filterType": "PROPERTY"
+                  }
+                ],
+                "filterBranchType": "AND",
+                "filterBranchOperator": "AND"
+              }
+            ],
+            "filters": [],
+            "filterBranchType": "OR",
+            "filterBranchOperator": "OR"
+          },
+          "unEnrollObjectsNotMeetingCriteria": true,
+          "reEnrollmentTriggersFilterBranches": [
+            {
+              "filterBranches": [],
+              "filters": [
+                {
+                  "property": "atlas_snapshot_delivery_state",
+                  "operation": {
+                    "operator": "IS_ANY_OF",
+                    "includeObjectsWithNoValueSet": false,
+                    "values": [
+                      "ready"
+                    ],
+                    "operationType": "ENUMERATION"
+                  },
+                  "filterType": "PROPERTY"
+                }
+              ],
+              "filterBranchType": "AND",
+              "filterBranchOperator": "AND"
+            }
+          ],
+          "type": "LIST_BASED"
+        },
+        "timeWindows": [],
+        "blockedDates": [],
+        "customProperties": {},
+        "dataSources": [],
+        "crmObjectCreationStatus": "COMPLETE",
+        "suppressionListIds": [],
+        "canEnrollFromSalesforce": false,
+        "type": "CONTACT_FLOW",
+        "objectTypeId": "0-1"
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import { SNAPSHOT_PILOT_EMAIL } from "./snapshot-subscriptions";
 import { SNAPSHOT_EMAIL_PERMISSION, parseSnapshotEmailPermission } from "@shared/snapshot-delivery";
 import { captureSnapshotLiveTest, LIVE_TEST_APPROVAL } from "./snapshot-live-capture";
 import {captureWebsiteNoSend,WEBSITE_NO_SEND_VERSION,websiteNoSendReady,startWebsiteNoSendWorker} from "./snapshot-website-no-send";
+import {PUBLIC_SNAPSHOT_COHORT,sendPublicSnapshot,publicSnapshotConfigured,startPublicSnapshotReconciler,verifyPublicSnapshotSetup,snapshotPublicApi} from "./snapshot-public-delivery";
 
 const lifetime=10*24*60*60*1000;
 const hash=(token:string)=>createHash("sha256").update(token).digest("hex");
@@ -31,22 +32,34 @@ export function registerSnapshotRoutes(app:Express,deps:{
   pilot?:typeof captureSnapshotNoSend;
   liveCapture?:typeof captureSnapshotLiveTest;
   websiteCapture?:typeof captureWebsiteNoSend;
+  publicDelivery?:typeof sendPublicSnapshot;
 }={research:researchSnapshot,db:widgetDb,sync:syncSnapshotToHubSpot}) {
   // Default off. Local preparation only; production activation requires the
   // new email, subscription gates, billing cap and workflow to be approved.
-  const websiteNoSend=process.env.SNAPSHOT_WEBSITE_NO_SEND_ENABLED==="true";
-  const liveTestCapture=!websiteNoSend&&process.env.SNAPSHOT_LIVE_TEST_CAPTURE_ENABLED==="true";
-  const noSendPilot=!websiteNoSend&&!liveTestCapture&&process.env.SNAPSHOT_NO_SEND_PILOT_ENABLED==="true";
-  const permissionTrackingEnabled=websiteNoSend||liveTestCapture||noSendPilot||process.env.SNAPSHOT_PERMISSION_TRACKING_ENABLED==="true";
+  const publicDelivery=process.env.SNAPSHOT_PUBLIC_DELIVERY_ENABLED==="true";
+  const websiteNoSend=!publicDelivery&&process.env.SNAPSHOT_WEBSITE_NO_SEND_ENABLED==="true";
+  const liveTestCapture=!publicDelivery&&!websiteNoSend&&process.env.SNAPSHOT_LIVE_TEST_CAPTURE_ENABLED==="true";
+  const noSendPilot=!publicDelivery&&!websiteNoSend&&!liveTestCapture&&process.env.SNAPSHOT_NO_SEND_PILOT_ENABLED==="true";
+  const permissionTrackingEnabled=publicDelivery||websiteNoSend||liveTestCapture||noSendPilot||process.env.SNAPSHOT_PERMISSION_TRACKING_ENABLED==="true";
   if(websiteNoSend&&!deps.websiteCapture)startWebsiteNoSendWorker();
+  if(publicDelivery&&!deps.publicDelivery)startPublicSnapshotReconciler();
   app.use("/api/widget/snapshot",noCache);
-  app.get("/api/widget/snapshot/config",(_req,res)=>res.json({
+  let publicSetupCheckedAt=0,publicSetupReady=false;
+  app.get("/api/widget/snapshot/config",async(_req,res)=>{
+    if(publicDelivery&&Date.now()-publicSetupCheckedAt>60_000){
+      try{
+        if(!deps.publicDelivery)await verifyPublicSnapshotSetup(snapshotPublicApi);
+        publicSetupReady=!!deps.publicDelivery||publicSnapshotConfigured();
+      }catch{publicSetupReady=false;}
+      publicSetupCheckedAt=Date.now();
+    }
+    res.json({
     marketingConsent:WIDGET_MARKETING_CONSENT,lifetimeDays:10,
-    noSendPilot,liveTestCapture,websiteNoSend,
+    noSendPilot,liveTestCapture,websiteNoSend,publicDelivery,
     ...(websiteNoSend?{websiteTestConfigured:websiteNoSendReady()}:{}),
-    emailDeliveryReady:!permissionTrackingEnabled&&process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true",
+    emailDeliveryReady:publicDelivery?publicSetupReady:!permissionTrackingEnabled&&process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true",
     ...(permissionTrackingEnabled?{snapshotEmailConsent:SNAPSHOT_EMAIL_PERMISSION}:{}),
-  }));
+  });});
   app.post("/api/widget/snapshot",async(req,res)=>{
     const url=publicCompanyUrl(req.body?.url);
     const companyName=typeof req.body?.companyName==="string"?req.body.companyName.trim():"";
@@ -109,6 +122,8 @@ export function registerSnapshotRoutes(app:Express,deps:{
       return res.status(403).json({error:"This test is limited to the approved test recipient. You can still view or save your snapshot."});
     if(websiteNoSend&&!websiteNoSendReady())
       return res.status(503).json({sendingEnabled:false,error:"The website no-send test is not configured yet. Your snapshot remains available; no email or contact change was requested."});
+    if(publicDelivery&&!deps.publicDelivery&&!publicSnapshotConfigured())
+      return res.status(503).json({error:"Email delivery is temporarily unavailable. Please save your snapshot link."});
     if(!rate(`lead:${hashIp(req.ip||"unknown")}`,15,3600*1000))return res.status(429).json({error:"Too many requests. Please try later."});
     let evidence;
     try{
@@ -118,6 +133,7 @@ export function registerSnapshotRoutes(app:Express,deps:{
         ...(noSendPilot?{noSendPilot:true}:{}),
         ...(liveTestCapture?{liveEmailTest:LIVE_TEST_APPROVAL}:{}),
         ...(websiteNoSend?{websiteNoSend:WEBSITE_NO_SEND_VERSION}:{}),
+        ...(publicDelivery?{publicDelivery:PUBLIC_SNAPSHOT_COHORT}:{}),
       };
     }catch(e){return res.status(400).json({error:(e as Error).message});}
     const key=`${hash(token)}:${email}`;
@@ -145,7 +161,18 @@ export function registerSnapshotRoutes(app:Express,deps:{
         return res.status(409).json({error:"This earlier request cannot be used for the live email test. Run a fresh snapshot."});
       if((receipt.consent_evidence?.websiteNoSend||null)!==(websiteNoSend?WEBSITE_NO_SEND_VERSION:null))
         return res.status(409).json({error:"An earlier request cannot be reused for this website test. Run a fresh snapshot."});
+      if((receipt.consent_evidence?.publicDelivery||null)!==(publicDelivery?PUBLIC_SNAPSHOT_COHORT:null))
+        return res.status(409).json({error:"Run a fresh snapshot to request an email. Earlier test requests are not sent automatically."});
       const snapshotUrl=`https://atlas.brexconsulting.com/widget.html#snapshot=${token}`;
+      if(publicDelivery){
+        const result=await (deps.publicDelivery||sendPublicSnapshot)({requestId:receipt.id,snapshotUrl},db);
+        return res.json({ok:true,publicDelivery:true,sendingEnabled:true,deliveryStatus:result.status,
+          snapshotUrl,expiresAt:row.expires_at,message:result.status==="queued"
+            ?"Your snapshot email has been queued. Delivery is subject to your email preferences and eligibility. Save the link below while it arrives."
+            :result.status==="already_recorded"
+            ?"This email request is already recorded. We have not sent a duplicate. Save your snapshot link below."
+            :"Your snapshot is ready here, but email delivery needs review. Existing email preferences, contact limits, or an unresolved earlier request may prevent sending. Save the link below and contact Kenny for help."});
+      }
       if(websiteNoSend){
         const result=await (deps.websiteCapture||captureWebsiteNoSend)({requestId:receipt.id,snapshotUrl},db);
         if(!["queued","duplicate"].includes(result.status))
@@ -188,7 +215,9 @@ export function registerSnapshotRoutes(app:Express,deps:{
           ?"Your email-copy request has been recorded. Email delivery is subject to eligibility; save this link so you can return to your snapshot."
           :"Your request has been recorded for follow-up. Automatic email delivery is not active yet. Save this link or download a text copy to keep your snapshot."});
     }catch{
-      res.status(503).json({error:websiteNoSend
+      res.status(503).json({error:publicDelivery
+        ?"We could not confirm email delivery. Please save your snapshot link and contact Kenny before submitting again."
+        :websiteNoSend
         ?"We could not confirm the website test. No email or HubSpot change was requested. Keep your snapshot link and ask for the test status before resubmitting."
         :liveTestCapture
         ?"We could not confirm the email-test request. No email was sent by this submission. Your snapshot remains available; ask for the test status before submitting again."
