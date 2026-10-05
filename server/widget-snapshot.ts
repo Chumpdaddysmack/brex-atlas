@@ -11,6 +11,7 @@ import {captureWebsiteNoSend,WEBSITE_NO_SEND_VERSION,websiteNoSendReady,startWeb
 import {PUBLIC_SNAPSHOT_COHORT,sendPublicSnapshot,publicSnapshotConfigured,startPublicSnapshotReconciler,verifyPublicSnapshotSetup,snapshotPublicApi} from "./snapshot-public-delivery";
 import { assessWidget, widgetAssessmentInputSchema, WIDGET_HEALTH_CONFIG } from "../shared/widget-health";
 import { leadCaptureSchema, privateLeadCapture, LEAD_CAPTURE_NOTICE, WIDGET_REVENUE_RANGES, PERSONAL_EMAIL_DOMAINS } from "../shared/widget-lead-capture";
+import {initialInternalAlert,internalAlertStatus,startInternalAlertWorker} from "./widget-internal-alert";
 
 const lifetime=10*24*60*60*1000;
 const hash=(token:string)=>createHash("sha256").update(token).digest("hex");
@@ -48,6 +49,8 @@ export function registerSnapshotRoutes(app:Express,deps:{
   const permissionTrackingEnabled=publicDelivery||websiteNoSend||liveTestCapture||noSendPilot||process.env.SNAPSHOT_PERMISSION_TRACKING_ENABLED==="true";
   if(websiteNoSend&&!deps.websiteCapture)startWebsiteNoSendWorker();
   if(publicDelivery&&!deps.publicDelivery)startPublicSnapshotReconciler();
+  const internalAlertEnabled=requiredLeadCapture&&process.env.SNAPSHOT_INTERNAL_ALERT_ENABLED==="true";
+  if(internalAlertEnabled&&deps.db===widgetDb)startInternalAlertWorker();
   app.use("/api/widget/snapshot",noCache);
   let publicSetupCheckedAt=0,publicSetupReady=false;
   app.get("/api/widget/snapshot/config",async(_req,res)=>{
@@ -59,7 +62,7 @@ export function registerSnapshotRoutes(app:Express,deps:{
       publicSetupCheckedAt=Date.now();
     }
     res.json({
-    marketingConsent:WIDGET_MARKETING_CONSENT,lifetimeDays:10,healthRubric:WIDGET_HEALTH_CONFIG,
+    marketingConsent:WIDGET_MARKETING_CONSENT,lifetimeDays:10,healthRubric:WIDGET_HEALTH_CONFIG,internalAlerts:internalAlertStatus(),
     ...(requiredLeadCapture?{leadCapture:{required:true,notice:LEAD_CAPTURE_NOTICE,revenueRanges:WIDGET_REVENUE_RANGES,personalEmailDomains:PERSONAL_EMAIL_DOMAINS}}:{}),
     noSendPilot,liveTestCapture,websiteNoSend,publicDelivery,
     ...(websiteNoSend?{websiteTestConfigured:websiteNoSendReady()}:{}),
@@ -99,7 +102,8 @@ export function registerSnapshotRoutes(app:Express,deps:{
       const token=randomBytes(32).toString("hex"),expiresAt=new Date(Date.now()+lifetime).toISOString();
       const {error}=await db.from("widget_snapshots").insert({token_hash:hash(token),expires_at:expiresAt,
         company_url:url,ip_hash:ip,snapshot,
-        ...(captureInput?.success?{lead_capture:privateLeadCapture(captureInput.data,url,companyName)}:{})});
+        ...(captureInput?.success?{lead_capture:{...privateLeadCapture(captureInput.data,url,companyName),
+          ...(internalAlertEnabled?{alert:initialInternalAlert()}:{})}}:{})});
       if(error)throw new Error("STORE_FAILED");
       res.json({snapshot,token,expiresAt});
     }catch(error){

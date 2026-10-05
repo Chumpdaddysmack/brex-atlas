@@ -21,6 +21,7 @@ test("exactly five approved ranges; names and company email required",()=>{
 });
 test("capture gate persists privately before results without requiring or creating an email request",async()=>{
   process.env.SNAPSHOT_REQUIRED_LEAD_CAPTURE_ENABLED="true";
+  process.env.SNAPSHOT_INTERNAL_ALERT_ENABLED="true";
   const rows:any[]=[];let researchCount=0,failStore=false;
   const db:any=()=>({from(table:string){
     assert.equal(table,"widget_snapshots","Must not create email requests or invoke subscriptions");
@@ -49,11 +50,12 @@ test("capture gate persists privately before results without requiring or creati
     assert.equal(rows[0].lead_capture.email,capture.email);
     assert.equal(rows[0].lead_capture.firstName,capture.firstName);
     assert.equal(rows[0].lead_capture.inquiryOnly,true);
+    assert.equal(rows[0].lead_capture.alert.state,"pending");
     assert.equal(rows[0].lead_capture.revenueBand,"500k1m");
     assert.equal(data.snapshot.assessment.answers.context.revenueBand,"500k1m");
     for(const raw of [JSON.stringify(data),JSON.stringify(await (await post("/view",{token:data.token})).json())])
       for(const secret of [capture.email,capture.firstName,capture.lastName,"lead_capture"])assert.equal(raw.includes(secret),false,secret);
     failStore=true;const failed=await post("",{...intake,capture});assert.equal(failed.status,503);
     assert.equal((await failed.json()).snapshot,undefined);
-  }finally{delete process.env.SNAPSHOT_REQUIRED_LEAD_CAPTURE_ENABLED;await new Promise<void>(r=>server.close(()=>r()));}
+  }finally{delete process.env.SNAPSHOT_REQUIRED_LEAD_CAPTURE_ENABLED;delete process.env.SNAPSHOT_INTERNAL_ALERT_ENABLED;await new Promise<void>(r=>server.close(()=>r()));}
 });

@@ -1,0 +1,163 @@
+{
+  "id": "5064375995",
+  "hash": "dcaf8f9e8cb6217eaa0e0d3dcab73b470ae84f98fb565eaf8607a6bb344e3c8e",
+  "isEnabled": true,
+  "workflow": {
+    "id": "5064375995",
+    "isEnabled": true,
+    "flowType": "WORKFLOW",
+    "revisionId": "3",
+    "name": "Atlas Completed Assessment — Kenny Internal Alert",
+    "createdAt": "2026-10-05T20:20:30.107Z",
+    "updatedAt": "2026-10-05T20:22:35.051Z",
+    "startActionId": "1",
+    "nextAvailableActionId": "5",
+    "actions": [
+      {
+        "actionId": "1",
+        "listBranches": [
+          {
+            "filterBranch": {
+              "filterBranches": [],
+              "filters": [
+                {
+                  "property": "atlas_health_band",
+                  "operation": {
+                    "operator": "IS_ANY_OF",
+                    "includeObjectsWithNoValueSet": false,
+                    "values": [
+                      "incomplete"
+                    ],
+                    "operationType": "ENUMERATION"
+                  },
+                  "filterType": "PROPERTY"
+                }
+              ],
+              "filterBranchType": "AND",
+              "filterBranchOperator": "AND"
+            },
+            "branchName": "Incomplete assessment",
+            "connection": {
+              "edgeType": "STANDARD",
+              "nextActionId": "3"
+            }
+          }
+        ],
+        "defaultBranchName": "Scored assessment",
+        "defaultBranch": {
+          "edgeType": "STANDARD",
+          "nextActionId": "2"
+        },
+        "type": "LIST_BRANCH"
+      },
+      {
+        "actionId": "2",
+        "actionTypeVersion": 0,
+        "actionTypeId": "0-8",
+        "connection": {
+          "edgeType": "STANDARD",
+          "nextActionId": "4"
+        },
+        "fields": {
+          "user_ids": [
+            "78405166"
+          ],
+          "subject": "New Atlas assessment: {{contact.company}} | {{contact.atlas_health_score}}/100 | {{contact.atlas_cmo_recommendation}}",
+          "body": "<p>A prospect completed the Atlas widget assessment.</p>\n<p>Name: {{ _0_1.firstname }} {{ _0_1.lastname }}<br>Company: {{ _0_1.company }}<br>Company email: {{ _0_1.email }}<br>Website: {{ _0_1.website }}<br>Annual revenue: {{ _0_1.atlas_revenue_range }}<br>Completed: {{ _0_1.atlas_assessment_completed_at }}</p>\n<p>Marketing-health score: {{ _0_1.atlas_health_score }}/100<br>Health band: {{ _0_1.atlas_health_band }}<br>Preliminary CMO recommendation: {{ _0_1.atlas_cmo_recommendation }}</p>\n<p>Assessment summary:<br>{{ _0_1.atlas_assessment_summary }}</p>\n<p><a href=\"https://app-na2.hubspot.com/contacts/242249577/record/0-1/{{ _0_1.hs_object_id }}\">Open prospect in HubSpot</a><br>Assessment ID: {{ _0_1.atlas_assessment_id }}<br>Lead source: Atlas Excavator Widget</p>\n<p>The health score is based on self-reported answers using the research-informed Brex rubric. It is not a verified audit or a service-fit percentage. The CMO recommendation requires Kenny's review.</p>\n<p>This internal alert does not indicate that the prospect requested an email copy or consented to promotional emails.</p>"
+        },
+        "type": "SINGLE_CONNECTION"
+      },
+      {
+        "actionId": "3",
+        "actionTypeVersion": 0,
+        "actionTypeId": "0-8",
+        "connection": {
+          "edgeType": "GOTO",
+          "nextActionId": "4"
+        },
+        "fields": {
+          "user_ids": [
+            "78405166"
+          ],
+          "subject": "New Atlas assessment: {{contact.company}} | Incomplete | {{contact.atlas_cmo_recommendation}}",
+          "body": "<p>A prospect completed the Atlas widget assessment.</p>\n<p>Name: {{ _0_1.firstname }} {{ _0_1.lastname }}<br>Company: {{ _0_1.company }}<br>Company email: {{ _0_1.email }}<br>Website: {{ _0_1.website }}<br>Annual revenue: {{ _0_1.atlas_revenue_range }}<br>Completed: {{ _0_1.atlas_assessment_completed_at }}</p>\n<p>Marketing-health score: Incomplete: not enough answers to calculate<br>Health band: {{ _0_1.atlas_health_band }}<br>Preliminary CMO recommendation: {{ _0_1.atlas_cmo_recommendation }}</p>\n<p>Assessment summary:<br>{{ _0_1.atlas_assessment_summary }}</p>\n<p><a href=\"https://app-na2.hubspot.com/contacts/242249577/record/0-1/{{ _0_1.hs_object_id }}\">Open prospect in HubSpot</a><br>Assessment ID: {{ _0_1.atlas_assessment_id }}<br>Lead source: Atlas Excavator Widget</p>\n<p>The health score is based on self-reported answers using the research-informed Brex rubric. It is not a verified audit or a service-fit percentage. The CMO recommendation requires Kenny's review.</p>\n<p>This internal alert does not indicate that the prospect requested an email copy or consented to promotional emails.</p>"
+        },
+        "type": "SINGLE_CONNECTION"
+      },
+      {
+        "actionId": "4",
+        "actionTypeVersion": 0,
+        "actionTypeId": "0-5",
+        "fields": {
+          "property_name": "atlas_internal_alert_state",
+          "value": {
+            "staticValue": "queued",
+            "type": "STATIC_VALUE"
+          }
+        },
+        "type": "SINGLE_CONNECTION"
+      }
+    ],
+    "enrollmentCriteria": {
+      "shouldReEnroll": true,
+      "listFilterBranch": {
+        "filterBranches": [
+          {
+            "filterBranches": [],
+            "filters": [
+              {
+                "property": "atlas_internal_alert_state",
+                "operation": {
+                  "operator": "IS_ANY_OF",
+                  "includeObjectsWithNoValueSet": false,
+                  "values": [
+                    "ready"
+                  ],
+                  "operationType": "ENUMERATION"
+                },
+                "filterType": "PROPERTY"
+              }
+            ],
+            "filterBranchType": "AND",
+            "filterBranchOperator": "AND"
+          }
+        ],
+        "filters": [],
+        "filterBranchType": "OR",
+        "filterBranchOperator": "OR"
+      },
+      "unEnrollObjectsNotMeetingCriteria": false,
+      "reEnrollmentTriggersFilterBranches": [
+        {
+          "filterBranches": [],
+          "filters": [
+            {
+              "property": "atlas_internal_alert_state",
+              "operation": {
+                "operator": "IS_ANY_OF",
+                "includeObjectsWithNoValueSet": false,
+                "values": [
+                  "ready"
+                ],
+                "operationType": "ENUMERATION"
+              },
+              "filterType": "PROPERTY"
+            }
+          ],
+          "filterBranchType": "AND",
+          "filterBranchOperator": "AND"
+        }
+      ],
+      "type": "LIST_BASED"
+    },
+    "timeWindows": [],
+    "blockedDates": [],
+    "customProperties": {},
+    "dataSources": [],
+    "crmObjectCreationStatus": "COMPLETE",
+    "suppressionListIds": [],
+    "canEnrollFromSalesforce": false,
+    "type": "CONTACT_FLOW",
+    "objectTypeId": "0-1"
+  }
+}
