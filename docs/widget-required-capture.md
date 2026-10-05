@@ -1,6 +1,6 @@
 # Required widget contact capture
 
-Prepared October 5, 2026. Not activated in production.
+Prepared October 5, 2026. Production migration and deployment approved at 12:58 PM Pacific; the additive migration has been applied.
 
 ## Required fields
 
@@ -30,7 +30,7 @@ No automatic change to HubSpot marketing status, results-email permission, or pr
 
 ## Activation gate
 
-The code defaults off behind `SNAPSHOT_REQUIRED_LEAD_CAPTURE_ENABLED=true`. Production activation requires approval of `20261005_widget_private_lead_capture.sql`, an additive migration introducing a nullable JSONB column and object-type constraint. Existing rows remain null, existing RLS/access grants remain unchanged, and there is no deletion, backfill, or automatic send.
+The server reads `SNAPSHOT_REQUIRED_LEAD_CAPTURE_ENABLED=true`. After the October 5 approval and migration, the production startup command defaults this setting to true; an explicit false remains a rollback switch. `20261005_widget_private_lead_capture.sql` introduces a nullable JSONB column and object-type constraint. Existing rows remain null, existing RLS/access grants remain unchanged, and there is no deletion, backfill, or automatic send.
 
 Apply the approved migration before deploying/enabling the gate. Existing snapshot-view and explicit email-copy routes remain compatible.
 

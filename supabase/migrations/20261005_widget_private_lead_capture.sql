@@ -1,4 +1,4 @@
--- Pending production approval. Additive only: no backfill or CRM/email action.
+-- Approved and applied Oct 5, 2026. Additive only: no backfill or CRM/email action.
 -- Existing RLS denies anon/authenticated access to widget_snapshots.
 -- Public handlers explicitly select only the shareable snapshot, not this
 -- private field. It records an inquiry, NEVER email subscription permission.
