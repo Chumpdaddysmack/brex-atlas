@@ -10,6 +10,7 @@ import { captureSnapshotLiveTest, LIVE_TEST_APPROVAL } from "./snapshot-live-cap
 import {captureWebsiteNoSend,WEBSITE_NO_SEND_VERSION,websiteNoSendReady,startWebsiteNoSendWorker} from "./snapshot-website-no-send";
 import {PUBLIC_SNAPSHOT_COHORT,sendPublicSnapshot,publicSnapshotConfigured,startPublicSnapshotReconciler,verifyPublicSnapshotSetup,snapshotPublicApi} from "./snapshot-public-delivery";
 import { assessWidget, widgetAssessmentInputSchema, WIDGET_HEALTH_CONFIG } from "../shared/widget-health";
+import { leadCaptureSchema, privateLeadCapture, LEAD_CAPTURE_NOTICE, WIDGET_REVENUE_RANGES, PERSONAL_EMAIL_DOMAINS } from "../shared/widget-lead-capture";
 
 const lifetime=10*24*60*60*1000;
 const hash=(token:string)=>createHash("sha256").update(token).digest("hex");
@@ -38,6 +39,9 @@ export function registerSnapshotRoutes(app:Express,deps:{
   // Default off. Local preparation only; production activation requires the
   // new email, subscription gates, billing cap and workflow to be approved.
   const publicDelivery=process.env.SNAPSHOT_PUBLIC_DELIVERY_ENABLED==="true";
+  // Activate only after the additive private-column migration is approved and
+  // applied. Never place contact details inside the bearer-link snapshot JSON.
+  const requiredLeadCapture=process.env.SNAPSHOT_REQUIRED_LEAD_CAPTURE_ENABLED==="true";
   const websiteNoSend=!publicDelivery&&process.env.SNAPSHOT_WEBSITE_NO_SEND_ENABLED==="true";
   const liveTestCapture=!publicDelivery&&!websiteNoSend&&process.env.SNAPSHOT_LIVE_TEST_CAPTURE_ENABLED==="true";
   const noSendPilot=!publicDelivery&&!websiteNoSend&&!liveTestCapture&&process.env.SNAPSHOT_NO_SEND_PILOT_ENABLED==="true";
@@ -56,6 +60,7 @@ export function registerSnapshotRoutes(app:Express,deps:{
     }
     res.json({
     marketingConsent:WIDGET_MARKETING_CONSENT,lifetimeDays:10,healthRubric:WIDGET_HEALTH_CONFIG,
+    ...(requiredLeadCapture?{leadCapture:{required:true,notice:LEAD_CAPTURE_NOTICE,revenueRanges:WIDGET_REVENUE_RANGES,personalEmailDomains:PERSONAL_EMAIL_DOMAINS}}:{}),
     noSendPilot,liveTestCapture,websiteNoSend,publicDelivery,
     ...(websiteNoSend?{websiteTestConfigured:websiteNoSendReady()}:{}),
     emailDeliveryReady:publicDelivery?publicSetupReady:!permissionTrackingEnabled&&process.env.SNAPSHOT_EMAIL_DELIVERY_READY==="true",
@@ -66,6 +71,11 @@ export function registerSnapshotRoutes(app:Express,deps:{
     const companyName=typeof req.body?.companyName==="string"?req.body.companyName.trim():"";
     if(!url||companyName.length<2||companyName.length>140||req.body?.companyConfirmed!==true)
       return res.status(400).json({error:"Enter the public company website and name, then confirm they refer to the same company."});
+    const captureInput=requiredLeadCapture?leadCaptureSchema.safeParse(req.body?.capture):null;
+    if(captureInput&&!captureInput.success)
+      return res.status(400).json({code:"CAPTURE_INVALID",error:"Enter your first and last name, company email, and annual revenue range. Use a company email rather than a common personal-email address. If the form was already open, refresh it."});
+    if(!requiredLeadCapture&&req.body?.capture!==undefined)
+      return res.status(409).json({error:"The required-contact form is not active. Refresh before submitting."});
     const assessmentInput = req.body?.assessment === undefined ? null : widgetAssessmentInputSchema.safeParse(req.body.assessment);
     if (assessmentInput && !assessmentInput.success)
       return res.status(400).json({error:"Check the assessment answers. Scores must be calculated from valid form choices, not supplied directly."});
@@ -82,10 +92,14 @@ export function registerSnapshotRoutes(app:Express,deps:{
       // totals/tier or let web/LLM output populate self-reported answers.
       const {assessment:_discardUntrustedAssessment,...researchOnly} = researched;
       const snapshot = { ...researchOnly,
-        ...(assessmentInput?.success ? {assessment: assessWidget(assessmentInput.data)} : {}) };
+        ...(assessmentInput?.success ? {assessment: assessWidget({
+          ...assessmentInput.data,
+          context:{...assessmentInput.data.context,...(captureInput?.success?{revenueBand:captureInput.data.revenueBand}:{})},
+        })} : {}) };
       const token=randomBytes(32).toString("hex"),expiresAt=new Date(Date.now()+lifetime).toISOString();
       const {error}=await db.from("widget_snapshots").insert({token_hash:hash(token),expires_at:expiresAt,
-        company_url:url,ip_hash:ip,snapshot});
+        company_url:url,ip_hash:ip,snapshot,
+        ...(captureInput?.success?{lead_capture:privateLeadCapture(captureInput.data,url,companyName)}:{})});
       if(error)throw new Error("STORE_FAILED");
       res.json({snapshot,token,expiresAt});
     }catch(error){

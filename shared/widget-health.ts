@@ -83,7 +83,10 @@ export const widgetAssessmentInputSchema = z.object({
   }).strict().default({ ownership: "unknown", need: "unknown", sponsor: "unknown",
     execution: "unknown", budget: "unknown", readiness: "unknown", growthGoal: "", timeframe: "" }),
   context: z.object({ industry: z.string().trim().max(100).default(""),
-    revenueBand: z.enum(["unknown", "under1m", "1m5m", "5m25m", "25mplus"]).default("unknown") })
+    // Preserve historical snapshots; new mandatory intake uses the five
+    // approved ranges, validated separately in widget-lead-capture.
+    revenueBand: z.enum(["unknown", "under1m", "1m5m", "5m25m", "25mplus",
+      "under500k", "500k1m", "5m50m", "50m250m"]).default("unknown") })
     .strict().default({ industry: "", revenueBand: "unknown" }),
 }).strict();
 export type WidgetAssessmentInput = z.infer<typeof widgetAssessmentInputSchema>;

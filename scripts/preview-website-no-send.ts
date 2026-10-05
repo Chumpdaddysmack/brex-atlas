@@ -8,6 +8,7 @@ Object.assign(process.env,{SNAPSHOT_WEBSITE_NO_SEND_ENABLED:"true",SNAPSHOT_QUEU
 const snapshots:any[]=[],requests:any[]=[];
 const publicPreview=process.argv.includes("--public");
 if(publicPreview)process.env.SNAPSHOT_PUBLIC_DELIVERY_ENABLED="true";
+if(process.argv.includes("--capture"))process.env.SNAPSHOT_REQUIRED_LEAD_CAPTURE_ENABLED="true";
 const db:any=()=>({from(table:string){
   const filters:Record<string,any>={};let insert:any,upsert:any;
   const chain:any={select(){return chain;},single(){return chain;},maybeSingle(){return chain;},eq(k:string,v:any){filters[k]=v;return chain;},

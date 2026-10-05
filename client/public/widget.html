@@ -105,14 +105,22 @@ legend{font-size:19px;font-weight:700;margin-bottom:16px}
       <p class="progress-label" id="form-progress" aria-live="polite">Step 1 of 3 · Your company</p>
       <fieldset id="form-company" class="form-stage">
       <legend>Your company</legend>
+      <div id="required-contact-fields" class="hidden">
+        <div class="form-grid" style="margin-bottom:20px">
+          <div class="field"><label for="capture-first-name">First name</label><input id="capture-first-name" type="text" maxlength="80" autocomplete="given-name"></div>
+          <div class="field"><label for="capture-last-name">Last name</label><input id="capture-last-name" type="text" maxlength="80" autocomplete="family-name"></div>
+        </div>
+        <div class="field"><label for="capture-email">Company email</label><input id="capture-email" type="email" maxlength="254" autocomplete="email" placeholder="you@company.com" aria-describedby="company-email-help"><p class="fine" id="company-email-help" style="margin:6px 0 0">Use your company email rather than a common personal-email address. A parent-company domain is accepted.</p></div>
+      </div>
       <div class="field"><label for="company-name">Company name</label><input id="company-name" type="text" placeholder="Your company's public name" maxlength="140" required autocomplete="organization"></div>
       <div class="field"><label for="url-input">Company website</label><input id="url-input" type="text" inputmode="url" placeholder="example.com" maxlength="300" required autocomplete="url"></div>
       <div class="form-grid">
         <div class="field"><label for="industry-input">Industry (optional)</label><input id="industry-input" type="text" maxlength="100" placeholder="e.g., B2B professional services"></div>
-        <div class="field"><label for="revenue-input">Annual revenue (optional)</label><select id="revenue-input"><option value="unknown">Not sure / prefer not to say</option value="under1m">Under $1M</option><option value="1m5m">$1M–$5M</option><option value="5m25m">$5M–$25M</option><option value="25mplus">$25M+</option></select></div>
+        <div class="field"><label for="revenue-input" id="revenue-label">Annual revenue (optional)</label><select id="revenue-input"><option value="unknown">Not sure / prefer not to say</option><option value="under1m">Under $1M</option><option value="1m5m">$1M–$5M</option><option value="5m25m">$5M–$25M</option><option value="25mplus">$25M+</option></select></div>
       </div>
       <p class="fine" style="margin-top:16px">Industry and revenue provide context. They do not increase your score or automatically determine your tier.</p>
       <label class="choice"><input id="company-confirmed" type="checkbox" required><span>I confirm this name and website refer to the company I want researched.</span></label>
+      <p class="fine hidden" id="capture-notice" style="margin-top:16px"></p>
       </fieldset>
       <fieldset id="form-health" class="form-stage hidden">
         <legend>Your marketing practices</legend>
@@ -137,7 +145,7 @@ legend{font-size:19px;font-weight:700;margin-bottom:16px}
         <span class="fine">Free · Up to 5 research requests per day</span>
       </div>
     </form>
-    <p class="fine" style="margin:20px 0 0">Research-informed Brex rubric, not an industry ranking or growth prediction. You can leave assessment answers as “Not sure” and still get your researched snapshot. No signup required to view results.</p>
+    <p class="fine" id="intake-note" style="margin:20px 0 0">Research-informed Brex rubric, not an industry ranking or growth prediction. You can leave assessment answers as “Not sure” and still get your researched snapshot. No signup required to view results.</p>
   </section>
   <section id="step-loading" class="card hidden" aria-live="polite" aria-busy="true">
     <div class="loader"><div class="spinner" aria-hidden="true"></div><h2>Researching your company</h2>
@@ -201,7 +209,7 @@ function step(id){['step-intake','step-loading','step-results'].forEach(x=>$(x).
 function error(id,message){$(id).innerHTML='<div class="error">'+escapeHtml(message)+'</div>';height();}
 async function api(path,body){
  const response=await fetch('/api/widget/snapshot'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(240000)});
- const data=await response.json();if(!response.ok)throw new Error(data.error||'The request could not be completed. Please try again.');return data;
+ const data=await response.json();if(!response.ok){const err=new Error(data.error||'The request could not be completed. Please try again.');err.code=data.code;throw err;}return data;
 }
 function claim(c){
  const links=(c.sources||[]).filter(s=>safeUrl(s.url)).map(s=>'<a class="citation" href="'+escapeHtml(safeUrl(s.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(s.title||new URL(s.url).hostname)+'</a>').join('');
@@ -215,6 +223,22 @@ function prepareAssessment(r){
  $('fit-fields').innerHTML=r.tierQuestions.map(q=>selectField('fit-'+q.key,q.label,[['unknown','Not sure / skip'],...q.options.filter(o=>o[0]!=='unknown')])).join('');
  document.querySelectorAll('#health-fields select,#fit-fields select').forEach(s=>s.addEventListener('change',()=>{$(s.id+'-answer').textContent=s.value==='unknown'?'':s.selectedOptions[0].textContent;height();}));
  $('form-next').disabled=false;$('form-next').textContent='Assess My Marketing';
+}
+function prepareLeadCapture(c){
+ if(!c?.required)return;
+ $('required-contact-fields').classList.remove('hidden');
+ ['capture-first-name','capture-last-name','capture-email','revenue-input'].forEach(id=>$(id).required=true);
+ $('revenue-label').textContent='Annual revenue (USD)';
+ $('revenue-input').innerHTML='<option value="">Select your annual revenue</option>'+c.revenueRanges.map(o=>'<option value="'+escapeHtml(o[0])+'">'+escapeHtml(o[1])+'</option>').join('');
+ $('capture-notice').textContent=c.notice.text;$('capture-notice').classList.remove('hidden');
+ $('intake-note').textContent='Contact details and annual revenue are required. Assessment questions can remain “Not sure”; missing answers are not guessed. This is a research-informed Brex rubric, not an industry ranking or growth prediction.';
+ $('capture-email').addEventListener('input',()=>{
+  const domain=$('capture-email').value.trim().toLowerCase().split('@').pop();
+  $('capture-email').setCustomValidity(c.personalEmailDomains.includes(domain)?'Please use your company email rather than a common personal-email address.':'');
+ });
+ ['capture-first-name','capture-last-name'].forEach(id=>$(id).addEventListener('input',()=>{
+  $(id).setCustomValidity($(id).value.trim()&&!/[\p{L}]/u.test($(id).value)?'Please enter your name.':'');
+ }));
 }
 function formStage(n){
  state.formStage=n;['form-company','form-health','form-fit'].forEach((id,i)=>$(id).classList.toggle('hidden',i!==n));
@@ -261,9 +285,12 @@ function render(data){
 $('research-form').addEventListener('submit',async e=>{
  e.preventDefault();if(state.formStage<2){$('form-next').click();return;}if(state.busy)return;state.busy=true;$('error-slot').textContent='';step('step-loading');
  try{
-  const data=await api('',{companyName:$('company-name').value.trim(),url:$('url-input').value.trim(),companyConfirmed:$('company-confirmed').checked,assessment:assessmentAnswers()});
+  const data=await api('',{companyName:$('company-name').value.trim(),url:$('url-input').value.trim(),companyConfirmed:$('company-confirmed').checked,assessment:assessmentAnswers(),
+   ...(state.config?.leadCapture?.required?{capture:{firstName:$('capture-first-name').value.trim(),lastName:$('capture-last-name').value.trim(),
+    email:$('capture-email').value.trim(),revenueBand:$('revenue-input').value,noticeVersion:state.config.leadCapture.notice.version}}:{})});
   state.token=data.token;render(data);
- }catch(err){step('step-intake');error('error-slot',err.name==='TimeoutError'?'Research took too long. Please try again later. No guessed findings were substituted.':err.message);}
+  if(state.config?.leadCapture?.required)$('lead-email').value=$('capture-email').value.trim();
+ }catch(err){step('step-intake');if(err.code==='CAPTURE_INVALID')formStage(0);error('error-slot',err.name==='TimeoutError'?'Research took too long. Please try again later. No guessed findings were substituted.':err.message);}
  finally{state.busy=false;}
 });
 $('lead-form').addEventListener('submit',async e=>{
@@ -294,13 +321,14 @@ $('save-btn').addEventListener('click',()=>{
 });
 $('restart-btn').addEventListener('click',()=>{
  state.snapshot=null;state.token=null;state.expiresAt=null;history.replaceState(null,'',location.pathname+location.search);
- $('research-form').reset();$('lead-form').reset();document.querySelectorAll('#health-fields .fine,#fit-fields .fine').forEach(p=>p.textContent='');$('error-slot').textContent='';formStage(0);step('step-intake');
+ $('research-form').reset();$('lead-form').reset();['capture-email','capture-first-name','capture-last-name'].forEach(id=>$(id).setCustomValidity(''));document.querySelectorAll('#health-fields .fine,#fit-fields .fine').forEach(p=>p.textContent='');$('error-slot').textContent='';formStage(0);step('step-intake');
 });
 async function init(){
  try{
   const r=await fetch('/api/widget/snapshot/config');if(!r.ok)throw new Error();state.config=await r.json();
   if(state.config.healthRubric)prepareAssessment(state.config.healthRubric);
   else throw new Error('Rubric unavailable');
+  prepareLeadCapture(state.config.leadCapture);
   $('delivery-status').classList.toggle('hidden',state.config.emailDeliveryReady===true);
   if(state.config.snapshotEmailConsent?.version){
    $('snapshot-email-consent-text').textContent=state.config.snapshotEmailConsent.text;
