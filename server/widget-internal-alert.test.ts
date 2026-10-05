@@ -127,6 +127,12 @@ test("earlier unresolved receipt blocks a later assessment for the same email; o
   await processInternalAlert(old,f.store,f.api);
   assert.equal(f.writes.length,0);
 });
+test("secondary-email match does not replace a contact's primary email",async()=>{
+  const f=fixture(row(),{id:"contact-1",properties:{email:"different@company.example"}});
+  await processInternalAlert(f.read(),f.store,f.api);
+  assert.equal(f.writes.length,0);
+  assert.equal(f.read().lead_capture.alert.state,"needs-review");
+});
 test("workflow pin permits only exact approved configuration and Kenny recipient",async()=>{
   const f=JSON.parse(readFileSync("docs/assessment-alert-workflow.json","utf8")).workflow;
   assert.equal(publicWorkflowHash(f),ALERT_WORKFLOW.hash);

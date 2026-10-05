@@ -123,6 +123,9 @@ export async function processInternalAlert(row:AlertRow,store:AlertStore,api:Api
   if(!await store.move(row,"processing"))return; // Atomic, durable claim.
   try{
     let c=await contact(api,row.lead_capture.email,true);
+    if(c&&c.properties?.email?.trim().toLowerCase()!==row.lead_capture.email){
+      await store.move(row,"needs-review",{reason:"Contact primary email requires review"});return;
+    }
     if(c&&["ready","pending","needs-review"].includes(c.properties.atlas_internal_alert_state)){
       await store.move(row,"needs-review",{reason:"Prior contact alert needs review"});return;
     }
