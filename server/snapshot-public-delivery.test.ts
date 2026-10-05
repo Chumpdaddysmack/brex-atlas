@@ -5,6 +5,9 @@ import express from "express";
 import {dryRunFixture} from "./snapshot-dry-run-fixtures";
 import {sendPublicSnapshot,PUBLIC_SNAPSHOT_COHORT,assertPublicReceiptRow,snapshotClickBinding,
   matchesPublicProjection,PUBLIC_WORKFLOWS,publicWorkflowHash,publicSubscriptionReader,reconcilePublicSnapshot} from "./snapshot-public-delivery";
+import {COMBINED_SENDER_ACTIONS,COMBINED_SNAPSHOT_EMAIL,COMBINED_EMAIL_UPDATED_AT,
+  isCombinedSnapshotFlow,verifyPublicSnapshotSetup} from "./snapshot-public-delivery";
+import {assessWidget,HEALTH_QUESTIONS} from "../shared/widget-health";
 import {snapshotReceiptDigest} from "./snapshot-delivery-ledger";
 import {registerSnapshotRoutes} from "./widget-snapshot";
 import {SNAPSHOT_EMAIL_PERMISSION} from "../shared/snapshot-delivery";
@@ -16,6 +19,7 @@ function fixture(){
   (f.stored.request.consent_evidence as any).publicDelivery=PUBLIC_SNAPSHOT_COHORT;
   (f.stored.snapshot as any).snapshot={companyName:"Fixture Company"};
   (f.stored.snapshot as any).company_url="https://example.invalid";
+  (f.stored.snapshot as any).created_at=new Date(Date.parse(f.receipt.requestedAt)-1000).toISOString();
   let claimState="prepared",already=false,sub="NOT_SPECIFIED",global=false;
   let contact:any=null,failArm=false,badWorkflow=false;
   const writes:any[]=[],rpcCalls:any[]=[];
@@ -76,6 +80,65 @@ test("public workflow contracts pin results-only sender and native status prereq
     assert.equal(filters.some((f:any)=>f.property==="email"),false);
     assert.equal(filters.find((f:any)=>f.property==="hs_marketable_status").operation.value,w.kind==="sender");
   }
+});
+function combinedApi(f:ReturnType<typeof fixture>,changed?: (flow:any)=>void){
+  return async(m:any,p:string,b:any)=>{
+    if(p==="/automation/v4/flows/"+PUBLIC_WORKFLOWS[1].id){
+      const flow=structuredClone(workflows.workflows[1].flow);
+      flow.startActionId="2";flow.actions=structuredClone(COMBINED_SENDER_ACTIONS);
+      changed?.(flow);return flow;
+    }
+    const r=await f.api(m,p,b);
+    if(p==="/marketing/v3/emails/"+COMBINED_SNAPSHOT_EMAIL)
+      return {...r,updatedAt:COMBINED_EMAIL_UPDATED_AT,
+        subject:"Your Brex Atlas free assessment and company snapshot are ready"};
+    return r;
+  };
+}
+test("combined rollout preserves all enrollment and consent gates and rejects unapproved actions",async()=>{
+  const f=fixture();
+  assert.equal(await verifyPublicSnapshotSetup(combinedApi(f)),"combined");
+  assert.equal(await verifyPublicSnapshotSetup(f.api),"link-only");
+  for(const change of [
+    (w:any)=>{w.enrollmentCriteria.shouldReEnroll=false;},
+    (w:any)=>{w.actions[2].fields.content_id="unapproved";},
+    (w:any)=>{w.actions[1].listBranches[0].filterBranch.filters[0].property="atlas_health_score";},
+    (w:any)=>{w.startActionId="3";},
+  ])await assert.rejects(()=>verifyPublicSnapshotSetup(combinedApi(f,change)));
+  const api=combinedApi(f);
+  await assert.rejects(()=>verifyPublicSnapshotSetup(async(m,p,b)=>{
+    const r=await api(m,p,b);return p.endsWith(COMBINED_SNAPSHOT_EMAIL)?{...r,isPublished:false}:r;
+  }));
+});
+test("public combined email binds zero/incomplete scores and tier to immutable snapshot before Ready",async()=>{
+  for(const answers of [{health:Object.fromEntries(HEALTH_QUESTIONS.map(q=>[q.key,"0"]))},{}]){
+    const f=fixture();(f.stored.snapshot as any).snapshot.assessment=assessWidget(answers);
+    assert.equal((await sendPublicSnapshot(f.input,f.db,combinedApi(f))).status,"queued");
+    const recap=f.contact().properties.atlas_snapshot_assessment_recap;
+    assert.match(recap,answers.health?/0\/100 · Foundational gaps/:/Incomplete: not enough answers/);
+    assert.match(recap,/PRELIMINARY CMO RECOMMENDATION/);
+    assert.equal(f.writes.filter(w=>w.body?.properties?.atlas_snapshot_delivery_state==="ready").length,1);
+    assert.equal(f.writes.some(w=>Object.hasOwn(w.body?.properties||{},"atlas_health_score")),false);
+  }
+});
+test("combined legacy snapshots clear stale recap; invalid version and altered readback never arm",async()=>{
+  const f=fixture();
+  assert.equal((await sendPublicSnapshot(f.input,f.db,combinedApi(f))).status,"queued");
+  assert.equal(f.contact().properties.atlas_snapshot_assessment_recap,"");
+  const invalid=fixture();
+  (invalid.stored.snapshot as any).snapshot.assessment={...assessWidget({}),version:"old"};
+  assert.equal((await sendPublicSnapshot(invalid.input,invalid.db,combinedApi(invalid))).status,"blocked");
+  assert.equal(invalid.writes.length,0);
+  const changed=fixture();(changed.stored.snapshot as any).snapshot.assessment=assessWidget({});
+  const api=combinedApi(changed);
+  const altered=async(m:any,p:string,b:any)=>{
+    const r=await api(m,p,b);
+    if(m==="GET"&&p.startsWith("/crm/v3/objects/contacts/123?"))
+      return {...r,properties:{...r.properties,atlas_snapshot_assessment_recap:"stale"}};
+    return r;
+  };
+  assert.equal((await sendPublicSnapshot(changed.input,changed.db,altered)).status,"blocked");
+  assert.equal(changed.writes.some(w=>w.body?.properties?.atlas_snapshot_delivery_state==="ready"),false);
 });
 test("new subscriber OBJECT_NOT_FOUND means unspecified, never subscribed; other errors fail closed",async()=>{
   const email="new@example.com";
@@ -152,7 +215,7 @@ test("projection matching rejects changed URL, request, permission or expiry",as
     assert.equal(matchesPublicProjection({...f.contact().properties,[key]:"changed"},f.receipt),false);
 });
 test("reconciliation only records an exactly link-bound SENT/DELIVERED lineage and never rewrites contact state",async()=>{
-  for(const scenario of ["complete","no-click","click-only","wrong-link","incomplete"]){
+  for(const scenario of ["complete","combined","two-campaigns","no-click","click-only","wrong-link","incomplete"]){
     const f=fixture();await sendPublicSnapshot(f.input,f.db,f.api);const writes=f.writes.length;
     const now=Date.now(),parent={id:"6e8a164d-16e7-404e-aea6-a0f9a3452921",created:now-10};
     const common={portalId:242249577,emailCampaignId:38781164,recipient:f.receipt.email};
@@ -171,15 +234,22 @@ test("reconciliation only records an exactly link-bound SENT/DELIVERED lineage a
       return chain;
     },async rpc(name:string,args:any){recorded.push({name,args});return {data:true,error:null};}};
     const api:any=async(m:any,path:string,b:any)=>{
-      if(path.includes("email-campaigns"))return {results:[{flowId:PUBLIC_WORKFLOWS[1].id,emailContentId:"405101719239",emailCampaignId:"38781164"}]};
-      if(path.startsWith("/email/public/v1/events"))return {hasMore:scenario==="incomplete",events:
-        scenario==="no-click"?events.slice(0,2):scenario==="click-only"?events.slice(2):events};
+      if(path.includes("email-campaigns"))return {results:[
+        {flowId:PUBLIC_WORKFLOWS[1].id,emailContentId:"405101719239",emailCampaignId:"38781164"},
+        ...(["combined","two-campaigns"].includes(scenario)?[
+          {flowId:PUBLIC_WORKFLOWS[1].id,emailContentId:COMBINED_SNAPSHOT_EMAIL,emailCampaignId:"38897500"}]:[])]};
+      if(path.startsWith("/email/public/v1/events")){
+        const campaignId=Number(new URL(path,"https://example.invalid").searchParams.get("campaignId"));
+        const selected=scenario==="combined"&&campaignId===38781164?[]:
+          scenario==="no-click"?events.slice(0,2):scenario==="click-only"?events.slice(2):events;
+        return {hasMore:scenario==="incomplete",events:selected.map(e=>({...e,emailCampaignId:campaignId}))};
+      }
       return f.api(m,path,b);
     };
     await reconcilePublicSnapshot(db,api);
     assert.equal(f.writes.length,writes);
     assert.equal(f.contact().properties.atlas_snapshot_delivery_state,"ready");
-    if(scenario==="complete"){
+    if(["complete","combined"].includes(scenario)){
       assert.deepEqual(recorded.map(x=>x.name),["bind_snapshot_delivery_message","record_snapshot_delivery_event","record_snapshot_delivery_event"]);
       assert.deepEqual(recorded.slice(1).map(x=>x.args.p_event_type),["SENT","DELIVERED"]);
     }else assert.equal(recorded.length,0,scenario);

@@ -7,6 +7,8 @@ import {snapshotPermissionProperties, SNAPSHOT_EMAIL_PERMISSION} from "../shared
 import {widgetAttributionProperties} from "../shared/widget-attribution";
 import {SNAPSHOT_SUPPRESSION_PROPERTIES} from "./snapshot-workflow-guard";
 import {hubspotSnapshotMessageId,planBoundSnapshotEvents} from "./snapshot-provider-events";
+import {buildSnapshotAssessmentRecap} from "./snapshot-assessment-recap";
+import {isDeepStrictEqual} from "node:util";
 
 export const PUBLIC_SNAPSHOT_COHORT="public-results-2026-10-04";
 export const PUBLIC_SNAPSHOT_AFTER="2026-10-04T01:47:00Z";
@@ -15,11 +17,31 @@ export const PUBLIC_WORKFLOWS=[
   {id:"5051859668",hash:"9c85db302c448cbbc0f42b50231e669f0ddbccf20a50c136de28361db90f5016"},
 ];
 const legacy=["5015673537","5014906568","5051336409","5051781861"];
+export const COMBINED_SNAPSHOT_EMAIL="406150193876";
+export const COMBINED_EMAIL_UPDATED_AT="2026-10-05T21:38:00.127Z";
+const originalSenderAction={actionId:"1",actionTypeVersion:0,actionTypeId:"0-4",
+  fields:{content_id:"405101719239"},type:"SINGLE_CONNECTION"};
+// Keep action 1 intact for any enrollment already in progress at cutover.
+export const COMBINED_SENDER_ACTIONS=[
+  originalSenderAction,
+  {actionId:"2",type:"LIST_BRANCH",listBranches:[{
+    filterBranch:{filterBranches:[],filters:[{property:"atlas_snapshot_assessment_recap",
+      operation:{operator:"IS_KNOWN",includeObjectsWithNoValueSet:false,operationType:"ALL_PROPERTY"},filterType:"PROPERTY"}],
+      filterBranchType:"AND",filterBranchOperator:"AND"},
+    branchName:"Assessment score and snapshot",connection:{edgeType:"STANDARD",nextActionId:"3"}}],
+    defaultBranchName:"Legacy research-only snapshot",defaultBranch:{edgeType:"STANDARD",nextActionId:"1"}},
+  {actionId:"3",actionTypeVersion:0,actionTypeId:"0-4",
+    fields:{content_id:COMBINED_SNAPSHOT_EMAIL},type:"SINGLE_CONNECTION"},
+];
+export function isCombinedSnapshotFlow(f:any){
+  return f?.startActionId==="2"&&isDeepStrictEqual(f.actions,COMBINED_SENDER_ACTIONS)
+    &&publicWorkflowHash({...f,actions:[originalSenderAction],startActionId:"1"})===PUBLIC_WORKFLOWS[1].hash;
+}
 type Api=(method:"GET"|"POST"|"PATCH",path:string,body?:unknown)=>Promise<any>;
 const props=["email","company","website","original_lead_source","atlas_snapshot_id","atlas_snapshot_url",
   "atlas_snapshot_requested_at","atlas_snapshot_request_id","atlas_snapshot_expires_at",
   "atlas_snapshot_email_permission","atlas_snapshot_permission_version","atlas_optional_marketing_choice",
-  "atlas_snapshot_delivery_state","hs_marketable_status",...SNAPSHOT_SUPPRESSION_PROPERTIES];
+  "atlas_snapshot_delivery_state","atlas_snapshot_assessment_recap","hs_marketable_status",...SNAPSHOT_SUPPRESSION_PROPERTIES];
 export function publicSnapshotConfigured(){return !!process.env.HUBSPOT_ACCESS_TOKEN;}
 export const snapshotPublicApi:Api=async(method,path,body)=>{
   if(!path.startsWith("/")||path.startsWith("//")||!publicSnapshotConfigured())throw Error("Public delivery unavailable");
@@ -38,9 +60,12 @@ export function publicWorkflowHash(f:any){
     blockedDates:f.blockedDates})).digest("hex");
 }
 export async function verifyPublicSnapshotSetup(api:Api){
+  let combined=false;
   for(const w of PUBLIC_WORKFLOWS){
     const f=await api("GET","/automation/v4/flows/"+w.id);
-    if(f?.isEnabled!==true||publicWorkflowHash(f)!==w.hash)throw Error("Public workflow requires review");
+    const combinedSender=w.id===PUBLIC_WORKFLOWS[1].id&&isCombinedSnapshotFlow(f);
+    if(f?.isEnabled!==true||(publicWorkflowHash(f)!==w.hash&&!combinedSender))throw Error("Public workflow requires review");
+    if(combinedSender)combined=true;
   }
   for(const id of legacy)if((await api("GET","/automation/v4/flows/"+id))?.isEnabled!==false)
     throw Error("Legacy sender isolation changed");
@@ -51,6 +76,16 @@ export async function verifyPublicSnapshotSetup(api:Api){
     ||e.updatedAt!=="2026-10-03T23:40:04.983Z"
     ||e.from?.replyTo?.toLowerCase()!=="kenny@brexconsulting.com")
     throw Error("Results email requires review");
+  if(combined){
+    const e=await api("GET","/marketing/v3/emails/"+COMBINED_SNAPSHOT_EMAIL);
+    if(e?.isPublished!==true||e.state!=="AUTOMATED"||e.type!=="AUTOMATED_EMAIL"||e.archived
+      ||e.subscriptionDetails?.subscriptionId!=="3750294688"
+      ||e.subject!=="Your Brex Atlas free assessment and company snapshot are ready"
+      ||e.updatedAt!==COMBINED_EMAIL_UPDATED_AT
+      ||e.from?.replyTo?.toLowerCase()!=="kenny@brexconsulting.com")
+      throw Error("Combined assessment email requires review");
+  }
+  return combined?"combined":"link-only";
 }
 export function assertPublicReceiptRow(r:any,now=Date.now()){
   if(!r||r.consent_evidence?.publicDelivery!==PUBLIC_SNAPSHOT_COHORT
@@ -132,20 +167,22 @@ export async function sendPublicSnapshot(input:{requestId:string;snapshotUrl:str
     return {status:claim.status==="duplicate"?"already_recorded":"held",state:claim.state,sendingEnabled:true};
   let armed=false;
   try{
-    await verifyPublicSnapshotSetup(api);
+    const mode=await verifyPublicSnapshotSetup(api);
     // Check existing preferences before creating/updating a CRM record.
     const initial=await publicSubscriptionReader(api,receipt.email).read(receipt.email);
     if(initial.globallyBlocked||initial.snapshot==="UNSUBSCRIBED")throw Error("Existing opt-out");
     let c=await api("GET",`/crm/v3/objects/contacts/${encodeURIComponent(receipt.email)}?idProperty=email&properties=${props.join(",")}`);
     if(c)clear(c.properties,receipt.email);
-    const snapshot=await db.from("widget_snapshots").select("snapshot,company_url").eq("id",receipt.snapshotId).single();
+    const snapshot=await db.from("widget_snapshots").select("id,created_at,snapshot,company_url").eq("id",receipt.snapshotId).single();
     if(snapshot.error)throw Error("Snapshot unavailable");
+    const recap=mode==="combined"?buildSnapshotAssessmentRecap(snapshot.data,receipt):"";
     const old=c?.properties||{};
     const properties={email:receipt.email,...widgetAttributionProperties(old.original_lead_source),
       ...(!old.company?{company:snapshot.data.snapshot.companyName}:{}),
       ...(!old.website?{website:snapshot.data.company_url}:{}),
       ...snapshotPermissionProperties(receipt),atlas_snapshot_url:receipt.snapshotUrl,
-      atlas_snapshot_id:receipt.snapshotId,atlas_snapshot_requested_at:receipt.requestedAt};
+      atlas_snapshot_id:receipt.snapshotId,atlas_snapshot_requested_at:receipt.requestedAt,
+      atlas_snapshot_assessment_recap:recap};
     const saved=await api(c?"PATCH":"POST",`/crm/v3/objects/contacts${c?"/"+encodeURIComponent(c.id):""}`,{properties});
     const id=String(c?.id||saved?.id||"");
     if(!/^\d+$/.test(id))throw Error("Contact creation unconfirmed");
@@ -154,7 +191,8 @@ export async function sendPublicSnapshot(input:{requestId:string;snapshotUrl:str
     await preferencesClear(api,receipt,true);
     c=await api("GET",`/crm/v3/objects/contacts/${id}?properties=${props.join(",")}`);
     clear(c?.properties,receipt.email);
-    if(!matchesPublicProjection(c.properties,receipt)||c.properties.atlas_snapshot_delivery_state!=="pending")
+    if(!matchesPublicProjection(c.properties,receipt)||c.properties.atlas_snapshot_delivery_state!=="pending"
+      ||(c.properties.atlas_snapshot_assessment_recap||"")!==recap)
       throw Error("Contact request mismatch");
     validateSnapshotReceipt(receipt);
     await preferencesClear(api,receipt,false);
@@ -215,9 +253,8 @@ export async function reconcilePublicSnapshot(db:any=widgetDb(),api:Api=snapshot
   if(!Array.isArray(mappings))throw Error("Campaign mapping unavailable");
   const ids=new Set<number>();
   for(const m of mappings)if(String(m.flowId)===PUBLIC_WORKFLOWS[1].id
-    &&String(m.emailContentId)==="405101719239")ids.add(Number(m.emailCampaignId));
-  if(ids.size!==1||![...ids].every(Number.isSafeInteger))throw Error("Ambiguous campaign mapping");
-  const campaignId=[...ids][0];
+    &&["405101719239",COMBINED_SNAPSHOT_EMAIL].includes(String(m.emailContentId)))ids.add(Number(m.emailCampaignId));
+  if(!ids.size||ids.size>10||![...ids].every(id=>Number.isSafeInteger(id)&&id>0))throw Error("Ambiguous campaign mapping");
   for(const a of rows.data){
     try{
       const request=await db.from("widget_snapshot_requests").select("*").eq("id",a.request_id).single();
@@ -226,10 +263,19 @@ export async function reconcilePublicSnapshot(db:any=widgetDb(),api:Api=snapshot
       const c=await api("GET",`/crm/v3/objects/contacts/${request.data.contact_id}?properties=${props.join(",")}`);
       const receipt=await readStored(db,a.request_id,c?.properties?.atlas_snapshot_url);
       if(snapshotReceiptDigest(receipt)!==a.receipt_digest||!matchesPublicProjection(c.properties,receipt))continue;
-      const events=await completeEvents(api,a.email,campaignId,Date.parse(a.created_at));
-      if(events.some(e=>e.portalId!==242249577||e.emailCampaignId!==campaignId||e.recipient!==a.email))continue;
-      const parent=snapshotClickBinding(events,a.email,receipt.snapshotUrl);
-      if(!parent)continue;
+      const candidates:{campaignId:number;events:any[];parent:any}[]=[];
+      for(const campaignId of ids){
+        const events=await completeEvents(api,a.email,campaignId,Date.parse(a.created_at));
+        if(events.some(e=>e.portalId!==242249577||e.emailCampaignId!==campaignId||e.recipient!==a.email))
+          throw Error("Unexpected event identity");
+        // More than one parent in any mapped campaign is ambiguous as well.
+        const matching=events.filter(e=>snapshotClickBinding([e],a.email,receipt.snapshotUrl));
+        const parent=snapshotClickBinding(events,a.email,receipt.snapshotUrl);
+        if(matching.length&&!parent)throw Error("Ambiguous snapshot messages");
+        if(parent)candidates.push({campaignId,events,parent});
+      }
+      if(candidates.length!==1)continue;
+      const {campaignId,events,parent}=candidates[0];
       const providerMessageId=hubspotSnapshotMessageId(242249577,campaignId,parent);
       if(a.provider_message_id&&a.provider_message_id!==providerMessageId)continue;
       const lineage=events.filter(e=>(e.type==="SENT"?e:e.sentBy)?.id===parent.id
