@@ -87,18 +87,59 @@ export function normalizeBlogCalendar(value: unknown, options: CalendarOptions =
 export async function generateValidatedBlogBatch(
   generate: (validationError?: string) => Promise<unknown>,
   expectedWeeks: number[],
+  repairWeek?: (week: number, validationError: string, preservedTitles: string[]) => Promise<unknown>,
 ): Promise<Calendar> {
   let lastError = "";
+  const preserved = new Map<number, Calendar[number]>();
+  let receivedOutput = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const output = await generate(lastError || undefined);
+      receivedOutput = true;
       if (!isObject(output)) throw new Error("Blog response must be an object");
+      if (repairWeek) {
+        // Salvage only complete, unambiguous weeks. Never pad short weeks,
+        // fabricate briefs, or alter a week that has already passed validation.
+        const decoded = decode(output.blogCalendar);
+        for (const number of expectedWeeks) {
+          if (preserved.has(number)) continue;
+          const matches = decoded.filter(w => isObject(w) && w.weekNumber === number);
+          if (matches.length !== 1) continue;
+          try {
+            const [valid] = normalizeBlogCalendar(matches, {
+              expectedWeeks: [number], postsPerWeek: 10, requireCompleteBrief: true,
+            });
+            preserved.set(number, valid);
+          } catch { /* This whole week needs regeneration; no partial posts are invented. */ }
+        }
+        if (preserved.size === expectedWeeks.length) return normalizeBlogCalendar([...preserved.values()], {
+          expectedWeeks, postsPerWeek: 10, requireCompleteBrief: true,
+        });
+      }
       return normalizeBlogCalendar(output.blogCalendar, {
         expectedWeeks, postsPerWeek: 10, requireCompleteBrief: true,
       });
     } catch (error) {
       lastError = error instanceof Error ? error.message : "Invalid blog response";
     }
+  }
+  // A service outage should not fan out into additional model requests.
+  if (repairWeek && receivedOutput && expectedWeeks.length > 1) {
+    for (const week of expectedWeeks) {
+      if (preserved.has(week)) continue;
+      const titles = [...preserved.values()].flatMap(w => w.posts.map(p => p.title));
+      try {
+        const [repaired] = await generateValidatedBlogBatch(
+          error => repairWeek(week, error || lastError, titles), [week],
+        );
+        preserved.set(week, repaired);
+      } catch (error) {
+        throw new Error(`Week ${week} recovery failed; complete weeks were not published as a full plan: ${error instanceof Error ? error.message : "Invalid response"}`);
+      }
+    }
+    return normalizeBlogCalendar([...preserved.values()], {
+      expectedWeeks, postsPerWeek: 10, requireCompleteBrief: true,
+    });
   }
   throw new Error(`Blog batch failed validation after two attempts: ${lastError}`);
 }

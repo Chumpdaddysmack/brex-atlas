@@ -6,7 +6,7 @@
 
 import { storage } from "./storage";
 import { generateValidatedBlogBatch, normalizeBlogCalendar } from "./blog-calendar";
-import { llmJson, SCHEMA_SHELL, SCHEMA_BLOG_BATCH, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
+import { llmJson, SCHEMA_SHELL, SCHEMA_BLOG_BATCH, SCHEMA_ROI_ASSUMPTIONS, blogBatchSchemaForWeekCount } from "./llm";
 import { ROI_INFERENCE_SYSTEM_PROMPT, calculateRoiProjections, FALLBACK_ASSUMPTIONS } from "./roi-calc";
 import { applyPackageCost } from "./roi-calc";
 import { parseCurrentSow } from "@shared/service-packages";
@@ -45,7 +45,8 @@ function voiceFor(analysis: Analysis): string {
 // the model's max_tokens budget and avoid unbalanced-JSON truncation.
 //
 //   1) SHELL — thesis, pillars, ad brief, social cadence, landing pages.
-//   2) BLOG BATCH — 4 weeks of blog calendar at a time (called 3× → 12 weeks).
+//   2) BLOG BATCH — 3 weeks at a time (called 4× → 12 weeks), with
+//      bounded single-week recovery for incomplete/malformed batches.
 //
 // The shell pass runs first so downstream blog batches can reference the pillar
 // names, ICP, and competitor set the model just committed to.
@@ -177,7 +178,7 @@ Hard rules:
 - Every blog post targetQuery should be the exact buyer question a founder/CEO would type into ChatGPT or Google.
 - Assign each blog post to one of the provided pillar names — do not invent new pillars.
 - Diversify: no more than 2 posts per week can target the same targetQuery, and titles across the batch must not repeat.
-- Include at least one competitor-comparison post per 4-week batch when relevant competitors exist.
+- Include a competitor-comparison post within a multi-week batch when relevant competitors exist.
 - Distribute the 10 weekly blog posts across weekdays (2 per day Mon-Fri).
 - weekOf is the Monday of that week. scheduledDate must land Mon-Fri of that week.
 
@@ -188,7 +189,7 @@ Editorial-brief rules:
 - primaryKeyword is one string, not an array.
 - aeoQuery is the answer-engine-shaped version of readerQuestion (an AI would cite this post if it answered exactly this question).
 
-Keep angles short (1-2 sentences) and keywords ≤ 3 per post. The 40-post batch JSON must stay compact.`;
+Keep angles short (1-2 sentences) and keywords ≤ 3 per post. Return only the requested weeks and keep the JSON compact.`;
 
 export async function runContentPlanGeneration(planId: string) {
   const plan = await storage.getContentPlan(planId);
@@ -276,6 +277,16 @@ export async function runContentPlanGeneration(planId: string) {
             SCHEMA_BLOG_BATCH,
           ),
           Array.from({ length: b.end - b.start + 1 }, (_, offset) => b.start + offset),
+          async (week, validationError, preservedTitles) => {
+            await storage.updateContentPlan(planId, {
+              currentStep: `Recovering blog calendar week ${week} (10 complete posts)`,
+            });
+            const repairMsg = `${contextBlock}\n\n=== APPROVED SHELL ===\n${JSON.stringify({
+              contentPillars: shell.contentPillars,
+              landingPages: (shell.landingPages ?? []).map((p: any) => p.title),
+            })}\n\n=== SINGLE-WEEK RECOVERY ===\nReturn ONLY week ${week}, with EXACTLY 10 complete posts and their editorialBrief objects. Do not return other weeks or placeholders.\nThe multi-week response failed validation: ${validationError}.\nPlan starts Monday ${startISO} (week 1). weekOf = startMonday + (weekNumber - 1) × 7 days. Schedule two posts per weekday in that week.\nUse these exact pillar names: ${JSON.stringify(pillarNames)}.\nDo not repeat any of these already accepted titles: ${JSON.stringify([...previousTitles, ...preservedTitles])}.\nReturn {"blogCalendar":[one complete week object]}.`;
+            return llmJson(SYS_BLOG_BATCH, repairMsg, 10000, blogBatchSchemaForWeekCount(1));
+          },
         );
         console.log(
           `[content-plan] batch ${b.start}-${b.end}: validated weeks=${weeks.length}`,

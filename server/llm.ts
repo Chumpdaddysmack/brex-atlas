@@ -471,6 +471,14 @@ export const SCHEMA_BLOG_BATCH = {
   },
 };
 
+export function blogBatchSchemaForWeekCount(count: number) {
+  if (!Number.isInteger(count) || count < 1 || count > 3) throw Error("Invalid blog batch size");
+  const schema = structuredClone(SCHEMA_BLOG_BATCH);
+  schema.properties.blogCalendar.minItems = count;
+  schema.properties.blogCalendar.maxItems = count;
+  return schema;
+}
+
 export const SCHEMA_ROI_ASSUMPTIONS = {
   type: "object",
   additionalProperties: false,
