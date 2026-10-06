@@ -3,7 +3,8 @@ import { z } from "zod";
 /** Deterministic Brex screening rubric, not a validated psychometric instrument.
  * Public research never supplies these answers. No CRM/LLM side effects.
  */
-export const HEALTH_VERSION = "brex-marketing-health-v1-2026-10-04";
+export const LEGACY_HEALTH_VERSION = "brex-marketing-health-v1-2026-10-04";
+export const HEALTH_VERSION = "brex-marketing-health-v2-2026-10-06";
 export const HEALTH_SOURCES = [
   { id: "capabilities", title: "Vorhies & Morgan (2005): Marketing capabilities",
     url: "https://neil-a-morgan.com/wp-content/uploads/2020/04/Vorhies-Morgan-JM-2005.pdf",
@@ -99,7 +100,9 @@ const catalog = {
   full_fractional: { label: "Full Fractional CMO", price: "$9,500–$15,500/month",
     reason: "You report a vacant or delegated executive remit and a need for marketing leadership." },
 } as const;
-export function assessWidget(raw: unknown) {
+export function assessWidget(raw: unknown, version: string = HEALTH_VERSION) {
+  if (![HEALTH_VERSION, LEGACY_HEALTH_VERSION].includes(version)) throw Error("Rubric requires review");
+  const legacy = version === LEGACY_HEALTH_VERSION;
   const answers = widgetAssessmentInputSchema.parse(raw);
   const items = HEALTH_QUESTIONS.map(q => {
     const value = answers.health[q.key];
@@ -121,14 +124,21 @@ export function assessWidget(raw: unknown) {
   if (f.ownership === "existing" && f.need === "advice") candidate = "advisor";
   if (f.ownership === "existing" && f.need === "strategy") candidate = "strategist";
   if (f.ownership === "delegated" && f.need === "leadership") candidate = "full_fractional";
+  if (!legacy) candidate = f.need === "advice" ? "advisor" : f.need === "strategy" ? "strategist"
+    : f.need === "leadership" ? "full_fractional" : null;
   const missing: string[] = [], concerns: string[] = [];
   for (const q of TIER_QUESTIONS) if (f[q.key] === "unknown") missing.push(q.label);
   if (!f.growthGoal) missing.push("Growth outcome");
   if (!f.timeframe) missing.push("Growth timeframe");
-  if (!candidate && f.ownership !== "unknown" && f.need !== "unknown")
+  if (legacy && !candidate && f.ownership !== "unknown" && f.need !== "unknown")
     missing.push("Resolve the mismatch between executive ownership and the support requested.");
+  if (!legacy && f.need === "leadership" && f.ownership === "existing")
+    missing.push("Confirm which executive marketing responsibilities can be delegated to Brex alongside the internal leader.");
+  if (!legacy && ["advice", "strategy"].includes(f.need) && f.ownership === "delegated")
+    missing.push("Confirm who retains executive accountability; this advisory or strategy scope does not replace an executive leadership remit.");
   if (f.sponsor === "no") concerns.push("Executive sponsorship is not available.");
-  if (f.execution === "none") concerns.push("No implementation resources or plan is available.");
+  if (f.execution === "none") concerns.push(legacy ? "No implementation resources or plan is available."
+    : "Confirm an implementation staffing and budget plan during discovery. Brex can discuss execution support; it is not included automatically in the CMO fee.");
   if (f.execution === "planned") concerns.push("Implementation resources still need funding.");
   if (f.readiness === "no") concerns.push("Willingness to share relevant economics and act needs discussion.");
   if (f.budget === "below") concerns.push("The stated budget is below the minimum CMO retainer range.");
@@ -139,20 +149,39 @@ export function assessWidget(raw: unknown) {
   if (f.sponsor === "pending") missing.push("Confirm decision authority.");
   if (f.budget === "pending") missing.push("Confirm leadership budget approval.");
   if (f.readiness === "pending") missing.push("Confirm data access and preparation.");
-  const recommended = concerns.length || missing.length ? null : candidate;
+  const recommended = legacy && (concerns.length || missing.length) ? null : candidate;
   const tier = recommended ? catalog[recommended] : null;
-  return { version: HEALTH_VERSION, assessedAt: new Date().toISOString(), answers,
+  const budgetGap=f.budget==="below" || !!(needed && f.budget in budgetRank
+    && budgetRank[f.budget as keyof typeof budgetRank] < needed);
+  const readinessStatus = f.sponsor==="no" || f.readiness==="no" || budgetGap
+    ? "not_ready" : concerns.length || missing.length ? "needs_discussion" : "discovery_ready";
+  const readinessLabel = readinessStatus==="not_ready" ? "Not ready to start: resolve the listed gaps"
+    : readinessStatus==="needs_discussion" ? "Confirm readiness during discovery"
+    : "Ready for a discovery discussion; final fit requires Kenny’s review";
+  const currentReason = candidate==="full_fractional"
+    ? "Your stated need is executive marketing leadership. Full Fractional CMO is a potential fit, subject to confirming delegated responsibilities and readiness."
+    : candidate==="strategist" ? "Your stated need is strategy development and program guidance. Strategist CMO is a potential fit, subject to confirming accountability and readiness."
+    : candidate==="advisor" ? "Your stated need is senior advice and decision support. Advisor CMO is a potential fit, subject to confirming accountability and readiness."
+    : "Tell us what support you need from Brex before we suggest a potential tier.";
+  return { version, assessedAt: new Date().toISOString(), answers,
     health: { score, band, answered: known, total: 8, subScores,
       formula: "100 × total answer points ÷ 24; each answer earns 0, 1, 2, or 3. Four dimensions have equal 25% weight. All eight answers are needed for the overall score.",
       note: HEALTH_NOTE,
       priorities: items.filter(i => i.points !== null && i.points < 3).sort((a, b) => a.points! - b.points!).slice(0, 3) },
-    fit: { tier: recommended, label: tier?.label ?? "Not yet recommended", price: tier?.price ?? null,
-      status: concerns.length ? "readiness_first" : recommended ? "preliminary" : "needs_information",
-      reason: tier?.reason ?? "Resolve the listed gaps before selecting a service tier.",
+    fit: { tier: recommended, label: tier?.label ?? (legacy ? "Not yet recommended" : "More information needed"), price: tier?.price ?? null,
+      status: legacy ? (concerns.length ? "readiness_first" : recommended ? "preliminary" : "needs_information")
+        : !candidate ? "needs_information" : concerns.length || missing.length ? "conditional" : "preliminary",
+      ...(!legacy ? {readinessStatus, readinessLabel} : {}),
+      reason: legacy ? tier?.reason ?? "Resolve the listed gaps before selecting a service tier." : currentReason,
       missing, concerns, sourceIds: ["alignment", "readiness"],
       note: "Potential tier for discussion, based on self-reported responsibility and readiness. Final suitability, scope, price, and Brex capacity require Kenny's review. Budget excludes execution, media, software, and third-party costs." },
     sources: HEALTH_SOURCES };
 }
 export type WidgetAssessment = ReturnType<typeof assessWidget>;
+/** Keep old report links and delayed emails faithful to their original rubric. */
+export function assessStoredWidget(stored:{version:string;answers:unknown}) {
+  if (!stored?.answers) throw Error("Assessment receipt unavailable");
+  return assessWidget(stored.answers,stored.version);
+}
 export const WIDGET_HEALTH_CONFIG = { version: HEALTH_VERSION, dimensions: HEALTH_DIMENSIONS,
   questions: HEALTH_QUESTIONS, tierQuestions: TIER_QUESTIONS, note: HEALTH_NOTE, sources: HEALTH_SOURCES };

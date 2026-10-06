@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assessWidget, widgetAssessmentInputSchema, HEALTH_QUESTIONS, TIER_QUESTIONS } from "./widget-health";
+import { assessWidget, assessStoredWidget, LEGACY_HEALTH_VERSION, widgetAssessmentInputSchema, HEALTH_QUESTIONS, TIER_QUESTIONS } from "./widget-health";
 
 function complete(level = "2", need = "advice", ownership = "existing", budget = "advisor") {
   return {health:Object.fromEntries(HEALTH_QUESTIONS.map(q=>[q.key,level])),
@@ -30,26 +30,44 @@ test("industry and revenue never change health or select a higher tier",()=>{
   assert.deepEqual(assessWidget(a).health,assessWidget(b).health);
   assert.deepEqual(assessWidget(a).fit,assessWidget(b).fit);
 });
-test("CMO title, high budget, or no team does not automatically create a full CMO recommendation",()=>{
-  assert.equal(assessWidget(complete("3","leadership","existing","fractional")).fit.tier,null);
-  const input=complete("3","leadership","delegated","fractional");input.fit.execution="none";
-  const a=assessWidget(input);assert.equal(a.fit.status,"readiness_first");assert.equal(a.fit.tier,null);
+test("reported leadership need yields conditional Full CMO without hiding ownership or staffing gaps",()=>{
+  const input=complete("3","leadership","existing","fractional");input.fit.execution="none";
+  const a=assessWidget(input);assert.equal(a.fit.status,"conditional");assert.equal(a.fit.tier,"full_fractional");
+  assert.equal(a.fit.readinessStatus,"needs_discussion");
+  assert.match(a.fit.missing.join(" "),/delegated/);
+  assert.match(a.fit.concerns.join(" "),/staffing and budget plan/);
   assert.equal(a.health.score,100);
+  const advice=complete("3","advice","existing","fractional");advice.fit.execution="none";
+  assert.equal(assessWidget(advice).fit.tier,"advisor");
 });
 test("lower budget never substitutes cheaper scope for an unmet leadership need",()=>{
   for(const budget of ["below","advisor","strategist"]){
     const a=assessWidget(complete("2","leadership","delegated",budget));
-    assert.equal(a.fit.tier,null);assert.equal(a.fit.status,"readiness_first");
+    assert.equal(a.fit.tier,"full_fractional");assert.equal(a.fit.readinessStatus,"not_ready");
+    assert.match(a.fit.concerns.join(" "),/budget/);
   }
 });
-test("unknown, pending, negative readiness, and absent goals suppress tier selection",()=>{
+test("only unknown support need prevents potential tier; other gaps remain explicit readiness conditions",()=>{
   for(const key of TIER_QUESTIONS.map(q=>q.key)){
-    const a=complete();a.fit[key]="unknown";assert.equal(assessWidget(a).fit.tier,null,key);
+    const a=complete();a.fit[key]="unknown";
+    assert.equal(assessWidget(a).fit.tier,key==="need"?null:"advisor",key);
+    assert.ok(assessWidget(a).fit.missing.length>0);
   }
   for(const [key,value] of [["sponsor","pending"],["sponsor","no"],["budget","pending"],
     ["execution","planned"],["readiness","pending"],["readiness","no"],["growthGoal",""],["timeframe",""]]){
-    const a:any=complete();a.fit[key]=value;assert.equal(assessWidget(a).fit.tier,null,key);
+    const a:any=complete();a.fit[key]=value;
+    const out=assessWidget(a);assert.equal(out.fit.tier,"advisor",key);
+    assert.notEqual(out.fit.readinessStatus,"discovery_ready",key);
   }
+});
+test("legacy snapshots retain the original decision; unsupported versions fail closed",()=>{
+  const input=complete("2","leadership","existing","fractional");input.fit.execution="none";
+  const legacy=assessStoredWidget({version:LEGACY_HEALTH_VERSION,answers:input});
+  assert.equal(legacy.fit.tier,null);assert.equal(legacy.fit.label,"Not yet recommended");
+  assert.equal(legacy.fit.readinessLabel,undefined);
+  assert.equal(assessWidget(input).fit.tier,"full_fractional");
+  assert.deepEqual(legacy.health,assessWidget(input).health);
+  assert.throws(()=>assessStoredWidget({version:"unrecognized",answers:input}));
 });
 test("client-generated scores, tiers, bad enums, and unbounded input are rejected",()=>{
   for(const data of [{...complete(),score:99},{...complete(),fit:{...complete().fit,tier:"full_fractional"}},

@@ -1,6 +1,6 @@
 import {widgetDb} from "./widget-store";
 import {snapshotPublicApi,publicWorkflowHash} from "./snapshot-public-delivery";
-import {assessWidget,HEALTH_VERSION,TIER_QUESTIONS} from "../shared/widget-health";
+import {assessWidget,assessStoredWidget,TIER_QUESTIONS} from "../shared/widget-health";
 import {leadCaptureSchema} from "../shared/widget-lead-capture";
 import {widgetAttributionProperties} from "../shared/widget-attribution";
 
@@ -25,10 +25,9 @@ export function assessmentAlertProperties(row:AlertRow,originalSource?:string){
   if(c.alert?.version!==ALERT_VERSION||!row.id||!Number.isFinite(Date.parse(row.created_at)))
     throw Error("Invalid alert receipt");
   const original=row.snapshot.assessment;
-  if(original&&original.version!==HEALTH_VERSION)throw Error("Rubric requires review");
   // Recalculate from the immutable, self-reported answer receipt. Never use
   // research or an LLM to fill unknown answers, and never reuse old fit fields.
-  const a=assessWidget(original?.answers??{});
+  const a=original?assessStoredWidget(original):assessWidget({});
   const h=a.health;
   const lines=[
     `Marketing health: ${h.score===null?"Incomplete":`${h.score}/100`} (${h.answered}/8 answers).`,
@@ -36,8 +35,9 @@ export function assessmentAlertProperties(row:AlertRow,originalSource?:string){
     ...TIER_QUESTIONS.map(q=>`${q.label} ${q.options.find(o=>o[0]===a.answers.fit[q.key])?.[1]??"Not sure"}.`),
     `Growth outcome: ${a.answers.fit.growthGoal?"Provided":"Not provided"}; timeframe: ${a.answers.fit.timeframe?"Provided":"Not provided"}.`,
     `Potential tier: ${a.fit.label}${a.fit.price?` (${a.fit.price})`:""}. ${a.fit.reason}`,
+    ...(a.fit.readinessLabel?[`Readiness: ${a.fit.readinessLabel}.`]:[]),
     ...a.fit.concerns,...a.fit.missing.map(m=>`Needs confirmation: ${m}`),
-    `Rubric: ${HEALTH_VERSION}. Self-reported, not a verified audit. Kenny review required.`,
+    `Rubric: ${a.version}. Self-reported, not a verified audit. Kenny review required.`,
   ];
   return {
     email:input.email,firstname:input.firstName,lastname:input.lastName,

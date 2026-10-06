@@ -1,4 +1,4 @@
-import {assessWidget,HEALTH_VERSION} from "../shared/widget-health";
+import {assessStoredWidget} from "../shared/widget-health";
 
 /**
  * Approved public recap. This module does not read/write CRM, change consent,
@@ -16,9 +16,7 @@ export function buildSnapshotAssessmentRecap(row:{
   const stored=row.snapshot?.assessment;
   // Historical research-only snapshots continue to use the original email.
   if(!stored)return "";
-  if(stored?.version!==HEALTH_VERSION||!stored.answers)
-    throw Error("Assessment receipt unavailable or rubric requires review");
-  const assessment=assessWidget(stored.answers);
+  const assessment=assessStoredWidget(stored);
   const h=assessment.health;
   const score=h.score===null
     ?"Incomplete: not enough answers to calculate."
@@ -31,6 +29,7 @@ export function buildSnapshotAssessmentRecap(row:{
     "PRELIMINARY CMO RECOMMENDATION",
     assessment.fit.label,
     assessment.fit.reason,
+    ...(assessment.fit.readinessLabel?[`Readiness: ${assessment.fit.readinessLabel}`]:[]),
     ...assessment.fit.concerns,
     ...assessment.fit.missing.map(m=>`Needs confirmation: ${m}`),
   ].join("\n");
