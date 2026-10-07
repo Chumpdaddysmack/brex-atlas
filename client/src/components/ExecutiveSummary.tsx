@@ -68,7 +68,9 @@ export function ExecutiveSummary(props: { input: ExecutiveSummaryInput; demo?: n
       {summary.demo ? "Demo: only selected excerpts are used. " : ""}
       Role-specific framing uses saved report findings, not new research or additional verification.
       Source passages and available citations are preserved. Questions are prompts for discussion, not established facts.
-      Switching viewpoints does not change the report, service recommendation, or PDF and slide exports.
+      Switching viewpoints does not change the saved report or service recommendation.
+      {props.demo ? "Standard exports remain separate from this demo." :
+        "Separate POV PDFs are available to the report owner in Content Studio's Export PDF menu; standard PDFs and slide exports remain unchanged."}
     </p>
   </Card>;
 }

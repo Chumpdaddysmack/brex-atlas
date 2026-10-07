@@ -51,6 +51,8 @@ import { RoiPanel } from "@/components/RoiPanel";
 import { SitemapPanel } from "@/components/SitemapPanel";
 import { useDemoMode, DemoModeSwitch } from "@/components/DemoMode";
 import { DemoReport } from "@/components/DemoReport";
+import { PDF_EXECUTIVE_ROLES, pdfFilename, type PdfScope } from "@shared/pdf-export-options";
+import type { ExecutiveRole } from "@shared/executive-summary";
 
 const CHANNELS: { key: string; label: string; icon: any }[] = [
   { key: "blog", label: "Blog calendar", icon: FileText },
@@ -70,6 +72,7 @@ export default function ContentStudio() {
   const { toast } = useToast();
   const [activeChannel, setActiveChannel] = useState<string>("blog");
   const [selectedPiece, setSelectedPiece] = useState<ContentPiece | null>(null);
+  const [pdfExporting, setPdfExporting] = useState(false);
 
   const analysisQ = useQuery<Analysis>({
     queryKey: ["/api/analyses", analysisId],
@@ -134,15 +137,15 @@ export default function ContentStudio() {
 
   // Download the branded PDF at the requested scope. Uses fetch (credentials
   // included) then triggers a blob download so the auth cookie is sent.
-  const exportPdf = async (scope: "full" | "strategy" | "summary") => {
-    if (!plan?.id) return;
-    const scopeLabel =
+  const exportPdf = async (scope: PdfScope, pov?: ExecutiveRole) => {
+    if (!plan?.id || pdfExporting) return;
+    setPdfExporting(true);
+    const baseLabel =
       scope === "full" ? "full plan" : scope === "strategy" ? "strategy" : "executive summary";
+    const scopeLabel = pov ? `${pov} perspective ${baseLabel}` : baseLabel;
     try {
       toast({ title: "Preparing PDF…", description: `Generating ${scopeLabel}.` });
-      const res = await fetch(`/api/content-plans/${plan.id}/pdf?scope=${scope}`, {
-        credentials: "include",
-      });
+      const res = await apiRequest("GET", `/api/content-plans/${plan.id}/pdf?scope=${scope}${pov ? `&pov=${pov}` : ""}`);
       if (!res.ok) {
         const msg = await res.json().catch(() => ({ error: "Download failed" }));
         throw new Error(msg?.error ?? "Download failed");
@@ -150,11 +153,8 @@ export default function ContentStudio() {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const clientSafe = (analysisQ.data?.clientName ?? "client").replace(/[^a-z0-9-_]/gi, "_");
-      const scopeSlug =
-        scope === "full" ? "full-plan" : scope === "strategy" ? "strategy" : "executive-summary";
       a.href = url;
-      a.download = `${clientSafe}-${scopeSlug}.pdf`;
+      a.download = pdfFilename(analysisQ.data?.clientName ?? "client", scope, pov);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -166,6 +166,8 @@ export default function ContentStudio() {
         description: e?.message ?? "Unknown error",
         variant: "destructive",
       });
+    } finally {
+      setPdfExporting(false);
     }
   };
 
@@ -253,12 +255,13 @@ export default function ContentStudio() {
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button data-testid="button-export-pdf">
-                      <FileDown className="h-4 w-4 mr-2" /> Export PDF
+                    <Button data-testid="button-export-pdf" disabled={pdfExporting}>
+                      {pdfExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileDown className="h-4 w-4 mr-2" />}
+                      {pdfExporting ? "Preparing PDF…" : "Export PDF"}
                       <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuContent align="end" collisionPadding={12} className="w-72 max-w-[calc(100vw-24px)]">
                     <DropdownMenuLabel>Choose scope</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -291,6 +294,21 @@ export default function ContentStudio() {
                         Thesis, pillars, week 1 preview, next steps
                       </span>
                     </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Full plan + executive POV</DropdownMenuLabel>
+                    {PDF_EXECUTIVE_ROLES.map(role => (
+                      <DropdownMenuItem key={role} data-testid={`pdf-pov-${role.toLowerCase()}`}
+                        onClick={() => exportPdf("full", role)}
+                        className="flex flex-col items-start gap-0.5 py-2.5">
+                        <span className="font-medium">{role} perspective</span>
+                        <span className="text-xs text-muted-foreground">
+                          {role === "CEO" ? "Growth, priorities, competitive position" :
+                            role === "COO" ? "Execution, capacity, accountability" :
+                            role === "CMO" ? "Positioning, buyers, demand generation" :
+                            "Investment, financial evidence, risk"}
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

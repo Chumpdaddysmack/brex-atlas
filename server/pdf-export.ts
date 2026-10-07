@@ -1,4 +1,6 @@
 import PDFDocument from "pdfkit";
+import { buildExecutiveSummary, type ExecutiveRole, type ExecutiveSummaryInput } from "@shared/executive-summary";
+import { pdfFilename, type PdfScope } from "@shared/pdf-export-options";
 import { ENGAGEMENT } from "@shared/engagement-terms";
 import type {
   ContentPlanPayload,
@@ -38,7 +40,7 @@ import {
   drawCostCompareBars,
 } from "./pdf-charts";
 
-export type PdfScope = "full" | "strategy" | "summary";
+export type { PdfScope } from "@shared/pdf-export-options";
 
 // Brex Consulting brand colors
 const BRAND = {
@@ -64,6 +66,8 @@ interface StreamPdfArgs {
   clientName: string;
   clientUrl?: string | null;
   scope: PdfScope;
+  pov?: ExecutiveRole;
+  executiveInput?: ExecutiveSummaryInput;
   swot?: SwotAnalysis | null;
   pestel?: PestelAnalysis | null;
   porters?: PortersFiveForces | null;
@@ -76,15 +80,14 @@ export function streamContentPlanPdf({
   clientName,
   clientUrl,
   scope,
+  pov,
+  executiveInput,
   swot,
   pestel,
   porters,
   customerInsights,
 }: StreamPdfArgs) {
-  const safeName = (clientName || "client").replace(/[^a-z0-9-_]/gi, "_");
-  const scopeLabel =
-    scope === "full" ? "full-plan" : scope === "strategy" ? "strategy" : "executive-summary";
-  const filename = `${safeName}-${scopeLabel}.pdf`;
+  const filename = pdfFilename(clientName, scope, pov);
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
@@ -94,9 +97,9 @@ export function streamContentPlanPdf({
     margins: { top: 72, bottom: 72, left: 72, right: 72 },
     bufferPages: true,
     info: {
-      Title: `${clientName} — 12-week content strategy`,
-      Author: "Brex Consulting",
-      Subject: "Content strategy plan",
+      Title: `${clientName} — 12-week content strategy${pov ? ` — ${pov} perspective` : ""}`,
+      Author: pov ? "Perplexity Computer" : "Brex Consulting",
+      Subject: pov ? `${pov} executive brief and content strategy plan` : "Content strategy plan",
       Creator: "Brex Atlas",
     },
   });
@@ -113,7 +116,17 @@ export function streamContentPlanPdf({
 
   try {
     // -------- Cover page --------
-    renderCover(doc, clientName, clientUrl ?? null, scope);
+    renderCover(doc, clientName, clientUrl ?? null, scope, pov);
+
+    if (pov) {
+      renderExecutivePerspective(doc, {
+        ...executiveInput, clientName,
+        swot: executiveInput?.swot ?? swot,
+        porters: executiveInput?.porters ?? porters,
+        customerInsights: executiveInput?.customerInsights ?? customerInsights,
+      }, pov);
+      doc.addPage();
+    }
 
     sectionHeader(doc, "12-Month Engagement | On-Ramp Quarter");
     bodyParagraph(doc, ENGAGEMENT.term);
@@ -200,6 +213,7 @@ function renderCover(
   clientName: string,
   clientUrl: string | null,
   scope: PdfScope,
+  pov?: ExecutiveRole,
 ) {
   const { width, height } = doc.page;
 
@@ -241,6 +255,14 @@ function renderCover(
     .font(FONTS.sansOblique)
     .fontSize(16)
     .text(scopeTitle, 72, doc.y + 4);
+
+  if (pov) {
+    doc.fillColor(BRAND.navy).font(FONTS.sansBold).fontSize(14)
+      .text(`${pov} Perspective`, 72, doc.y + 14, { width: width - 144 });
+    doc.fillColor(BRAND.muted).font(FONTS.sans).fontSize(10)
+      .text("Role-specific executive brief with the supporting report preserved.", 72, doc.y + 6,
+        { width: width - 144, lineGap: 2 });
+  }
 
   if (clientUrl) {
     doc
@@ -301,6 +323,62 @@ function renderCover(
     .text(dateStr, width - 200, height - 145, { width: 128, align: "right" });
 
   doc.addPage();
+}
+
+// The same read-only projection used by Overview. No model call, new claims,
+// database writes, or changes to the supporting report are introduced here.
+function renderExecutivePerspective(doc: PDFKit.PDFDocument, input: ExecutiveSummaryInput, role: ExecutiveRole) {
+  const summary = buildExecutiveSummary(input, role);
+  const width = doc.page.width - 144;
+  type Block = { text: string; size?: number; bold?: boolean; color?: string; link?: string };
+  const height = (block: Block) => {
+    doc.font(block.bold ? FONTS.sansBold : FONTS.sans).fontSize(block.size ?? 10.5);
+    return doc.heightOfString(block.text, { width, lineGap: 3 }) + 8;
+  };
+  const write = (block: Block) => {
+    const h = height(block);
+    ensureSpace(doc, h <= doc.page.height - 144 ? h : 60);
+    doc.font(block.bold ? FONTS.sansBold : FONTS.sans).fontSize(block.size ?? 10.5)
+      .fillColor(block.color ?? BRAND.text)
+      .text(block.text, 72, doc.y, {
+        width, lineGap: 3, ...(block.link ? { link: block.link, underline: true } : {}),
+      });
+    doc.y += 8;
+  };
+  write({ text: `${role} Executive Perspective`, bold: true, size: 20, color: BRAND.navy });
+  write({ text: summary.focus, bold: true, size: 12, color: BRAND.navy });
+  write({ text: summary.opening });
+  write({ text: "This brief applies the selected executive viewpoint to saved report findings. It is not new research or additional verification. The supporting report, pricing, and recommendations remain unchanged.", size: 9, color: BRAND.muted });
+  for (const section of summary.sections) {
+    const blocks: Block[] = [
+      { text: section.title, bold: true, size: 14, color: BRAND.navy },
+      { text: section.framing },
+    ];
+    if (section.evidence) {
+      blocks.push(
+        { text: `Report basis: ${section.evidence.origin}`, bold: true, size: 9 },
+        { text: section.evidence.status, size: 9, color: BRAND.muted },
+        { text: section.evidence.text },
+      );
+      for (const source of section.evidence.sources) {
+        blocks.push({ text: `${source.title}${source.date ? ` (${source.date})` : ""}\n${source.url}`,
+          size: 9, color: BRAND.navy, link: source.url });
+      }
+      if (!section.evidence.sources.length) {
+        blocks.push({ text: "No direct source link is attached to this saved finding.", size: 9, color: BRAND.muted });
+      }
+    } else {
+      blocks.push({ text: "Not established in this saved report. Confirm this information before making a decision.", color: BRAND.muted });
+    }
+    blocks.push({ text: `Decision to discuss: ${section.question}`, bold: true });
+    // Keep normal-sized sections together; long evidence may flow across pages
+    // naturally, without truncation or a fixed-height clipping box.
+    const total = blocks.reduce((sum, block) => sum + height(block), 0);
+    ensureSpace(doc, total <= doc.page.height - 144 ? total : 100);
+    for (const block of blocks) write(block);
+    doc.y += 8;
+  }
+  write({ text: "Questions are discussion prompts, not established facts. Estimates, proposed outcomes, and missing information retain their original qualifications.", size: 9, color: BRAND.muted });
 }
 
 // =============================================================

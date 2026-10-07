@@ -15,6 +15,7 @@ import { registerWidgetRoutes } from "./widget";
 import { registerSnapshotRoutes } from "./widget-snapshot";
 import { normalizeBlogCalendar } from "./blog-calendar";
 import { streamContentPlanPdf, type PdfScope } from "./pdf-export";
+import { parsePdfPov } from "@shared/pdf-export-options";
 import { buildContentPlanPptx } from "./pptx-export";
 import { llmJson, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
 import { isPerplexityConfigured, pplxAsk } from "./perplexity-search";
@@ -654,6 +655,12 @@ export async function registerRoutes(
   });
 
   app.get("/api/content-plans/:id/pdf", async (req, res) => {
+    let pov;
+    try {
+      pov = parsePdfPov(req.query.pov);
+    } catch {
+      return res.status(400).json({ error: "POV must be CEO, COO, CMO, or CFO" });
+    }
     const plan = await storage.getContentPlan(req.params.id);
     if (!plan) return res.status(404).json({ error: "Plan not found" });
     if (plan.status !== "ready" || !plan.planJson) {
@@ -691,6 +698,14 @@ export async function registerRoutes(
         clientName: analysis.clientName,
         clientUrl: analysis.clientUrl,
         scope,
+        pov,
+        executiveInput: {
+          extraction: analysis.extraction,
+          strategy: analysis.strategy,
+          swot: analysis.swot,
+          porters: analysis.porters,
+          customerInsights: analysis.customerInsights,
+        },
         swot: analysis.swot ? JSON.parse(analysis.swot) : null,
         pestel: analysis.pestel ? JSON.parse(analysis.pestel) : null,
         porters: analysis.porters ? JSON.parse(analysis.porters) : null,
