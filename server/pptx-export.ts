@@ -9,6 +9,8 @@ import { PRICING_BENCHMARKS, BENCHMARK_SOURCES, formatMoney } from "./pricing-be
 import { compatiblePptx } from "./pptx-package";
 import { ENGAGEMENT } from "@shared/engagement-terms";
 import type { DeckScope } from "@shared/deck-export-options";
+import { engagementTimeline, thesisVisual, pillarCards, publishingHeatmap, retainerRangeCards,
+  benchmarkRanges, roiMetricCards, nextStepsFlow, weekOneCards, modelLimitations } from "./pptx-summary-visuals";
 
 export interface PptxExportArgs {
   payload: ContentPlanPayload;
@@ -67,6 +69,14 @@ async function cover(d: DeckLayout, args: PptxExportArgs) {
   } else {
     d.text(s, "Client strategy briefing", .6, 2, 8.8, 34, true, C.white);
   }
+  if (args.scope === "summary" && textHeight(args.clientName, 8.8, size, true) < .9) {
+    ["M1–3 / On-ramp", "M4–6", "M7–9", "M10–12"].forEach((label, i) => {
+      const x = .6 + i * 2.2;
+      s.addShape("roundRect", { ...scaled({ x, y: 3.18, w: 2.04, h: .48 }),
+        fill: { color: i ? "3B5577" : C.blue }, line: { color: i ? "3B5577" : C.blue } });
+      d.text(s, label, x + .12, 3.31, 1.8, 13, true, i === 0 ? C.text : C.white);
+    });
+  }
   d.text(s, args.scope === "summary" ? "Executive Summary | Presentation Edition" : "On-ramp quarter | 12-week content strategy", .6, 4.02, 8.8, 18, false, C.white);
   if (textHeight(args.clientUrl, 8.8, 11) <= .34) d.text(s, args.clientUrl, .6, 4.37, 8.8, 11, false, C.white, args.clientUrl);
   d.text(s, `Prepared by Brex Consulting · ${(args.generatedAt ?? new Date()).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, .6, 4.8, 8.8, 11, false, C.white);
@@ -87,15 +97,22 @@ function program(d: DeckLayout, p: ContentPlanPayload) {
     d.text(s, value, x + .2, y + .15, 3.85, 32, true, C.navy);
     d.text(s, label, x + .2, y + .93, 3.85, 13, false, C.muted);
   });
-  d.section("Strategic Thesis", [field("12-week direction", p.summary)]);
+  if (d.presentation) {
+    thesisVisual(d, p);
+    pillarCards(d, p);
+  } else {
+    d.section("Strategic Thesis", [field("12-week direction", p.summary)]);
+  }
   d.bars("Pillar Mix", Array.from(counts).map(([name, n]) => ({
     label: name, value: n, detail: `${n} posts\n${posts.length ? Math.round(n / posts.length * 100) : 0}%`,
   })), "Planned posts by content pillar");
-  pillars.forEach((pillar, i) => d.section(`Content Pillar ${i + 1}`, [
+  if (!d.presentation) pillars.forEach((pillar, i) => d.section(`Content Pillar ${i + 1}`, [
     field(pillar.name, pillar.description), field("Planned output", `${counts.get(pillar.name) ?? 0} posts`),
   ]));
   // Six weeks per panel: readable labels, repeated headings, no 12-column squeeze.
-  for (let start = 0; start < weeks.length; start += 6) {
+  if (d.presentation) {
+    publishingHeatmap(d, p);
+  } else for (let start = 0; start < weeks.length; start += 6) {
     const batch = weeks.slice(start, start + 6);
     d.table("Publishing Timeline", ["Content pillar", ...batch.map((_, i) => `W${start + i + 1}`)],
       [3.4, ...batch.map(() => 5.4 / batch.length)],
@@ -154,7 +171,8 @@ function customers(d: DeckLayout, c?: CustomerInsights | null) {
 
 function pricing(d: DeckLayout, compact = false) {
   const tierStart = d.slides.length;
-  d.table("Brex vs. Market | Retainers", ["Engagement", "Brex / mo", "Market low–high / mo"], [3.2, 2.1, 3.5],
+  if (compact) retainerRangeCards(d);
+  else d.table("Brex vs. Market | Retainers", ["Engagement", "Brex / mo", "Market low–high / mo"], [3.2, 2.1, 3.5],
     BREX_TIERS.map(t => [t.name, packageRange(t), `${money(t.industryLow)}–${money(t.industryHigh)}`]),
     "Approved monthly ranges; final fees depend on agreed scope. Market benchmarks are indicative.");
   if (compact) citeSlides(d, tierStart, BREX_TIERS.flatMap(t => t.industrySourceUrls));
@@ -174,7 +192,8 @@ function pricing(d: DeckLayout, compact = false) {
     ? summaryBenchmarks
     : labels.map(label => PRICING_BENCHMARKS.find(b => b.service.startsWith(label) && !b.service.includes("%"))).filter(Boolean);
   const benchmarkStart = d.slides.length;
-  d.table("Investment Benchmarks", ["Service", "Low", "Mean", "High"], [4, 1.6, 1.6, 1.6],
+  if (compact) benchmarkRanges(d, top.filter(Boolean) as typeof summaryBenchmarks);
+  else d.table("Investment Benchmarks", ["Service", "Low", "Mean", "High"], [4, 1.6, 1.6, 1.6],
     top.map(b => [compact ? `${b!.service}\n${b!.unit}` : b!.service, formatMoney(b!.low, b!.unit), formatMoney(b!.mean, b!.unit), formatMoney(b!.high, b!.unit)]),
     "Reference ranges from the existing pricing dataset");
   if (compact) citeSlides(d, benchmarkStart, top.flatMap(b => {
@@ -193,6 +212,11 @@ function sitemap(d: DeckLayout, p: ContentPlanPayload, compact = false) {
   ]);
   const types = new Map<string, number>(); pages.forEach(p => types.set(p.pageType, (types.get(p.pageType) ?? 0) + 1));
   if (compact) {
+    const intents = new Map<string, number>();
+    pages.forEach(p => intents.set(p.keywordIntent || "Unspecified", (intents.get(p.keywordIntent || "Unspecified") ?? 0) + 1));
+    d.bars("Site Architecture | Intent Mix", Array.from(intents, ([label, value]) => ({
+      label: labelize(label), value, detail: `${value} pages`,
+    })), "Count of proposed pages by intent; derived from the saved site architecture");
     d.table("Site Architecture | Summary", ["Page", "Path", "Intent"], [3.3, 3.5, 2],
       pages.map(p => [p.title, p.slug, p.keywordIntent]),
       "Compact page list from the Executive Summary PDF; detailed page briefs remain in the full report");
@@ -221,13 +245,18 @@ function sitemap(d: DeckLayout, p: ContentPlanPayload, compact = false) {
 function roi(d: DeckLayout, p: ContentPlanPayload, compact = false) {
   const r = p.roiProjections; if (!r) return;
   const { outcomes: o, assumptions: a, monthlyProjection: months } = r;
-  d.table("12-Month ROI Projections", ["Metric", "Modeled result"], [5.8, 3], [
+  if (compact) roiMetricCards(d, p, a.pricingVersion === PRICING_VERSION
+    ? "Modeled projections, not guaranteed outcomes"
+    : "Saved forecast predates current package ranges. Regenerate and review ROI in Atlas before use.");
+  else d.table("12-Month ROI Projections", ["Metric", "Modeled result"], [5.8, 3], [
     ["Total revenue", money(o.totalRevenue)], ["Closed-won deals", String(o.totalClosedWon)],
     ["Gross profit / program cost", `${o.roiMultiple.toFixed(2)}x`],
     ["Cost per lead", money(o.brexCostPerLead)], ["Payback", o.paybackMonth ? `Month ${o.paybackMonth}` : "Beyond 12 months"],
   ], a.pricingVersion === PRICING_VERSION ? "Modeled projections, not guaranteed outcomes"
     : "Saved forecast predates current package ranges. Regenerate and review ROI in Atlas before use.");
-  d.section("ROI | Assumptions & Limitations", [field("Read before using these projections", r.disclaimer || "Projections depend on the report assumptions, execution quality, and market conditions. Actual results may differ.")]);
+  const disclaimer = r.disclaimer || "Projections depend on the report assumptions, execution quality, and market conditions. Actual results may differ.";
+  if (compact) modelLimitations(d, disclaimer);
+  else d.section("ROI | Assumptions & Limitations", [field("Read before using these projections", disclaimer)]);
   const chart = (title: string, subtitle: string, data: { name: string; labels: string[]; values: number[] }[], currency = false, bar = false) => {
     const s = d.slide(title, subtitle);
     const peak = Math.max(1, ...data.flatMap(series => series.values));
@@ -265,11 +294,12 @@ function roi(d: DeckLayout, p: ContentPlanPayload, compact = false) {
 
 /** Exposed for deterministic geometry regression tests; no analysis or CRM writes. */
 export async function createContentPlanDeck(args: PptxExportArgs): Promise<DeckLayout> {
-  const d = new DeckLayout(args.clientName);
   const summaryOnly = args.scope === "summary";
+  const d = new DeckLayout(args.clientName, summaryOnly);
   if (summaryOnly) d.pptx.title = `${args.clientName} | Executive Summary`;
   await cover(d, args);
-  d.section("12-Month Growth Engagement", [
+  if (summaryOnly) engagementTimeline(d);
+  else d.section("12-Month Growth Engagement", [
     field("Engagement structure", ENGAGEMENT.term),
     field("Why six months", `${ENGAGEMENT.commitment} ${ENGAGEMENT.caveat}`),
     field("The on-ramp quarter", ENGAGEMENT.onRamp),
@@ -287,9 +317,7 @@ export async function createContentPlanDeck(args: PptxExportArgs): Promise<DeckL
       field("Scope-based pricing", "Final fees and deliverables require approval; additional work, media spend, software, and third-party costs are scoped separately. The full roadmap is not included in every package."),
     ]);
     const firstWeek = args.payload.blogCalendar?.[0];
-    if (firstWeek) d.table("Week 1 Preview", ["Planned post", "Pillar / date", "Buyer question"], [3.4, 2.2, 3.2],
-      firstWeek.posts.map(p => [p.title, `${p.pillar}\n${p.scheduledDate}`, p.targetQuery]),
-      `Week ${firstWeek.weekNumber} · ${firstWeek.weekOf} · same preview as the Executive Summary PDF`);
+    if (firstWeek) weekOneCards(d, firstWeek);
     roi(d, args.payload, true);
     sitemap(d, args.payload, true);
   } else {
@@ -305,7 +333,8 @@ export async function createContentPlanDeck(args: PptxExportArgs): Promise<DeckL
     d.slides.forEach(s => s.addNotes(notes));
     d.section("Pricing References", Array.from(urls).map(([url, text]) => ({ label: "Source", text, url })));
   }
-  d.section("Next Steps", [
+  if (summaryOnly) nextStepsFlow(d);
+  else d.section("Next Steps", [
     field("Approve", "Confirm strategy direction and content-pillar framing."),
     field("Plan", summaryOnly ? "Confirm publishing cadence: 10 posts per week baseline." : "Confirm the publishing cadence and distribution budget."),
     field("Launch", "Kick off week-one briefs with the Brex team."),

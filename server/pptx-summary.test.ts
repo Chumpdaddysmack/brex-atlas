@@ -48,6 +48,20 @@ test("the explicit full deck retains detailed sections and the legacy internal d
   assert.match(full.regions.map(r => r.text).join(" "), /Brex vs. Market \| Services/);
 });
 
+test("summary visuals paginate unusually long narrative and labels without text overlap", async () => {
+  const payload = structuredClone(executivePdfPayload);
+  payload.summary = "Long narrative describing the saved strategy and its constraints. ".repeat(70);
+  payload.contentPillars[0].name = "Long content pillar label with detailed company-specific positioning ".repeat(5);
+  payload.contentPillars[0].description = "Retain the original evidence and context in the presentation. ".repeat(55);
+  payload.blogCalendar[0].posts[0].title = "Long post title requiring flowing layout ".repeat(20);
+  const d = await createContentPlanDeck({ ...args, payload, scope: "summary" });
+  const overlaps = d.regions.flatMap((a, i) => d.regions.slice(i + 1).filter(b => a.slide === b.slide &&
+    Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > .01 &&
+    Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > .01));
+  assert.equal(overlaps.length, 0);
+  assert.ok(d.regions.some(r => r.text.includes("Long post title")));
+});
+
 test("rich citation paragraphs are repaired without losing text or links", async () => {
   const z = new JSZip();
   z.file("[Content_Types].xml", '<Types></Types>');

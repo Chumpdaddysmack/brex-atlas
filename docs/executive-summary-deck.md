@@ -20,6 +20,12 @@ Detailed SWOT, PESTEL, Porter's Five Forces, customer insights/persona/journey b
 
 This is an editable presentation of the summary content, not PDF-page screenshots. It does not invent findings, refresh research, or recompute saved financial projections. Slide count depends on report length; content continues rather than shrinking or clipping. Pricing-source footers and reference links are clickable, with full URLs retained in speaker notes.
 
+## Visual design
+
+Every summary slide uses the Brex navy, sky-blue, and light-slate presentation theme. Native editable graphics include the 12-month engagement timeline, publishing heatmap, KPI cards, content-pillar and week-one cards, retainer price-range comparisons, benchmark ranges, ROI visuals, site-intent mix, and the next-steps sequence. Qualitative/reference slides use structured panels rather than invented numerical illustrations.
+
+Charts use the saved report payload or existing approved catalog values. Existing citations, modeling caveats, and stale-pricing notices remain intact. Long labels and narratives fall back to measured flowing layouts instead of clipping.
+
 ## QA inventory
 
 - Summary default, explicit full, invalid scope, filenames.
@@ -35,8 +41,8 @@ Production deployment requires user approval after QA. Existing ready reports ca
 
 ## Verification
 
-37 automated tests passed, including summary-scope exclusions, preservation of the full renderer, PDF POV regression tests, calendar recovery, pagination, and PowerPoint packaging. TypeScript and production builds passed.
+38 automated tests passed, including summary-scope exclusions, preservation of the full renderer, long visual-content fallbacks, PDF POV regression tests, calendar recovery, pagination, and PowerPoint packaging. TypeScript and production builds passed.
 
-An existing Long May export fixture produced a 33-slide summary presentation with no text-region collisions. All rendered slides were reviewed via contact sheets; pricing slides were re-rendered and checked after adding explicit billing units. The deck contains native editable text, tables, and charts, with next steps last. The final PowerPoint passed the OOXML repair checker with no repairs needed.
+An existing Long May export fixture produced a 32-slide visual summary presentation with no text-region collisions. All rendered slides were reviewed via contact sheets, with full-size visual spot checks and a final timeline contrast correction. The deck contains native editable text, shapes, tables, and charts, with next steps last. The final PowerPoint passed the OOXML repair checker with no repairs needed. This historical fixture is layout-test data, not a refreshed client report.
 
 Desktop summary and full downloads and a mobile summary download passed. Invalid scope returned 400; a simulated export failure showed a recoverable error and restored the button. No browser runtime errors or mobile horizontal overflow were observed. No live report was regenerated or modified during QA.

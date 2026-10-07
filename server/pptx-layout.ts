@@ -58,7 +58,7 @@ export class DeckLayout {
   readonly slides: PptxGenJS.Slide[] = [];
   readonly regions: TextRegion[] = [];
   readonly footerSources = new Map<number, { label: string; url: string }[]>();
-  constructor(readonly client: string) {
+  constructor(readonly client: string, readonly presentation = false) {
     this.pptx.layout = "LAYOUT_WIDE";
     this.pptx.author = "Brex Consulting";
     this.pptx.company = "Brex Consulting";
@@ -82,10 +82,16 @@ export class DeckLayout {
   slide(title: string, subtitle?: string): PptxGenJS.Slide {
     const slide = this.pptx.addSlide();
     this.slides.push(slide);
-    slide.background = { color: C.white };
+    slide.background = { color: this.presentation ? "F2F6FB" : C.white };
+    if (this.presentation) {
+      slide.addShape("rect", { ...scaled({ x: 0, y: 0, w: 10, h: 1.27 }),
+        fill: { color: C.navy }, line: { color: C.navy } });
+      slide.addShape("roundRect", { ...scaled({ x: .45, y: 1.37, w: 9.1, h: 3.65 }),
+        fill: { color: C.white }, line: { color: C.border, width: .6 } });
+    }
     // Section titles are controlled, short labels; long client content belongs in body.
-    this.text(slide, title, .6, .43, 8.8, 32, true, C.navy);
-    if (subtitle) this.text(slide, subtitle, .6, 1.04, 8.8, 11, false, C.muted);
+    this.text(slide, title, .6, .43, 8.8, 32, true, this.presentation ? C.white : C.navy);
+    if (subtitle) this.text(slide, subtitle, .6, 1.04, 8.8, 11, false, this.presentation ? "D5E8FA" : C.muted);
     return slide;
   }
   section(title: string, blocks: Block[], subtitle?: string): void {
@@ -102,6 +108,10 @@ export class DeckLayout {
         const height = Math.max(textHeight(block.label, 2.2, 15, true), textHeight(block.text, 6.2, 15));
         if (height < 2.1) {
           if (y + height > BOX.bottom) next();
+          if (this.presentation) {
+            slide!.addShape("roundRect", { ...scaled({ x: .52, y: y - .04, w: 8.96, h: height + .12 }),
+              fill: { color: blockIndex % 2 ? "F2F6FB" : "EAF1F8" }, line: { color: "FFFFFF", transparency: 100 } });
+          }
           this.text(slide!, block.label, .6, y, 2.2, 15, true, C.navy);
           this.text(slide!, block.text, 3.2, y, 6.2, 15, false, C.text, block.url);
           y += height + (block.label === "Source" ? .12 : .23);
