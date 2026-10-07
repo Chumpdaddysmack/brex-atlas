@@ -777,7 +777,7 @@ function renderInvestmentBenchmarks(
 // =============================================================
 // Brex vs. Market — Comparative Pricing Matrix
 // =============================================================
-function renderBrexPricingMatrix(
+export function renderBrexPricingMatrix(
   doc: PDFKit.PDFDocument,
   opts: { compact?: boolean } = {},
 ) {
@@ -982,32 +982,55 @@ function renderBrexPricingMatrix(
     // Table header
     const lTableX = 72;
     const lTableW = doc.page.width - 144;
-    const lServiceW = lTableW * 0.40;
-    const lBrexW = lTableW * 0.16;
-    const lIndW = lTableW * 0.22;
-    const lSavW = lTableW * 0.13;
-    const lPosW = lTableW * 0.09;
-
-    doc
-      .rect(lTableX, doc.y, lTableW, 20)
-      .fillColor(BRAND.navy)
-      .fill();
-    doc
-      .fillColor("#FFFFFF")
-      .font(FONTS.sansBold)
-      .fontSize(8.5);
-    const lhy = doc.y + 6;
-    doc.text("Service", lTableX + 8, lhy, { width: lServiceW - 16 });
-    doc.text("Brex", lTableX + lServiceW, lhy, { width: lBrexW - 8 });
-    doc.text("Industry Mid-Market", lTableX + lServiceW + lBrexW, lhy, { width: lIndW - 8 });
-    doc.text("vs Mid", lTableX + lServiceW + lBrexW + lIndW, lhy, { width: lSavW - 8 });
-    doc.text("Position", lTableX + lServiceW + lBrexW + lIndW + lSavW, lhy, { width: lPosW - 8 });
-    doc.y += 20;
+    const lServiceW = lTableW * 0.36;
+    const lBrexW = lTableW * 0.14;
+    const lIndW = lTableW * 0.23;
+    const lSavW = lTableW * 0.12;
+    const lPosW = lTableW * 0.15;
+    const measure = (text: string, font: string, size: number, width: number) =>
+      doc.font(font).fontSize(size).heightOfString(text, { width, lineGap: 0, characterSpacing: 0 });
+    const serviceHeaders = [
+      { text: "Service", x: lTableX + 8, width: lServiceW - 16 },
+      { text: "Brex", x: lTableX + lServiceW, width: lBrexW - 8 },
+      { text: "Industry Mid-Market", x: lTableX + lServiceW + lBrexW, width: lIndW - 8 },
+      { text: "vs Mid", x: lTableX + lServiceW + lBrexW + lIndW, width: lSavW - 8 },
+      { text: "Position", x: lTableX + lServiceW + lBrexW + lIndW + lSavW, width: lPosW - 8 },
+    ];
+    const serviceHeaderH = Math.ceil(Math.max(...serviceHeaders.map(cell =>
+      measure(cell.text, FONTS.sansBold, 8.5, cell.width)))) + 14;
+    function drawServiceHeader() {
+      const y = doc.y;
+      doc.rect(lTableX, y, lTableW, serviceHeaderH).fill(BRAND.navy);
+      doc.fillColor("#FFFFFF").font(FONTS.sansBold).fontSize(8.5);
+      for (const cell of serviceHeaders)
+        doc.text(cell.text, cell.x, y + 7, { width: cell.width, lineGap: 0, characterSpacing: 0 });
+      doc.x = lTableX;
+      doc.y = y + serviceHeaderH + 4;
+    }
+    const layouts = BREX_LINE_ITEMS.map(item => {
+      const nameH = measure(item.service, FONTS.sansBold, 8.5, lServiceW - 16);
+      const unitH = measure(item.brexUnit, FONTS.sans, 7, lServiceW - 16);
+      const range = `${formatBrexPrice(item.benchmarkLow, item.benchmarkUnit)} – ${formatBrexPrice(item.benchmarkHigh, item.benchmarkUnit)}`;
+      const rangeH = measure(range, FONTS.sans, 9, lIndW - 8);
+      const midH = measure(`Mid: ${formatBrexPrice(item.benchmarkMid, item.benchmarkUnit)}`, FONTS.sans, 7, lIndW - 8);
+      const priceH = measure(formatBrexPrice(item.brexPrice, item.brexUnit), FONTS.sansBold, 10, lBrexW - 8);
+      const savingsH = measure(computeSavings(item.brexPrice, item.benchmarkMid).label, FONTS.sansBold, 11, lSavW - 8);
+      const positionH = measure(positioningColor(item.positioning).label, FONTS.sansBold, 7, lPosW - 8);
+      return { nameH, range, rangeH, height: Math.ceil(Math.max(
+        nameH + 3 + unitH, rangeH + 3 + midH, priceH, savingsH, positionH,
+      )) + 14 };
+    });
+    ensureSpace(doc, serviceHeaderH + 4 + layouts[0].height + 2);
+    drawServiceHeader();
 
     for (let i = 0; i < BREX_LINE_ITEMS.length; i++) {
       const item = BREX_LINE_ITEMS[i];
-      const lrowH = 30;
-      ensureSpace(doc, lrowH + 4);
+      const layout = layouts[i];
+      const lrowH = layout.height;
+      if (doc.y + lrowH + 2 > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        drawServiceHeader();
+      }
       const y = doc.y;
       const zebra = i % 2 === 0 ? "#FFFFFF" : "#F9FAFB";
       doc.rect(lTableX, y, lTableW, lrowH).fillColor(zebra).fill();
@@ -1025,12 +1048,12 @@ function renderBrexPricingMatrix(
         .fillColor(BRAND.text)
         .font(FONTS.sansBold)
         .fontSize(8.5)
-        .text(item.service, lTableX + 8, y + 6, { width: lServiceW - 16 });
+        .text(item.service, lTableX + 8, y + 7, { width: lServiceW - 16, lineGap: 0, characterSpacing: 0 });
       doc
         .fillColor(BRAND.muted)
         .font(FONTS.sans)
         .fontSize(7)
-        .text(item.brexUnit, lTableX + 8, y + 18, { width: lServiceW - 16 });
+        .text(item.brexUnit, lTableX + 8, y + 7 + layout.nameH + 3, { width: lServiceW - 16, lineGap: 0, characterSpacing: 0 });
 
       // Brex price
       doc
@@ -1047,10 +1070,10 @@ function renderBrexPricingMatrix(
         .font(FONTS.sans)
         .fontSize(9)
         .text(
-          `${formatBrexPrice(item.benchmarkLow, item.benchmarkUnit)} – ${formatBrexPrice(item.benchmarkHigh, item.benchmarkUnit)}`,
+          layout.range,
           lTableX + lServiceW + lBrexW,
-          y + 6,
-          { width: lIndW - 8 },
+          y + 7,
+          { width: lIndW - 8, lineGap: 0, characterSpacing: 0 },
         );
       doc
         .fillColor(BRAND.muted)
@@ -1059,8 +1082,8 @@ function renderBrexPricingMatrix(
         .text(
           `Mid: ${formatBrexPrice(item.benchmarkMid, item.benchmarkUnit)}`,
           lTableX + lServiceW + lBrexW,
-          y + 18,
-          { width: lIndW - 8 },
+          y + 7 + layout.rangeH + 3,
+          { width: lIndW - 8, lineGap: 0, characterSpacing: 0 },
         );
 
       // Savings %
@@ -1083,21 +1106,28 @@ function renderBrexPricingMatrix(
         });
 
       doc.y = y + lrowH + 2;
+      doc.x = lTableX;
     }
 
-    doc.moveDown(0.4);
+    const pricingNote =
+      `Blended hourly rate: $${BREX_BLENDED_HOURLY}/hr (senior fractional CMO, mid-market band $200–$500/hr per 2026 pricing surveys). ` +
+      "Monthly package ranges vary with agreed scope; no fixed bundle discount is promised.";
+    doc.font(FONTS.sansOblique).fontSize(8);
+    const noteHeight = doc.heightOfString(pricingNote, { width: lTableW, lineGap: 2 });
+    ensureSpace(doc, noteHeight + 12);
+    doc.y += 8;
     doc
       .fillColor(BRAND.muted)
       .font(FONTS.sansOblique)
       .fontSize(8)
       .text(
-        `Blended hourly rate: $${BREX_BLENDED_HOURLY}/hr (senior fractional CMO, mid-market band $200–$500/hr per 2026 pricing surveys). ` +
-          "Monthly package ranges vary with agreed scope; no fixed bundle discount is promised.",
-        { lineGap: 2 },
+        pricingNote, lTableX, doc.y,
+        { width: lTableW, lineGap: 2 },
       );
   }
 
   doc.moveDown(0.5);
+  doc.x = tableX;
 }
 
 function renderSourcesAppendix(doc: PDFKit.PDFDocument) {
