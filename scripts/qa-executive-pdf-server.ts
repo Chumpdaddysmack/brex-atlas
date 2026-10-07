@@ -4,6 +4,8 @@ import path from "node:path";
 import { streamContentPlanPdf } from "../server/pdf-export";
 import { parsePdfPov } from "../shared/pdf-export-options";
 import { executivePdfInput, executivePdfPayload } from "./fixtures/executive-pdf";
+import { buildContentPlanPptx } from "../server/pptx-export";
+import { parseDeckScope, deckFilename } from "../shared/deck-export-options";
 
 const app = express();
 const analysis = { id: "qa-pov", status: "done", progress: 100, createdAt: Date.now(),
@@ -17,6 +19,17 @@ app.get("/api/config-status", (_req, res) => res.json({}));
 app.get("/api/analyses/qa-pov", (_req, res) => res.json(analysis));
 app.get("/api/analyses/qa-pov/content-plan", (_req, res) => res.json(plan));
 app.get("/api/content-plans/qa-pov-plan/pieces", (_req, res) => res.json([]));
+app.get("/api/content-plans/qa-pov-plan/pptx", async (req, res) => {
+  try {
+    const scope = parseDeckScope(req.query.scope);
+    // Invalid URL avoids external logo lookup in this synthetic test.
+    const buffer = await buildContentPlanPptx({ payload: executivePdfPayload, clientName: analysis.clientName,
+      clientUrl: "", scope });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+    res.setHeader("Content-Disposition", `attachment; filename="${deckFilename(analysis.clientName, scope)}"`);
+    res.end(buffer);
+  } catch (e) { res.status(400).json({ error: String(e) }); }
+});
 app.get("/api/content-plans/qa-pov-plan/pdf", (req, res) => {
   let pov;
   try { pov = parsePdfPov(req.query.pov); }

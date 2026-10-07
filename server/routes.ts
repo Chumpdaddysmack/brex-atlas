@@ -16,6 +16,7 @@ import { registerSnapshotRoutes } from "./widget-snapshot";
 import { normalizeBlogCalendar } from "./blog-calendar";
 import { streamContentPlanPdf, type PdfScope } from "./pdf-export";
 import { parsePdfPov } from "@shared/pdf-export-options";
+import { parseDeckScope, deckFilename } from "@shared/deck-export-options";
 import { buildContentPlanPptx } from "./pptx-export";
 import { llmJson, SCHEMA_ROI_ASSUMPTIONS } from "./llm";
 import { isPerplexityConfigured, pplxAsk } from "./perplexity-search";
@@ -598,6 +599,12 @@ export async function registerRoutes(
   });
 
   app.get("/api/content-plans/:id/pptx", async (req, res) => {
+    let scope;
+    try {
+      scope = parseDeckScope(req.query.scope);
+    } catch {
+      return res.status(400).json({ error: "Deck scope must be summary or full" });
+    }
     const plan = await storage.getContentPlan(req.params.id);
     if (!plan) return res.status(404).json({ error: "Plan not found" });
     if (plan.status !== "ready" || !plan.planJson) {
@@ -625,6 +632,7 @@ export async function registerRoutes(
     try {
       const buffer = await buildContentPlanPptx({
         payload,
+        scope,
         clientName: analysis.clientName,
         clientUrl: analysis.clientUrl,
         swot: analysis.swot ? JSON.parse(analysis.swot) : null,
@@ -633,14 +641,13 @@ export async function registerRoutes(
         customerInsights: analysis.customerInsights ? safeParseCI(analysis.customerInsights) : null,
       });
 
-      const safeName = (analysis.clientName || "client").replace(/[^a-z0-9-_]/gi, "_");
       res.setHeader(
         "Content-Type",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       );
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename="${safeName}-content-strategy-deck.pptx"`,
+        `attachment; filename="${deckFilename(analysis.clientName, scope)}"`,
       );
       res.setHeader("Content-Length", String(buffer.length));
       res.end(buffer);

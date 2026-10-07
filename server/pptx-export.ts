@@ -8,12 +8,14 @@ import { PRICING_VERSION, packageRange } from "@shared/service-packages";
 import { PRICING_BENCHMARKS, BENCHMARK_SOURCES, formatMoney } from "./pricing-benchmarks";
 import { compatiblePptx } from "./pptx-package";
 import { ENGAGEMENT } from "@shared/engagement-terms";
+import type { DeckScope } from "@shared/deck-export-options";
 
 export interface PptxExportArgs {
   payload: ContentPlanPayload;
   clientName: string;
   clientUrl: string;
   generatedAt?: Date;
+  scope?: DeckScope;
   swot?: SwotAnalysis | null;
   pestel?: PestelAnalysis | null;
   porters?: PortersFiveForces | null;
@@ -26,6 +28,22 @@ const sources = (items: FrameworkSource[] = []): Block[] => items.map(s => ({
   url: s.url,
 }));
 const labelize = (s: string) => s.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]/g, " ").replace(/^./, c => c.toUpperCase());
+const summaryBenchmarks = PRICING_BENCHMARKS.filter(b =>
+  ["Blog content", "Fractional CMO", "SEO/AEO", "LinkedIn Ads management"].some(label => b.service.includes(label))).slice(0, 4);
+function summarySourceMap() {
+  const usedKeys = new Set(summaryBenchmarks.map(b => b.sourceKey));
+  const urls = new Map(BENCHMARK_SOURCES.filter(s => usedKeys.has(s.key)).map(s => [s.url, `${s.publisher} | ${s.title}`]));
+  BREX_TIERS.forEach(t => t.industrySourceUrls.forEach(url => {
+    if (!urls.has(url)) urls.set(url, BENCHMARK_SOURCES.find(s => s.url === url)?.publisher || new URL(url).hostname);
+  }));
+  return urls;
+}
+function citeSlides(d: DeckLayout, start: number, urls: string[]) {
+  const refs = [...new Set(urls)].map(url => ({
+    label: BENCHMARK_SOURCES.find(s => s.url === url)?.publisher || new URL(url).hostname.replace(/^www\./, ""), url,
+  }));
+  for (let i = start; i < d.slides.length; i++) d.footerSources.set(i, refs);
+}
 // Enumerate selected structured fields without dropping longer values or array entries.
 const details = (obj: Record<string, unknown>): Block[] => Object.entries(obj)
   .filter(([, v]) => v !== undefined && v !== null && v !== "")
@@ -34,7 +52,7 @@ const details = (obj: Record<string, unknown>): Block[] => Object.entries(obj)
 async function cover(d: DeckLayout, args: PptxExportArgs) {
   const s = d.pptx.addSlide(); d.slides.push(s); s.background = { color: C.navy };
   d.text(s, "BREX CONSULTING", .6, .55, 6.8, 15, true, C.white);
-  d.text(s, "ATLAS / CONTENT STRATEGY BRIEFING", .6, 1.05, 7, 11, true, C.white);
+  d.text(s, args.scope === "summary" ? "ATLAS / EXECUTIVE SUMMARY" : "ATLAS / CONTENT STRATEGY BRIEFING", .6, 1.05, 7, 11, true, C.white);
   // Logo has its own reserved band and never shifts the title into the footer.
   try {
     const logo = await fetchProspectLogo(args.clientUrl);
@@ -49,7 +67,7 @@ async function cover(d: DeckLayout, args: PptxExportArgs) {
   } else {
     d.text(s, "Client strategy briefing", .6, 2, 8.8, 34, true, C.white);
   }
-  d.text(s, "On-ramp quarter | 12-week content strategy", .6, 4.02, 8.8, 18, false, C.white);
+  d.text(s, args.scope === "summary" ? "Executive Summary | Presentation Edition" : "On-ramp quarter | 12-week content strategy", .6, 4.02, 8.8, 18, false, C.white);
   if (textHeight(args.clientUrl, 8.8, 11) <= .34) d.text(s, args.clientUrl, .6, 4.37, 8.8, 11, false, C.white, args.clientUrl);
   d.text(s, `Prepared by Brex Consulting · ${(args.generatedAt ?? new Date()).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, .6, 4.8, 8.8, 11, false, C.white);
   if (textHeight(args.clientName, 8.8, size, true) > 1.9) d.section("Prepared for", [field("Client", args.clientName)]);
@@ -134,29 +152,38 @@ function customers(d: DeckLayout, c?: CustomerInsights | null) {
   d.section("Customer Evidence Sources", sources(c.vocSources));
 }
 
-function pricing(d: DeckLayout) {
+function pricing(d: DeckLayout, compact = false) {
+  const tierStart = d.slides.length;
   d.table("Brex vs. Market | Retainers", ["Engagement", "Brex / mo", "Market low–high / mo"], [3.2, 2.1, 3.5],
     BREX_TIERS.map(t => [t.name, packageRange(t), `${money(t.industryLow)}–${money(t.industryHigh)}`]),
     "Approved monthly ranges; final fees depend on agreed scope. Market benchmarks are indicative.");
-  BREX_TIERS.forEach(t => d.section(t.name, [
+  if (compact) citeSlides(d, tierStart, BREX_TIERS.flatMap(t => t.industrySourceUrls));
+  if (!compact) BREX_TIERS.forEach(t => d.section(t.name, [
     field("Best for", t.bestFor),
     field("Monthly investment", `${packageRange(t)} per month. Final fee subject to agreed scope.`),
     field("Scope", "Baseline service mix shown. Final fee and deliverables require approval; additional work and third-party costs are scoped separately."),
     ...t.includes.map((v, i) => field(`Included ${i + 1}`, v)),
     ...t.industrySourceUrls.map(url => ({ label: "Source", text: new URL(url).hostname, url })),
   ]));
-  d.table("Brex vs. Market | Services", ["Service", "Brex", "Market midpoint", "Vs. midpoint"], [3.2, 1.9, 2.2, 1.5],
+  if (!compact) d.table("Brex vs. Market | Services", ["Service", "Brex", "Market midpoint", "Vs. midpoint"], [3.2, 1.9, 2.2, 1.5],
     BREX_LINE_ITEMS.map(v => [v.service, `${v.brexUnit === "% of spend" ? `${v.brexPrice}%` : money(v.brexPrice)}\n${v.brexUnit}`,
       `${v.benchmarkUnit === "% of spend" ? `${v.benchmarkMid}%` : money(v.benchmarkMid)}\n${v.benchmarkUnit}`, computeSavings(v.brexPrice, v.benchmarkMid).label]),
     `Blended delivery rate: ${money(BREX_BLENDED_HOURLY)}/hour · catalog unchanged`);
   const labels = ["Blog content", "SEO/AEO", "Fractional CMO", "LinkedIn Ads management"];
-  const top = labels.map(label => PRICING_BENCHMARKS.find(b => b.service.startsWith(label) && !b.service.includes("%"))).filter(Boolean);
+  const top = compact
+    ? summaryBenchmarks
+    : labels.map(label => PRICING_BENCHMARKS.find(b => b.service.startsWith(label) && !b.service.includes("%"))).filter(Boolean);
+  const benchmarkStart = d.slides.length;
   d.table("Investment Benchmarks", ["Service", "Low", "Mean", "High"], [4, 1.6, 1.6, 1.6],
-    top.map(b => [b!.service, formatMoney(b!.low, b!.unit), formatMoney(b!.mean, b!.unit), formatMoney(b!.high, b!.unit)]),
+    top.map(b => [compact ? `${b!.service}\n${b!.unit}` : b!.service, formatMoney(b!.low, b!.unit), formatMoney(b!.mean, b!.unit), formatMoney(b!.high, b!.unit)]),
     "Reference ranges from the existing pricing dataset");
+  if (compact) citeSlides(d, benchmarkStart, top.flatMap(b => {
+    const s = BENCHMARK_SOURCES.find(s => s.key === b!.sourceKey);
+    return s ? [s.url] : [];
+  }));
 }
 
-function sitemap(d: DeckLayout, p: ContentPlanPayload) {
+function sitemap(d: DeckLayout, p: ContentPlanPayload, compact = false) {
   const sm = p.sitemap; if (!sm) return;
   const pages = sm.pages ?? [];
   d.section("SEO / GEO Site Architecture", [field("Architecture", sm.overview),
@@ -165,6 +192,12 @@ function sitemap(d: DeckLayout, p: ContentPlanPayload) {
     field("Linking coverage", `${sm.linkingSummary?.blogsLinked ?? 0} blogs linked · ${sm.linkingSummary?.socialsLinked ?? 0} social posts linked · ${sm.linkingSummary?.orphanPages?.length ?? 0} orphan pages`),
   ]);
   const types = new Map<string, number>(); pages.forEach(p => types.set(p.pageType, (types.get(p.pageType) ?? 0) + 1));
+  if (compact) {
+    d.table("Site Architecture | Summary", ["Page", "Path", "Intent"], [3.3, 3.5, 2],
+      pages.map(p => [p.title, p.slug, p.keywordIntent]),
+      "Compact page list from the Executive Summary PDF; detailed page briefs remain in the full report");
+    return;
+  }
   d.bars("Page Type Mix", Array.from(types).map(([t, n]) => ({ label: labelize(t), value: n })), "Pages by architectural role");
   // Match prior highlight scope: key pages first, with the complete directory following.
   const keyTypes = ["home", "solution", "service", "comparison", "case-study"];
@@ -185,7 +218,7 @@ function sitemap(d: DeckLayout, p: ContentPlanPayload) {
     pages.map(p => [p.title, p.slug, p.keywordIntent]));
 }
 
-function roi(d: DeckLayout, p: ContentPlanPayload) {
+function roi(d: DeckLayout, p: ContentPlanPayload, compact = false) {
   const r = p.roiProjections; if (!r) return;
   const { outcomes: o, assumptions: a, monthlyProjection: months } = r;
   d.table("12-Month ROI Projections", ["Metric", "Modeled result"], [5.8, 3], [
@@ -216,12 +249,14 @@ function roi(d: DeckLayout, p: ContentPlanPayload) {
   const labels = months.map(m => `M${m.month}`);
   chart("Organic Traffic Growth", "Monthly visitors as published content matures", [{ name: "Visitors", labels, values: months.map(m => m.monthlyVisitors) }]);
   chart("Lead Growth", "Monthly leads shown separately to preserve a readable scale", [{ name: "Leads", labels, values: months.map(m => m.monthlyLeads) }]);
+  if (!compact) {
   const stages: [string, number][] = [["Visitors", o.month12CumulativeVisitors], ["Leads", o.totalLeads], ["MQLs", o.totalMqls], ["SQLs", o.totalSqls], ["Closed won", o.totalClosedWon]];
   d.table("12-Month Conversion Funnel", ["Stage", "Volume", "From prior stage"], [3.8, 2.5, 2.5],
     stages.map(([label, value], i) => [label, value.toLocaleString(), i ? (stages[i - 1][1] > 0 ? `${(value / stages[i - 1][1] * 100).toFixed(1)}%` : "N/A") : "Baseline"]));
   chart("Program Cost vs. Paid Media", "12-month cost to generate the modeled lead volume", [{ name: "Cost", labels: ["Brex program", "Paid CPL equivalent"], values: [a.programCost12Mo, o.paidEquivalentCost] }], true, true);
   d.section("Cost Comparison | Readout", [field("Savings vs. paid equivalent", `${money(o.savingsVsPaid)} over 12 months`),
     field("Basis", "Paid-equivalent cost uses the report’s paid CPL benchmark; this is a modeled comparison, not a guarantee.")]);
+  }
   chart("Payback Timeline", o.paybackMonth ? `Modeled breakeven at month ${o.paybackMonth}` : "Payback extends beyond the modeled period", [
     { name: "Cumulative gross profit", labels, values: months.map(m => m.cumulativeGrossProfit) },
     { name: "Cumulative program cost", labels, values: months.map(m => a.programCost12Mo / 12 * m.month) },
@@ -231,6 +266,8 @@ function roi(d: DeckLayout, p: ContentPlanPayload) {
 /** Exposed for deterministic geometry regression tests; no analysis or CRM writes. */
 export async function createContentPlanDeck(args: PptxExportArgs): Promise<DeckLayout> {
   const d = new DeckLayout(args.clientName);
+  const summaryOnly = args.scope === "summary";
+  if (summaryOnly) d.pptx.title = `${args.clientName} | Executive Summary`;
   await cover(d, args);
   d.section("12-Month Growth Engagement", [
     field("Engagement structure", ENGAGEMENT.term),
@@ -239,20 +276,46 @@ export async function createContentPlanDeck(args: PptxExportArgs): Promise<DeckL
     field("Beyond the on-ramp", ENGAGEMENT.continuation),
   ]);
   program(d, args.payload);
-  frameworks(d, args);
-  customers(d, args.customerInsights);
-  pricing(d);
-  sitemap(d, args.payload);
-  roi(d, args.payload);
+  if (!summaryOnly) {
+    frameworks(d, args);
+    customers(d, args.customerInsights);
+  }
+  pricing(d, summaryOnly);
+  if (summaryOnly) {
+    d.section("Retainer Scope & Evidence", [
+      ...BREX_TIERS.map(t => field(t.name, t.bestFor)),
+      field("Scope-based pricing", "Final fees and deliverables require approval; additional work, media spend, software, and third-party costs are scoped separately. The full roadmap is not included in every package."),
+    ]);
+    const firstWeek = args.payload.blogCalendar?.[0];
+    if (firstWeek) d.table("Week 1 Preview", ["Planned post", "Pillar / date", "Buyer question"], [3.4, 2.2, 3.2],
+      firstWeek.posts.map(p => [p.title, `${p.pillar}\n${p.scheduledDate}`, p.targetQuery]),
+      `Week ${firstWeek.weekNumber} · ${firstWeek.weekOf} · same preview as the Executive Summary PDF`);
+    roi(d, args.payload, true);
+    sitemap(d, args.payload, true);
+  } else {
+    sitemap(d, args.payload);
+    roi(d, args.payload);
+  }
+  if (summaryOnly) {
+    // Keep supporting source lists out of the speaking flow, while retaining
+    // their full URLs in native PowerPoint speaker notes on every summary slide.
+    const urls = summarySourceMap();
+    const notes = "Executive Summary PDF presentation edition. Saved findings and modeled estimates are unchanged.\nPricing reference URLs:\n" +
+      Array.from(urls, ([url, title]) => `${title}: ${url}`).join("\n");
+    d.slides.forEach(s => s.addNotes(notes));
+    d.section("Pricing References", Array.from(urls).map(([url, text]) => ({ label: "Source", text, url })));
+  }
   d.section("Next Steps", [
     field("Approve", "Confirm strategy direction and content-pillar framing."),
-    field("Plan", "Confirm the publishing cadence and distribution budget."),
+    field("Plan", summaryOnly ? "Confirm publishing cadence: 10 posts per week baseline." : "Confirm the publishing cadence and distribution budget."),
     field("Launch", "Kick off week-one briefs with the Brex team."),
     field("Review", "Schedule the biweekly review checkpoint."),
   ]);
+  if (!summaryOnly) {
   const urls = new Map(BENCHMARK_SOURCES.map(s => [s.url, `${s.publisher} | ${s.title}`]));
   BREX_LINE_ITEMS.forEach(v => v.sourceUrls.forEach(url => { if (!urls.has(url)) urls.set(url, new URL(url).hostname); }));
   d.section("Sources & Citations", Array.from(urls).map(([url, text]) => ({ label: "Source", text, url })));
+  }
   d.finish();
   return d;
 }

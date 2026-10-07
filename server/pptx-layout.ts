@@ -57,6 +57,7 @@ export class DeckLayout {
   readonly pptx = new PptxGenJS();
   readonly slides: PptxGenJS.Slide[] = [];
   readonly regions: TextRegion[] = [];
+  readonly footerSources = new Map<number, { label: string; url: string }[]>();
   constructor(readonly client: string) {
     this.pptx.layout = "LAYOUT_WIDE";
     this.pptx.author = "Brex Consulting";
@@ -184,7 +185,20 @@ export class DeckLayout {
   finish(): void {
     this.slides.forEach((s, i) => {
       if (i === 0) return;
-      this.text(s, "BREX CONSULTING  /  ATLAS", .6, BOX.footer, 6, 9, true, C.muted);
+      const refs = this.footerSources.get(i);
+      if (refs?.length) {
+        const text = `Source: ${refs.map(r => r.label).join(" · ")}`;
+        const h = textHeight(text, 7.6, 9);
+        if (h > .24) throw new Error("Summary source footer is too long");
+        s.addText([{ text: "Source: " }, ...refs.flatMap((r, n) => [
+          ...(n ? [{ text: " · " }] : []),
+          { text: r.label, options: { hyperlink: { url: r.url } } },
+        ])], { ...scaled({ x: .6, y: BOX.footer, w: 7.6, h }), fontFace: "Arial", fontSize: 9,
+          color: C.muted, margin: 0, breakLine: false, fit: "none" });
+        this.regions.push({ slide: i, text, x: .6, y: BOX.footer, w: 7.6, h, size: 9 });
+      } else {
+        this.text(s, "BREX CONSULTING  /  ATLAS", .6, BOX.footer, 6, 9, true, C.muted);
+      }
       this.text(s, `${i + 1} / ${this.slides.length}`, 8.4, BOX.footer, 1, 9, false, C.muted);
     });
   }

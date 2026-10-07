@@ -53,6 +53,7 @@ import { useDemoMode, DemoModeSwitch } from "@/components/DemoMode";
 import { DemoReport } from "@/components/DemoReport";
 import { PDF_EXECUTIVE_ROLES, pdfFilename, type PdfScope } from "@shared/pdf-export-options";
 import type { ExecutiveRole } from "@shared/executive-summary";
+import { deckFilename, type DeckScope } from "@shared/deck-export-options";
 
 const CHANNELS: { key: string; label: string; icon: any }[] = [
   { key: "blog", label: "Blog calendar", icon: FileText },
@@ -73,6 +74,7 @@ export default function ContentStudio() {
   const [activeChannel, setActiveChannel] = useState<string>("blog");
   const [selectedPiece, setSelectedPiece] = useState<ContentPiece | null>(null);
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [deckExporting, setDeckExporting] = useState(false);
 
   const analysisQ = useQuery<Analysis>({
     queryKey: ["/api/analyses", analysisId],
@@ -172,16 +174,15 @@ export default function ContentStudio() {
   };
 
   // Download the branded PowerPoint deck (main findings & recommendations)
-  const exportPptx = async () => {
-    if (!plan?.id) return;
+  const exportPptx = async (scope: DeckScope = "summary") => {
+    if (!plan?.id || deckExporting) return;
+    setDeckExporting(true);
     try {
       toast({
         title: "Preparing deck…",
-        description: "Building your branded PowerPoint. This takes ~10 seconds.",
+        description: scope === "summary" ? "Building slides from the Executive Summary PDF content." : "Building the full detailed presentation.",
       });
-      const res = await fetch(`/api/content-plans/${plan.id}/pptx`, {
-        credentials: "include",
-      });
+      const res = await apiRequest("GET", `/api/content-plans/${plan.id}/pptx?scope=${scope}`);
       if (!res.ok) {
         const msg = await res.json().catch(() => ({ error: "Download failed" }));
         throw new Error(msg?.error ?? "Download failed");
@@ -189,20 +190,21 @@ export default function ContentStudio() {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const clientSafe = (analysisQ.data?.clientName ?? "client").replace(/[^a-z0-9-_]/gi, "_");
       a.href = url;
-      a.download = `${clientSafe}-content-strategy-deck.pptx`;
+      a.download = deckFilename(analysisQ.data?.clientName ?? "client", scope);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast({ title: "Deck downloaded", description: "Branded PowerPoint saved." });
+      toast({ title: "Deck downloaded", description: scope === "summary" ? "Executive summary presentation saved." : "Full detailed presentation saved." });
     } catch (e: any) {
       toast({
         title: "Deck export failed",
         description: e?.message ?? "Unknown error",
         variant: "destructive",
       });
+    } finally {
+      setDeckExporting(false);
     }
   };
 
@@ -250,9 +252,22 @@ export default function ContentStudio() {
                 <Button variant="outline" onClick={copyFullPlan} data-testid="button-copy-full-plan">
                   <Copy className="h-4 w-4 mr-2" /> Copy full plan
                 </Button>
-                <Button variant="outline" onClick={exportPptx} data-testid="button-export-deck">
-                  <Presentation className="h-4 w-4 mr-2" /> Export Deck
+                <Button variant="outline" onClick={() => exportPptx("summary")} disabled={deckExporting} data-testid="button-export-deck">
+                  {deckExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Presentation className="h-4 w-4 mr-2" />}
+                  {deckExporting ? "Preparing deck…" : "Executive Summary Deck"}
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" disabled={deckExporting} aria-label="More deck export options" data-testid="button-deck-options">
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" collisionPadding={12}>
+                    <DropdownMenuItem data-testid="deck-scope-full" onClick={() => exportPptx("full")}>
+                      Full detailed deck (original)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button data-testid="button-export-pdf" disabled={pdfExporting}>
