@@ -67,3 +67,12 @@ The approved copy operator is separate from runtime code; it does not enroll or 
 - Post-copy targeted tests: 32 passed. Earlier full widget/snapshot suite: 127 passed, 12 skipped.
 - Next: Kenny submits his own actual answers at `/excavate-v2`, then explicitly requests his email. Verify research, saved result, private inquiry/HubSpot alert, and email outcome before flipping `WIDGET_V2_DEFAULT`.
 - No V2 live submission or email send has yet been performed by the assistant. Homepage cutover is still pending.
+
+## Owner submission and format recovery
+
+- Owner submitted October 19 at 23:01 UTC: readiness 75, internal alert queued. No prospect-email request was recorded.
+- Research was unavailable. A safe diagnostic-only release identified the next retry failure as `RESEARCH_FORMAT_INVALID` during “Preparing the snapshot from retrieved sources…” after 51 seconds.
+- Release `ae8de78` adds an explicit provider JSON schema and one bounded format-repair attempt. Exact quotation, entity, semantic-review, competitor and weakness gates remain unchanged.
+- TypeScript check and 34 targeted tests passed. This is not yet a successful production research retest.
+- Kenny reports that his run looked successful; asked whether this included company summary, competitor, SWOT and strategy or only the immediate score. Do not dismiss his observation or equate the score screen with completed research.
+- Homepage remains V1. After deployment, retry the existing receipt rather than creating a fresh inquiry; verify resulting research and requested email before cutover.
