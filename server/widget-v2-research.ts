@@ -11,6 +11,16 @@ const optional=block.nullable();
 const draftSchema=z.object({company_name:z.string().min(2).max(140),identity:block,
   summary:z.array(block).min(1).max(3),market:optional,competitor:optional,competitor_url:z.string().nullable(),
   strength:optional,weakness:optional,opportunity:optional,threat:optional,strategy:optional});
+const blockJsonSchema={type:"object",required:["text","evidence"],properties:{
+  text:{type:"string",minLength:15,maxLength:850},
+  evidence:{type:"array",minItems:1,maxItems:3,items:{type:"object",required:["source_id","quote"],properties:{
+    source_id:{type:"integer",minimum:1},quote:{type:"string",minLength:20,maxLength:650}}}}}};
+export const GROWTH_DRAFT_SCHEMA={type:"object",
+  required:["company_name","identity","summary","market","competitor","competitor_url","strength","weakness","opportunity","threat","strategy"],
+  properties:{company_name:{type:"string",minLength:2,maxLength:140},identity:blockJsonSchema,
+    summary:{type:"array",minItems:1,maxItems:3,items:blockJsonSchema},competitor_url:{type:["string","null"]},
+    ...Object.fromEntries(["market","competitor","strength","weakness","opportunity","threat","strategy"]
+      .map(k=>[k,{anyOf:[blockJsonSchema,{type:"null"}]}]))}};
 type Pages=Record<number,PageEvidence>;
 export const domain=(u:string)=>new URL(u).hostname.toLowerCase().replace(/^www\./,"");
 export function researchUrl(raw:unknown):string|null{
@@ -60,8 +70,8 @@ const defaults:Deps={search:pplxAsk,structure:llmJson,read:readOfficialPage};
 export async function researchGrowth(url:string,progress:(message:string)=>void=()=>{},deps:Deps=defaults,signal?:AbortSignal){
   const started=Date.now(),timings:Record<string,number>={};let previous="",at=started;
   function phase(key:string,message:string){signal?.throwIfAborted();const now=Date.now();if(previous)timings[previous]=(now-at)/1000;previous=key;at=now;progress(message);}
-  async function model(system:string,data:any,tokens=4000){
-    signal?.throwIfAborted();const result=await deps.structure(base+" "+system,JSON.stringify(data),tokens,undefined,{signal});
+  async function model(system:string,data:any,tokens=4000,schema?:any){
+    signal?.throwIfAborted();const result=await deps.structure(base+" "+system,JSON.stringify(data),tokens,schema,{signal});
     signal?.throwIfAborted();return result;
   }
   async function discover(data:any,retry=false){
@@ -124,8 +134,21 @@ about the SAME entity, offering, territory and period. Brand-specific exclusivit
 Broad services, multiple buyers, competition, missing web evidence, or a question do not prove a weakness. Return null instead.
 Opportunity and threat are hypotheses, not proven effects. Strategy is one proposed competitive move and a small test.
 Unknown revenue, headcount and ownership must stay unknown. Aim for 250–350 words total, excluding evidence quotes.`,
-    {website:url,candidate_competitors:competitors,pages:sourceData},5700);
-  const draft=draftSchema.parse(raw);
+    {website:url,candidate_competitors:competitors,pages:sourceData},5700,GROWTH_DRAFT_SCHEMA);
+  let parsedDraft=draftSchema.safeParse(raw);
+  if(!parsedDraft.success){
+    phase("format_repair","Correcting the research format before source checks…");
+    const repaired=await model(`Repair only the structured snapshot format to match the supplied schema.
+Use only the retrieved pages. Every evidence quote must be a continuous verbatim passage of 20–650 characters.
+Do not invent or pad evidence to satisfy length checks. All optional sections must be either a valid block or null.
+Unknown or unsupported optional sections must be null. The summary must be an array of 1–3 blocks, not a string.
+Source IDs must be integer IDs from the supplied pages. This repair does not establish that any claim is supported;
+the exact-quote and semantic checks will run afterward.`,{website:url,pages:sourceData,candidate:raw,
+      format_issues:parsedDraft.error.issues.map(i=>({path:i.path,code:i.code,message:i.message}))},5700,GROWTH_DRAFT_SCHEMA);
+    parsedDraft=draftSchema.safeParse(repaired);
+  }
+  if(!parsedDraft.success)throw parsedDraft.error;
+  const draft=parsedDraft.data;
   // Minimal identity grounding: require name in both official title and body.
   for(const i of official){
     const name=norm(draft.company_name),text=pages[i].text;

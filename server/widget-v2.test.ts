@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import {growthAssessment,storedGrowthAssessment,growthRecap} from "../shared/widget-growth";
-import {exactBlock,competitorSupport,weaknessSupported,retrievalUrls,researchGrowth} from "./widget-v2-research";
+import {exactBlock,competitorSupport,weaknessSupported,retrievalUrls,researchGrowth,GROWTH_DRAFT_SCHEMA} from "./widget-v2-research";
 import {registerWidgetV2Routes,v2Snapshot,researchFailureCode} from "./widget-v2";
 import {assessmentAlertProperties,initialInternalAlert} from "./widget-internal-alert";
 import {LEAD_CAPTURE_NOTICE,privateLeadCapture} from "../shared/widget-lead-capture";
@@ -107,13 +107,22 @@ test("production research provider adapter preserves audit gating and weakness o
   const result=await researchGrowth(pages[1].url,()=>{},{
     search:async()=>({answer:JSON.stringify({company_name:"Acme Industrial",competitor_urls:[pages[2].url],sources:[]}),citations:[]}),
     read:async u=>Object.values(pages).find(p=>p.url===u)||null,
-    structure:async()=>{
+    structure:async(_system,_user,_tokens,schema)=>{
       calls++;
-      if(calls===1)return {company_name:"Acme Industrial",identity,summary:[identity],market:identity,competitor:b,competitor_url:pages[2].url,
-        strength:identity,weakness:null,opportunity:null,threat:null,strategy:null};
+      if(calls===1){assert.equal(schema,GROWTH_DRAFT_SCHEMA);return {company_name:"Acme Industrial",identity,summary:[identity],market:identity,competitor:b,competitor_url:pages[2].url,
+        strength:identity,weakness:null,opportunity:null,threat:null,strategy:null};}
       return {reviews:["identity","summary_0","market","strength","competitor"].map(key=>({key,supported:true,text:key==="competitor"?b.text:identity.text})),
         competitor_checks:checks,competitor_match:"direct",weakness_check:{deficiency_established:false}};
     },
   });
   assert.equal(result.competitor_match,"direct");assert.equal(result.weakness,null);assert.equal(calls,2);
+});
+test("malformed research draft gets one schema repair, not a relaxed evidence gate",async()=>{
+  let calls=0;const phases:string[]=[];
+  await assert.rejects(researchGrowth(pages[1].url,m=>phases.push(m),{
+    search:async()=>({answer:JSON.stringify({company_name:"Acme Industrial",competitor_urls:[pages[2].url],sources:[]}),citations:[]}),
+    read:async u=>Object.values(pages).find(p=>p.url===u)||null,
+    structure:async(_s,_u,_t,schema)=>{calls++;assert.equal(schema,GROWTH_DRAFT_SCHEMA);return {summary:"Wrong format"};},
+  }),{name:"ZodError"});
+  assert.equal(calls,2);assert.ok(phases.some(p=>p.includes("Correcting the research format")));
 });
