@@ -54,3 +54,16 @@ The internal alert has NOT yet been edited, avoiding an unnecessary worker pause
 
 No production source push, no V2 live submission, no email test and no homepage cutover have occurred.
 The approved copy operator is separate from runtime code; it does not enroll or send to contacts.
+
+## Production staging: October 19, 22:48 UTC
+
+- Kenny published the compatible email; verified published/AUTOMATED, unchanged sender and subscription `3750294688`, live update `2026-10-19T22:38:26.996Z`. His final signature reads “Lead CMO”; preserved.
+- Applied the approved alert bodies/subjects without enrollment/audience changes. New pinned hash: `b9a19689bc0e2c49edb3f00b6474a761f9216d3ba0953286dcb3d38976337b9d`.
+- Deployed `fdda953713aa785c95a379f9c70312e97fe7a94e` to GitHub main/Railway. Railway status is success.
+- `/excavate-v2` loads the new widget in a fresh desktop/mobile browser context with no page errors or horizontal overflow observed. Submit control enabled.
+- Public config confirms `emailDeliveryReady: true` and internal alerts `enabled: true, ready: true`.
+- `/widget` still serves V1; `/excavate-v1` also serves V1. The main app sign-in works.
+- Remote tag `atlas-widget-v1-before-one-page` preserves original production source `a6cd8b0`.
+- Post-copy targeted tests: 32 passed. Earlier full widget/snapshot suite: 127 passed, 12 skipped.
+- Next: Kenny submits his own actual answers at `/excavate-v2`, then explicitly requests his email. Verify research, saved result, private inquiry/HubSpot alert, and email outcome before flipping `WIDGET_V2_DEFAULT`.
+- No V2 live submission or email send has yet been performed by the assistant. Homepage cutover is still pending.
