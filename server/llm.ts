@@ -202,7 +202,7 @@ export async function llmJson(
   user: string,
   maxTokens = 4096,
   schema?: any,
-  options: { forceText?: boolean } = {},
+  options: { forceText?: boolean; signal?: AbortSignal } = {},
 ): Promise<any> {
   if (schema && !options.forceText) {
     // tool_use path with real schema — Claude MUST fill required fields
@@ -226,7 +226,7 @@ export async function llmJson(
         tools: [tool],
         tool_choice: { type: "any" } as any,
         messages: [{ role: "user", content: user }],
-      });
+      }, {signal:options.signal});
 
       const stopReason = (resp as any).stop_reason;
       const usage = (resp as any).usage;
@@ -272,7 +272,7 @@ export async function llmJson(
     max_tokens: maxTokens,
     system: `${system}\n\nRespond with ONLY a JSON object or array. No preface, no code fences, no commentary.${schemaHint}`,
     messages: [{ role: "user", content: user }],
-  });
+  }, {signal:options.signal});
 
   const text = (resp.content as any[])
     .filter((b) => b.type === "text")

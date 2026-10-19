@@ -1,4 +1,5 @@
 import {assessStoredWidget} from "../shared/widget-health";
+import {growthRecap} from "../shared/widget-growth";
 
 /**
  * Approved public recap. This module does not read/write CRM, change consent,
@@ -13,6 +14,7 @@ export function buildSnapshotAssessmentRecap(row:{
     ||!Number.isFinite(Date.parse(request.requestedAt))
     ||Date.parse(request.requestedAt)<Date.parse(row.created_at))
     throw Error("Matching requested assessment required");
+  if(row.snapshot?.kind==="company-growth-v2")return growthRecap(row.snapshot.growth);
   const stored=row.snapshot?.assessment;
   // Historical research-only snapshots continue to use the original email.
   if(!stored)return "";

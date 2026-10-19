@@ -13,6 +13,7 @@ import { runContentPlanGeneration } from "./content-pipeline";
 import { requireAuth } from "./auth";
 import { registerWidgetRoutes } from "./widget";
 import { registerSnapshotRoutes } from "./widget-snapshot";
+import {registerWidgetV2Routes,WIDGET_V2_DEFAULT} from "./widget-v2";
 import { normalizeBlogCalendar } from "./blog-calendar";
 import { streamContentPlanPdf, type PdfScope } from "./pdf-export";
 import { parsePdfPov } from "@shared/pdf-export-options";
@@ -52,6 +53,7 @@ export async function registerRoutes(
   // research; see server/widget.ts.
   registerWidgetRoutes(app);
   registerSnapshotRoutes(app);
+  registerWidgetV2Routes(app);
   registerClientReportRoutes(app);
 
   // PUBLIC widget page — serves the standalone HTML at /excavate so it can be
@@ -59,7 +61,7 @@ export async function registerRoutes(
   // dist/public/widget.html (copied by Vite from client/public/); in dev
   // Vite's dev middleware serves it from client/public/widget.html.
   // /widget is preserved as an alias for any pre-existing embeds.
-  app.get(["/excavate", "/widget"], async (_req, res) => {
+  app.get(["/excavate", "/widget", "/widget.html", "/excavate-v1", "/excavate-v2"], async (_req, res) => {
     // Allow embedding from any origin (widget is designed for iframe use)
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader(
@@ -69,10 +71,12 @@ export async function registerRoutes(
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     const fs = await import("node:fs");
     const path = await import("node:path");
+    const file=_req.path==="/excavate-v1"?"widget.html":
+      (_req.path==="/excavate-v2"||WIDGET_V2_DEFAULT)?"widget-v2/index.html":"widget.html";
     const candidates = [
-      path.resolve(__dirname, "public", "widget.html"),               // prod: dist/public/
-      path.resolve(process.cwd(), "dist", "public", "widget.html"),   // prod alt
-      path.resolve(process.cwd(), "client", "public", "widget.html"), // dev
+      path.resolve(__dirname, "public", file),
+      path.resolve(process.cwd(), "dist", "public", file),
+      path.resolve(process.cwd(), "client", "public", file),
     ];
     for (const p of candidates) {
       if (fs.existsSync(p)) {

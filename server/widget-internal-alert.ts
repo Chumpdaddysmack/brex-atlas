@@ -3,6 +3,7 @@ import {snapshotPublicApi,publicWorkflowHash} from "./snapshot-public-delivery";
 import {assessWidget,assessStoredWidget,TIER_QUESTIONS} from "../shared/widget-health";
 import {leadCaptureSchema} from "../shared/widget-lead-capture";
 import {widgetAttributionProperties} from "../shared/widget-attribution";
+import {growthRecap} from "../shared/widget-growth";
 
 export const ALERT_VERSION="atlas-internal-assessment-v1-2026-10-05";
 export const ALERT_WORKFLOW={id:"5064375995",hash:"dcaf8f9e8cb6217eaa0e0d3dcab73b470ae84f98fb565eaf8607a6bb344e3c8e"};
@@ -24,6 +25,19 @@ export function assessmentAlertProperties(row:AlertRow,originalSource?:string){
     revenueBand:c.revenueBand,noticeVersion:c.noticeVersion});
   if(c.alert?.version!==ALERT_VERSION||!row.id||!Number.isFinite(Date.parse(row.created_at)))
     throw Error("Invalid alert receipt");
+  if(row.snapshot?.kind==="company-growth-v2"){
+    return {
+      email:input.email,firstname:input.firstName,lastname:input.lastName,
+      company:String(row.snapshot.companyName||c.company),website:row.company_url,
+      ...widgetAttributionProperties(originalSource),atlas_revenue_range:input.revenueBand,
+      atlas_assessment_summary:[growthRecap(row.snapshot.growth),
+        `Company research: ${row.snapshot.researchStatus||"pending"}.`,
+        "Company/site may show the submitted domain until research confirms its business name.",
+        "No email copy or promotional permission is implied by this inquiry."].join("\n"),
+      atlas_assessment_id:row.id,atlas_assessment_completed_at:row.created_at,atlas_internal_alert_state:"pending",
+      // Do not populate or erase legacy health/tier fields with a different metric.
+    };
+  }
   const original=row.snapshot.assessment;
   // Recalculate from the immutable, self-reported answer receipt. Never use
   // research or an LLM to fill unknown answers, and never reuse old fit fields.

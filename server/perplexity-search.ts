@@ -41,6 +41,7 @@ export async function pplxAsk(
     recency?: "month" | "week" | "day" | "year" | null;
     maxTokens?: number;
     systemPrompt?: string;
+    signal?: AbortSignal;
   },
 ): Promise<PplxResult | null> {
   if (!PPLX_KEY) {
@@ -79,7 +80,7 @@ export async function pplxAsk(
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(45_000),
+        signal: options?.signal ? AbortSignal.any([options.signal,AbortSignal.timeout(45_000)]) : AbortSignal.timeout(45_000),
       });
 
       if (!res.ok) {

@@ -169,6 +169,8 @@ export function registerSnapshotRoutes(app:Express,deps:{
     try {
       const row=await load(token);
       if(!row)return res.status(410).json({error:"Snapshot expired. Please run a fresh snapshot."});
+      if(row.snapshot?.kind==="company-growth-v2"&&row.snapshot.researchStatus!=="ready")
+        return res.status(409).json({error:"Company research must finish before an email copy can be requested."});
       const db=deps.db();
       // Durable permission receipt before any CRM side effect. Retries never
       // overwrite an earlier choice or repeat a successful CRM write.
@@ -190,7 +192,7 @@ export function registerSnapshotRoutes(app:Express,deps:{
         return res.status(409).json({error:"An earlier request cannot be reused for this website test. Run a fresh snapshot."});
       if((receipt.consent_evidence?.publicDelivery||null)!==(publicDelivery?PUBLIC_SNAPSHOT_COHORT:null))
         return res.status(409).json({error:"Run a fresh snapshot to request an email. Earlier test requests are not sent automatically."});
-      const snapshotUrl=`https://atlas.brexconsulting.com/widget.html#snapshot=${token}`;
+      const snapshotUrl=`https://atlas.brexconsulting.com/${row.snapshot?.kind==="company-growth-v2"?"excavate-v2":"widget.html"}#snapshot=${token}`;
       if(publicDelivery){
         const result=await (deps.publicDelivery||sendPublicSnapshot)({requestId:receipt.id,snapshotUrl},db);
         return res.json({ok:true,publicDelivery:true,sendingEnabled:true,deliveryStatus:result.status,

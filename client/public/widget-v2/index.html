@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.pplx.app https://*.perplexity.ai http://localhost:3088 http://127.0.0.1:3088; form-action 'none'; base-uri 'none'; object-src 'none'">
+  <title>Growth Snapshot | Brex Atlas</title>
+  <meta name="description" content="Four quick readiness questions and source-cited research about your company, market and competitor.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/widget-v2/styles.css?v=2">
+  <script type="module" src="/widget-v2/app.mjs?v=2"></script>
+</head>
+<body>
+  <a class="skip" href="#main" data-testid="link-skip">Skip to content</a>
+  <main id="main">
+    <section id="intake" class="sheet">
+      <header>
+        <p class="eyebrow">BREX ATLAS / GROWTH SNAPSHOT</p>
+        <h1>Find your next growth move.</h1>
+        <p class="intro">Your company, your market, one competitor, and a focused strategy. Start with four quick answers.</p>
+      </header>
+      <div class="preview-note"><strong>Real research. Separate readiness score.</strong> Your website informs the company research. Your four answers inform the score. No guessed revenue, performance or service tier.</div>
+      <form id="snapshot-form" novalidate>
+        <section aria-labelledby="details-title" class="form-section">
+          <div class="section-head"><h2 id="details-title">Company & contact</h2></div>
+          <p class="helper">All fields are required. Use your company email address.</p>
+          <div class="field"><label for="website">Company website</label><input id="website" name="website" type="text" inputmode="url" autocomplete="url" required maxlength="250" aria-describedby="website-error" data-testid="input-website"><p class="error" id="website-error"></p></div>
+          <div class="field"><label for="first">First name</label><input id="first" name="first" autocomplete="given-name" required maxlength="80" aria-describedby="first-error" data-testid="input-first"><p class="error" id="first-error"></p></div>
+          <div class="field"><label for="last">Last name</label><input id="last" name="last" autocomplete="family-name" required maxlength="80" aria-describedby="last-error" data-testid="input-last"><p class="error" id="last-error"></p></div>
+          <div class="field"><label for="email">Company email</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="254" aria-describedby="email-error" data-testid="input-email"><p class="error" id="email-error"></p></div>
+          <div class="field"><label for="revenue">Annual revenue (USD)</label><select id="revenue" name="revenue" required aria-describedby="revenue-error" data-testid="select-revenue"><option value="">Select a range</option><option value="under500k">Under $500,000</option><option value="500k1m">$500,000 to under $1 million</option><option value="1m5m">$1 million to under $5 million</option><option value="5m50m">$5 million to under $50 million</option><option value="50m250m">$50 million to $250 million</option></select><p class="error" id="revenue-error"></p></div>
+        </section>
+        <section aria-labelledby="questions-title" class="form-section">
+          <div class="section-head"><h2 id="questions-title">Four signals of readiness</h2><span class="helper" id="coverage" data-testid="text-coverage">0 of 4 answered</span></div>
+          <p class="helper">Choose “Not sure” when needed. Unknown never means zero.</p>
+          <div id="questions"></div>
+        </section>
+        <div class="submit-area">
+          <p id="form-error" class="error" role="alert" data-testid="status-error"></p>
+          <p id="research-status" role="status" class="research-status" data-testid="status-research" hidden></p>
+          <button class="primary" id="submit" type="submit" data-testid="button-submit" disabled>Get My Growth Snapshot <span aria-hidden="true">↗</span></button>
+          <noscript><p class="error">JavaScript is required to run this private preview.</p></noscript>
+          <p class="helper" id="capture-notice">Loading the inquiry notice…</p>
+        </div>
+      </form>
+    </section>
+    <section id="results" class="sheet" hidden aria-labelledby="result-title">
+      <div class="section-head"><p class="eyebrow">BREX ATLAS / GROWTH SNAPSHOT</p><button type="button" class="text-button" id="edit" data-testid="button-edit">Edit answers</button></div>
+      <header><h1 id="result-title" tabindex="-1">Your growth snapshot</h1><p class="intro" id="entered" data-testid="text-entered"></p></header>
+      <div class="preview-note"><strong>Public research, not a verified company audit.</strong> Findings link to retrieved sources. SWOT and strategy are interpretations. The score reflects only your answers, not the research.</div>
+      <section class="score-panel" aria-labelledby="score-heading">
+        <div class="score-top"><div><p class="eyebrow">SELF-REPORTED SCREENING</p><h2 id="score-heading">Preliminary growth readiness</h2><p id="score-status" data-testid="text-score-status"></p></div><div class="score-number"><strong id="score" data-testid="text-score"></strong><span id="denominator">/ 100</span></div></div>
+        <div class="breakdown" id="breakdown"></div>
+        <p id="next" data-testid="text-next"></p>
+        <p class="score-note">Not a probability of growth, verified financial assessment, or CMO service-tier recommendation.</p>
+      </section>
+      <section id="research-progress" class="research-status" hidden aria-labelledby="research-progress-title">
+        <h2 id="research-progress-title">Your research is in progress</h2>
+        <p id="research-phase" role="status" aria-live="polite" data-testid="status-phase"></p>
+        <p class="helper">Your readiness feedback above uses only your answers. Company findings appear after their source checks finish. Keep this page open. Email delivery is optional and requires a separate request below.</p>
+        <p class="helper" id="receipt-status"></p>
+      </section>
+      <section id="research-failure" class="research-status" hidden>
+        <h2>Company research isn’t ready</h2>
+        <p id="research-error" class="error" role="alert"></p>
+        <button id="retry" type="button" class="text-button" data-testid="button-retry">Retry company research</button>
+      </section>
+      <div id="research-output" hidden>
+      <article class="report-section">
+        <p class="eyebrow">EXECUTIVE SUMMARY</p><h2 id="company-name" data-testid="text-company"></h2>
+        <div id="company-summary" data-testid="text-summary"></div>
+      </article>
+      <div class="market-grid">
+        <article class="report-section"><h2>Market</h2><div id="market-content" data-testid="text-market"></div></article>
+        <article class="report-section"><h2 id="competitor-title">One competitor</h2><div id="competitor-content" data-testid="text-competitor"></div></article>
+      </div>
+      <section class="report-section" aria-labelledby="swot-title">
+        <h2 id="swot-title">Your market position, at a glance</h2>
+        <ul class="swot" id="swot-content"></ul>
+        <p class="evidence">Strategic interpretations based on the cited observations, not proven outcomes.</p>
+      </section>
+      <section class="strategy report-section"><p class="eyebrow">ONE PROPOSED COMPETITIVE MOVE</p><h2>Strategy to test</h2><div id="strategy-content" data-testid="text-strategy"></div><p class="evidence">Recommendation for discussion · No outcome is promised.</p></section>
+      <details data-testid="details-sources"><summary>Sources, evidence & research limits</summary><div id="source-details" class="details-body"></div></details>
+      <section class="report-section delivery">
+        <h2>Keep your snapshot</h2>
+        <p id="expiry-note" class="helper"></p>
+        <button type="button" id="copy-link" class="text-button" data-testid="button-copy">Copy results link</button>
+        <button type="button" id="download" class="text-button" data-testid="button-download">Download text copy</button>
+        <p id="copy-status" class="helper" role="status"></p>
+        <form id="email-form">
+          <label for="delivery-email">Email for your requested copy</label>
+          <input id="delivery-email" type="email" required autocomplete="email" data-testid="input-delivery-email">
+          <label class="consent"><input type="checkbox" id="email-permission" required data-testid="checkbox-email"><span id="email-permission-text"></span></label>
+          <label class="consent"><input type="checkbox" id="marketing-permission" data-testid="checkbox-marketing"><span id="marketing-permission-text"></span></label>
+          <button type="submit" id="send-email" class="primary" disabled data-testid="button-email">Email My Snapshot</button>
+          <p class="helper" id="email-availability"></p><p id="email-status" role="status" class="helper"></p>
+        </form>
+      </section>
+      </div>
+      <details data-testid="details-method"><summary>How the score works</summary><div class="details-body"><p>Each of four answers earns 0, 1, or 2 points. Score = rounded total ÷ 8 × 100. All four answers must be known; unknown answers leave the overall score pending. Zero demand calls for validation. Zero capacity, funding, or ownership remains a constraint even with a high total.</p><p>Proposed bands: 0–39, strengthen the foundation; 40–69, prepare for growth; 70–100, stronger readiness signals only without a zero. Weights and bands are Brex-authored pilot rules, not validated predictions.</p><p>BDC’s guidance informs the topics, not the numerical scoring or company findings.</p><a href="https://www.bdc.ca/en/articles-tools/business-strategy-planning/manage-growth/9-tips-handling-fast-business-growth" target="_blank" rel="noopener noreferrer" data-testid="link-method-source">Read BDC’s growth-planning guidance ↗</a></div></details>
+      <section class="result-cta"><h2>Turn the snapshot into a conversation.</h2><p>Review the opportunity, confirm readiness, and explore a personalized demo of the Growth Excavation Report.</p><a class="primary" id="discuss" data-testid="button-discuss" href="https://meetings-na2.hubspot.com/kenny-peavy" target="_blank" rel="noopener noreferrer">Discuss My Growth Snapshot <span aria-hidden="true">↗</span></a><p id="booking-note" class="helper" role="status"></p></section>
+    </section>
+    <footer>Brex Consulting · Growth Snapshot V2 · Automated research, not a consultant-reviewed diagnosis</footer>
+  </main>
+</body>
+</html>

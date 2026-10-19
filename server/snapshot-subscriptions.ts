@@ -36,7 +36,7 @@ export function validateSnapshotReceipt(receipt: SnapshotReceipt, now = Date.now
       || receipt.email !== receipt.email.trim().toLowerCase() || !receipt.snapshotId
       || !Number.isFinite(requested) || requested > now
       || Date.parse(receipt.expiresAt) <= requested
-      || url.origin !== "https://atlas.brexconsulting.com" || url.pathname !== "/widget.html"
+      || url.origin !== "https://atlas.brexconsulting.com" || !["/widget.html","/excavate-v2"].includes(url.pathname)
       || url.username || url.password || url.search || !/^#snapshot=[a-f0-9]{64}$/.test(url.hash)) {
     throw new Error("Invalid snapshot receipt.");
   }
