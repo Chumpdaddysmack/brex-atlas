@@ -35,3 +35,22 @@ Check the 256 answer combinations, unknown/pending, zero constraints, tampered c
 - No CRM or prospect email was sent by those fixtures; production provider behavior is not yet signed off.
 - Homepage source currently embeds `https://atlas.brexconsulting.com/widget`, so switching the Atlas route changes its widget without editing WordPress. Its current fixed 900px iframe may still use internal scrolling; V2 emits both existing height-message formats but cannot force the parent page to resize without a listener.
 - V2 default remains false. No source has been pushed to production while live-message copy approval is pending.
+
+## Approved copy: publication gate
+
+Kenny approved both message revisions on October 19 at 2:36 PM PDT.
+The approved prospect HTML was saved to the draft buffer of email `406150193876`
+and read back exactly. Its live version remains unchanged.
+`POST /marketing/emails/2026-03/406150193876/publish` returned HTTP 403,
+`MISSING_SCOPES`, requiring `transactional-email` or `marketing-email`.
+Do not retry with another credential or change subscription type to work around it.
+
+Next required action: Kenny publishes/updates the existing automated email in HubSpot.
+Then read the live email, verify exact approved content and unchanged sender/subscription,
+update `COMBINED_EMAIL_UPDATED_AT`, apply the approved internal-alert body through
+`scripts/widget-v2-approved-copy.ts apply-alert`, update `ALERT_WORKFLOW.hash`,
+and deploy promptly so the fail-closed workers recognize the approved revisions.
+The internal alert has NOT yet been edited, avoiding an unnecessary worker pause while awaiting email publication.
+
+No production source push, no V2 live submission, no email test and no homepage cutover have occurred.
+The approved copy operator is separate from runtime code; it does not enroll or send to contacts.
