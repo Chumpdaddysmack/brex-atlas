@@ -6,7 +6,7 @@ import {widgetAttributionProperties} from "../shared/widget-attribution";
 import {growthRecap} from "../shared/widget-growth";
 
 export const ALERT_VERSION="atlas-internal-assessment-v1-2026-10-05";
-export const ALERT_WORKFLOW={id:"5064375995",hash:"dcaf8f9e8cb6217eaa0e0d3dcab73b470ae84f98fb565eaf8607a6bb344e3c8e"};
+export const ALERT_WORKFLOW={id:"5064375995",hash:"b9a19689bc0e2c49edb3f00b6474a761f9216d3ba0953286dcb3d38976337b9d"};
 type State="pending"|"processing"|"waiting"|"settling"|"queued"|"needs-review";
 export type Alert={version:string;state:State;updatedAt:string;contactId?:string;reason?:string};
 export type AlertRow={id:string;created_at:string;company_url:string;snapshot:any;lead_capture:any};
