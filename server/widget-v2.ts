@@ -14,6 +14,15 @@ export const WIDGET_V2_DEFAULT=false;
 const requestSchema=z.object({website:z.string().max(300),answers:growthAnswersSchema,capture:leadCaptureSchema,
   resumeToken:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict();
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
+export function researchFailureCode(error:unknown){
+  const e=error as any;
+  if(e?.name==="TimeoutError")return "RESEARCH_TIMEOUT";
+  if(e?.name==="AbortError"||e?.name==="APIUserAbortError")return "RESEARCH_CANCELLED";
+  if(e?.name==="ZodError")return "RESEARCH_FORMAT_INVALID";
+  if([400,401,403,404,429,500,502,503,504].includes(e?.status))return `PROVIDER_HTTP_${e.status}`;
+  return ["STORE_FAILED","RESEARCH_UNAVAILABLE","OFFICIAL_EVIDENCE_MISSING","ENTITY_UNCONFIRMED","UNSUPPORTED_CLAIM"].includes(e?.message)
+    ?e.message:"RESEARCH_FAILED";
+}
 const lifetime=10*86400000,cache=new Map<string,{at:number;data:any}>(),activeTokens=new Set<string>();
 let active=0;const hits=new Map<string,number[]>();
 function rate(key:string,max:number,span:number){
@@ -43,6 +52,8 @@ export function registerWidgetV2Routes(app:Express,deps={research:researchGrowth
       return res.status(429).json({detail:"Research limit reached. Please try later or schedule a discussion."});
     const controller=new AbortController(),signal=AbortSignal.any([controller.signal,AbortSignal.timeout(240000)]);
     let token="",expiresAt="",id="",ownsToken=false,db:ReturnType<typeof widgetDb>|null=null,snapshot:any=null,heartbeat:ReturnType<typeof setInterval>|null=null;
+    let researchStage="Recording inquiry";
+    const startedAt=Date.now();
     active++;
     const emit=(event:any)=>{if(!res.destroyed&&!res.writableEnded)res.write(JSON.stringify(event)+"\n");};
     res.on("close",()=>controller.abort());
@@ -77,7 +88,7 @@ export function registerWidgetV2Routes(app:Express,deps={research:researchGrowth
       const cached=cache.get(url);
       if(!research&&cached&&Date.now()-cached.at<900000){research={...cached.data,cached:true};emit({type:"progress",message:"Reusing recently checked public research…"});}
       if(!research){
-        research=await deps.research(url,message=>emit({type:"progress",message}),undefined,signal);
+        research=await deps.research(url,message=>{researchStage=message;emit({type:"progress",message});},undefined,signal);
         cache.set(url,{at:Date.now(),data:research});
         for(const [key,value] of cache)if(Date.now()-value.at>900000)cache.delete(key);
       }
@@ -86,9 +97,13 @@ export function registerWidgetV2Routes(app:Express,deps={research:researchGrowth
       if(stored.error)throw Error("STORE_FAILED");
       emit({type:"result",data:{...research,growth:snapshot.growth,token,expiresAt}});
       res.end();
-    }catch{
+    }catch(error){
+      const diagnostic={code:researchFailureCode(error),stage:researchStage,
+        elapsedSeconds:Math.round((Date.now()-startedAt)/1000),at:new Date().toISOString()};
+      // Never store provider messages, prompts, contact details or credentials in diagnostics.
+      console.warn("[widget-v2] research stopped",JSON.stringify({snapshotId:id||null,...diagnostic}));
       if(db&&id&&snapshot?.researchStatus!=="ready")
-        await db.from("widget_snapshots").update({snapshot:{...snapshot,researchStatus:"unavailable"}}).eq("id",id).then(()=>{},()=>{});
+        await db.from("widget_snapshots").update({snapshot:{...snapshot,researchStatus:"unavailable",researchDiagnostic:diagnostic}}).eq("id",id).then(()=>{},()=>{});
       const message=id?"Your inquiry is recorded, but the company research could not finish. Your answers are kept. Retry company research or schedule a discussion."
         :"We could not record your inquiry. Please retry before starting research.";
       if(!res.headersSent&&!res.destroyed)res.status(503).json({detail:message});

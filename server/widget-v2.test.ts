@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import {growthAssessment,storedGrowthAssessment,growthRecap} from "../shared/widget-growth";
 import {exactBlock,competitorSupport,weaknessSupported,retrievalUrls,researchGrowth} from "./widget-v2-research";
-import {registerWidgetV2Routes,v2Snapshot} from "./widget-v2";
+import {registerWidgetV2Routes,v2Snapshot,researchFailureCode} from "./widget-v2";
 import {assessmentAlertProperties,initialInternalAlert} from "./widget-internal-alert";
 import {LEAD_CAPTURE_NOTICE,privateLeadCapture} from "../shared/widget-lead-capture";
 import {buildSnapshotAssessmentRecap} from "./snapshot-assessment-recap";
@@ -14,6 +14,12 @@ const pages={1:{url:"https://acmeindustrial.com/",title:"Acme Industrial",text:"
   2:{url:"https://rivalindustrial.com/",title:"Rival Industrial",text:"Rival Industrial supplies industrial equipment to manufacturers in Chicago."}};
 const b={text:"The two businesses serve equipment buyers in Chicago.",evidence:[{source_id:1,quote:pages[1].text},{source_id:2,quote:pages[2].text}]};
 const checks={company_identity_confirmed:true,competitor_identity_confirmed:true,offering_overlap:true,buyer_overlap:true,geographic_overlap:true};
+test("research diagnostics classify failures without retaining provider messages",()=>{
+  assert.equal(researchFailureCode({status:401,message:"secret provider payload"}),"PROVIDER_HTTP_401");
+  assert.equal(researchFailureCode({name:"ZodError",issues:[]}),"RESEARCH_FORMAT_INVALID");
+  assert.equal(researchFailureCode(Error("secret provider payload")),"RESEARCH_FAILED");
+  assert.equal(researchFailureCode(Error("ENTITY_UNCONFIRMED")),"ENTITY_UNCONFIRMED");
+});
 test("all 256 readiness combinations match the four-answer rubric; unknown never zero",()=>{
   for(const d of ["0","1","2","unknown"])for(const c of ["0","1","2","unknown"])for(const f of ["0","1","2","unknown"])for(const o of ["0","1","2","unknown"]){
     const a=growthAssessment({demand:d,capacity:c,funding:f,ownership:o});
@@ -83,6 +89,9 @@ test("V2 route saves inquiry before research; retries reuse receipt; PII never r
     const events=(await (await post(input)).text()).trim().split("\n").map(JSON.parse as any);
     assert.equal(events[0].type,"receipt");assert.equal(events.at(-1).type,"error");
     const resumeToken=events[0].token;assert.equal(rows[0].snapshot.researchStatus,"unavailable");
+    assert.equal(rows[0].snapshot.researchDiagnostic.code,"RESEARCH_FAILED");
+    assert.equal(rows[0].snapshot.researchDiagnostic.stage,"Checking sources");
+    assert.equal(JSON.stringify(rows[0].snapshot).includes("Simulated provider failure"),false);
     assert.equal(JSON.stringify(rows[0].snapshot).includes(capture.email),false);
     fail=false;
     const completed=(await (await post({...input,resumeToken})).text()).trim().split("\n").map(JSON.parse as any);
