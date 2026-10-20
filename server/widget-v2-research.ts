@@ -21,6 +21,24 @@ export const GROWTH_DRAFT_SCHEMA={type:"object",
     summary:{type:"array",minItems:1,maxItems:3,items:blockJsonSchema},competitor_url:{type:["string","null"]},
     ...Object.fromEntries(["market","competitor","strength","weakness","opportunity","threat","strategy"]
       .map(k=>[k,{anyOf:[blockJsonSchema,{type:"null"}]}]))}};
+const reviewSchema=z.object({
+  reviews:z.array(z.object({key:z.string(),supported:z.boolean(),text:z.string().max(850),reason:z.string().max(500).optional()})).max(12),
+  competitor_match:z.enum(["direct","potential","unsupported"]),
+  competitor_checks:z.object({company_identity_confirmed:z.boolean(),competitor_identity_confirmed:z.boolean(),
+    offering_overlap:z.boolean(),buyer_overlap:z.boolean(),geographic_overlap:z.boolean()}),
+  weakness_check:z.object({deficiency_established:z.boolean(),
+    basis:z.enum(["documented_limitation","same_scope_contradiction","unestablished"]),
+    logical_error:z.enum(["none","scope_mismatch","absence_inference","unsupported_causality"])}),
+});
+export const GROWTH_REVIEW_SCHEMA={type:"object",required:["reviews","competitor_match","competitor_checks","weakness_check"],properties:{
+  reviews:{type:"array",maxItems:12,items:{type:"object",required:["key","supported","text","reason"],properties:{
+    key:{type:"string"},supported:{type:"boolean"},text:{type:"string",maxLength:850},reason:{type:"string",maxLength:500}}}},
+  competitor_match:{type:"string",enum:["direct","potential","unsupported"]},
+  competitor_checks:{type:"object",required:["company_identity_confirmed","competitor_identity_confirmed","offering_overlap","buyer_overlap","geographic_overlap"],
+    properties:Object.fromEntries(["company_identity_confirmed","competitor_identity_confirmed","offering_overlap","buyer_overlap","geographic_overlap"].map(k=>[k,{type:"boolean"}]))},
+  weakness_check:{type:"object",required:["deficiency_established","basis","logical_error"],properties:{
+    deficiency_established:{type:"boolean"},basis:{type:"string",enum:["documented_limitation","same_scope_contradiction","unestablished"]},
+    logical_error:{type:"string",enum:["none","scope_mismatch","absence_inference","unsupported_causality"]}}}}};
 type Pages=Record<number,PageEvidence>;
 export const domain=(u:string)=>new URL(u).hostname.toLowerCase().replace(/^www\./,"");
 export function researchUrl(raw:unknown):string|null{
@@ -172,13 +190,14 @@ the exact-quote and semantic checks will run afterward.`,{website:url,pages:sour
   };
   let competitorUrl=candidateUrl(draft.competitor_url);
   phase("review","Checking quotations and the reasoning behind findings…");
-  const audit=await model(`Review every supplied block using ONLY its attached quotations, not external knowledge.
+  const auditRaw=await model(`Review every supplied block using ONLY its attached quotations, not external knowledge.
 Return {"reviews":[{"key":"identity","supported":true,"text":"supported or safely narrowed text","reason":""}],
 "competitor_match":"direct|potential|unsupported","competitor_checks":{"company_identity_confirmed":true,
 "competitor_identity_confirmed":true,"offering_overlap":true,"buyer_overlap":true,"geographic_overlap":true},
 "weakness_check":{"deficiency_established":false,"basis":"documented_limitation|same_scope_contradiction|unestablished",
 "logical_error":"none|scope_mismatch|absence_inference|unsupported_causality"}}.
-Review each key. False for unsupported claims; narrowing may remove excess claims but never add them.
+Review each key exactly once. Keep reasons under 200 characters and text concise. False for unsupported claims;
+narrowing may remove excess claims but never add them. Never return null review items.
 The two identity flags establish DIFFERENT businesses on their respective OWN official sources, not that they are the same company.
 Capitalization differences or established city qualifiers are not entity conflicts.
 Direct requires offering, buyer and geography overlap. Otherwise potential requires offering AND buyer overlap.
@@ -186,7 +205,8 @@ Weakness requires a documented deficiency or same-scope contradiction. Brand aut
 can coexist. Reject that weakness as scope_mismatch. A named competitor, broad services, missing web content or a question is not a deficiency.`,
     {company_name:draft.company_name,website:url,competitor_url:competitorUrl,
       sources:Object.fromEntries(Object.entries(pages).map(([i,p])=>[i,{url:p.url,official_company:official.includes(Number(i))}])),
-      blocks:Object.fromEntries(Object.entries(blocks).filter(([,b])=>b))},3000);
+      blocks:Object.fromEntries(Object.entries(blocks).filter(([,b])=>b))},5000,GROWTH_REVIEW_SCHEMA);
+  const audit=reviewSchema.parse(auditRaw);
   const kept:Record<string,Block|null>={},reasons:Record<string,string>={};
   for(const [k,b] of Object.entries(blocks)){
     const review=Array.isArray(audit?.reviews)?audit.reviews.find((r:any)=>r.key===k):null;

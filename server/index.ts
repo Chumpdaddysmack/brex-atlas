@@ -5,6 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
 import { setupAuth } from "./auth";
+import {startWidgetResearchRecovery} from "./widget-v2";
 
 const app = express();
 const httpServer = createServer(app);
@@ -69,6 +70,7 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+  if(process.env.NODE_ENV==="production")startWidgetResearchRecovery();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

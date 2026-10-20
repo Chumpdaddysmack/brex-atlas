@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import {growthAssessment,storedGrowthAssessment,growthRecap} from "../shared/widget-growth";
-import {exactBlock,competitorSupport,weaknessSupported,retrievalUrls,researchGrowth,GROWTH_DRAFT_SCHEMA} from "./widget-v2-research";
-import {registerWidgetV2Routes,v2Snapshot,researchFailureCode} from "./widget-v2";
+import {exactBlock,competitorSupport,weaknessSupported,retrievalUrls,researchGrowth,GROWTH_DRAFT_SCHEMA,GROWTH_REVIEW_SCHEMA} from "./widget-v2-research";
+import {registerWidgetV2Routes,v2Snapshot,researchFailureCode,recoverRequestedWidgetResearch} from "./widget-v2";
 import {assessmentAlertProperties,initialInternalAlert} from "./widget-internal-alert";
 import {LEAD_CAPTURE_NOTICE,privateLeadCapture} from "../shared/widget-lead-capture";
 import {buildSnapshotAssessmentRecap} from "./snapshot-assessment-recap";
@@ -111,11 +111,37 @@ test("production research provider adapter preserves audit gating and weakness o
       calls++;
       if(calls===1){assert.equal(schema,GROWTH_DRAFT_SCHEMA);return {company_name:"Acme Industrial",identity,summary:[identity],market:identity,competitor:b,competitor_url:pages[2].url,
         strength:identity,weakness:null,opportunity:null,threat:null,strategy:null};}
+      assert.equal(schema,GROWTH_REVIEW_SCHEMA);assert.equal(_tokens,5000);
       return {reviews:["identity","summary_0","market","strength","competitor"].map(key=>({key,supported:true,text:key==="competitor"?b.text:identity.text})),
-        competitor_checks:checks,competitor_match:"direct",weakness_check:{deficiency_established:false}};
+        competitor_checks:checks,competitor_match:"direct",weakness_check:{deficiency_established:false,basis:"unestablished",logical_error:"none"}};
     },
   });
   assert.equal(result.competitor_match,"direct");assert.equal(result.weakness,null);assert.equal(calls,2);
+});
+test("operator-requested recovery runs once and changes only snapshot, never lead, alerts or emails",async()=>{
+  const row:any={id:"existing",company_url:pages[1].url,expires_at:new Date(Date.now()+86400000).toISOString(),
+    snapshot:{...v2Snapshot(pages[1].url,answers),researchStatus:"unavailable",
+      researchRecovery:{version:"v2-research-recovery-v1",state:"requested"}},
+    lead_capture:{email:capture.email,alert:{state:"queued"}}};
+  const leadBefore=JSON.stringify(row.lead_capture);let runs=0;
+  const db:any=()=>({from(table:string){
+    assert.equal(table,"widget_snapshots");
+    let update:any,filters:any[]=[];
+    const q:any={select(){return q},limit(){return q},eq(k:string,v:any){filters.push([k,v]);return q},
+      update(p:any){assert.deepEqual(Object.keys(p),["snapshot"]);update=p;return q},
+      then(resolve:any){
+        const matches=filters.every(([k,v])=>k==="snapshot"?JSON.stringify(row.snapshot)===v:
+          k==="id"?row.id===v:k.endsWith("state")?row.snapshot.researchRecovery.state===v:
+          row.snapshot.researchRecovery.version===v);
+        if(matches&&update)Object.assign(row,update);
+        return Promise.resolve(resolve({error:null,data:matches?[structuredClone(row)]:[]}));
+      }};return q;
+  }});
+  const research:any=async()=>{runs++;return {company_name:"Acme Industrial",summary:[],sources:[],researched_at:new Date().toISOString()}};
+  await recoverRequestedWidgetResearch({db,research});
+  assert.equal(row.snapshot.researchStatus,"ready");assert.equal(row.snapshot.researchRecovery.state,"complete");
+  assert.equal(row.snapshot.growth.score,50);assert.equal(JSON.stringify(row.lead_capture),leadBefore);
+  await recoverRequestedWidgetResearch({db,research});assert.equal(runs,1);
 });
 test("malformed research draft gets one schema repair, not a relaxed evidence gate",async()=>{
   let calls=0;const phases:string[]=[];

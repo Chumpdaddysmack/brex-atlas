@@ -19,6 +19,8 @@ export function researchFailureCode(error:unknown){
   if(e?.name==="TimeoutError")return "RESEARCH_TIMEOUT";
   if(e?.name==="AbortError"||e?.name==="APIUserAbortError")return "RESEARCH_CANCELLED";
   if(e?.name==="ZodError")return "RESEARCH_FORMAT_INVALID";
+  if(e?.name==="TypeError")return "RESEARCH_TYPE_ERROR";
+  if(e?.name==="SyntaxError")return "RESEARCH_JSON_INVALID";
   if([400,401,403,404,429,500,502,503,504].includes(e?.status))return `PROVIDER_HTTP_${e.status}`;
   return ["STORE_FAILED","RESEARCH_UNAVAILABLE","OFFICIAL_EVIDENCE_MISSING","ENTITY_UNCONFIRMED","UNSUPPORTED_CLAIM"].includes(e?.message)
     ?e.message:"RESEARCH_FAILED";
@@ -67,6 +69,8 @@ export function registerWidgetV2Routes(app:Express,deps={research:researchGrowth
           ||!Object.entries(input.capture).every(([k,v])=>row.lead_capture?.[k]===v))
           return res.status(409).json({detail:"This saved request cannot be reused with different details. Edit your answers and submit a new request."});
         token=input.resumeToken;expiresAt=row.expires_at;id=row.id;snapshot=row.snapshot;
+        if(snapshot.researchRecovery?.state==="running"&&Date.now()-Date.parse(snapshot.researchRecovery.at)<300000)
+          return res.status(409).json({detail:"Your saved research is being recovered. Please wait before retrying."});
       }else{
         snapshot=v2Snapshot(url,input.answers);token=randomBytes(32).toString("hex");expiresAt=new Date(Date.now()+lifetime).toISOString();
         // Store inquiry BEFORE research so an abandoned research wait is not a lost lead.
@@ -114,4 +118,39 @@ export function registerWidgetV2Routes(app:Express,deps={research:researchGrowth
       active--;
     }
   });
+}
+
+// Operator-requested, one-shot recovery. No public route can create this marker.
+// Reuses the existing saved snapshot; never writes contacts, alerts or email requests.
+export async function recoverRequestedWidgetResearch(deps={research:researchGrowth,db:widgetDb}){
+  const db=deps.db();
+  const found=await db.from("widget_snapshots").select("id,company_url,expires_at,snapshot")
+    .eq("snapshot->researchRecovery->>state","requested")
+    .eq("snapshot->researchRecovery->>version","v2-research-recovery-v1").limit(1);
+  if(found.error)throw Error("RECOVERY_READ_FAILED");
+  for(const row of found.data||[]){
+    if(row.snapshot?.kind!=="company-growth-v2"||row.snapshot.researchStatus!=="unavailable"
+      ||Date.parse(row.expires_at)<=Date.now()||!publicCompanyUrl(row.company_url))continue;
+    growthAssessment(row.snapshot.growth.answers);
+    const running={...row.snapshot,researchRecovery:{version:"v2-research-recovery-v1",state:"running",at:new Date().toISOString()}};
+    const claim=await db.from("widget_snapshots").update({snapshot:running}).eq("id",row.id)
+      .eq("snapshot",JSON.stringify(row.snapshot)).select("id");
+    if(claim.error||!claim.data?.length)continue;
+    let stage="Starting research-only recovery";const started=Date.now();
+    let next:any;
+    try{
+      const research=await deps.research(row.company_url,m=>{stage=m},undefined,AbortSignal.timeout(240000));
+      next={...v2Snapshot(row.company_url,row.snapshot.growth.answers,research),
+        researchRecovery:{version:"v2-research-recovery-v1",state:"complete",at:new Date().toISOString()}};
+    }catch(error){
+      next={...row.snapshot,researchStatus:"unavailable",
+        researchRecovery:{version:"v2-research-recovery-v1",state:"failed",at:new Date().toISOString()},
+        researchDiagnostic:{code:researchFailureCode(error),stage,elapsedSeconds:Math.round((Date.now()-started)/1000),at:new Date().toISOString()}};
+    }
+    const saved=await db.from("widget_snapshots").update({snapshot:next}).eq("id",row.id).eq("snapshot",JSON.stringify(running));
+    if(saved.error)throw Error("RECOVERY_STORE_FAILED");
+  }
+}
+export function startWidgetResearchRecovery(){
+  setTimeout(()=>void recoverRequestedWidgetResearch().catch(()=>console.warn("[widget-v2] Recovery unavailable")),15000).unref();
 }
