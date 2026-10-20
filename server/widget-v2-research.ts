@@ -206,7 +206,22 @@ can coexist. Reject that weakness as scope_mismatch. A named competitor, broad s
     {company_name:draft.company_name,website:url,competitor_url:competitorUrl,
       sources:Object.fromEntries(Object.entries(pages).map(([i,p])=>[i,{url:p.url,official_company:official.includes(Number(i))}])),
       blocks:Object.fromEntries(Object.entries(blocks).filter(([,b])=>b))},5000,GROWTH_REVIEW_SCHEMA);
-  const audit=reviewSchema.parse(auditRaw);
+  let parsedAudit=reviewSchema.safeParse(auditRaw);
+  if(!parsedAudit.success){
+    phase("review_repair","Repairing the review format without changing its evidence…");
+    const repaired=await model(`Repair this review JSON to the supplied schema. Use only the attached quotations.
+Return reviews as an ARRAY of objects, with exactly one object per supplied block key.
+Use real JSON booleans (true/false), not strings. Every review has key, supported, text and reason.
+For unsupported blocks use supported:false, text:"", and a short reason. Do not invent or elevate support.
+Keep text under 850 characters and reason under 200. Include every competitor boolean explicitly.
+For no established weakness use deficiency_established:false, basis:"unestablished", logical_error:"none".
+Preserve supported findings only if their wording remains entailed by the attached quotations.`,
+      {website:url,blocks:Object.fromEntries(Object.entries(blocks).filter(([,b])=>b)),candidate:auditRaw,
+        format_issues:parsedAudit.error.issues.map(i=>({path:i.path,code:i.code,message:i.message}))},5000,GROWTH_REVIEW_SCHEMA);
+    parsedAudit=reviewSchema.safeParse(repaired);
+  }
+  if(!parsedAudit.success)throw parsedAudit.error;
+  const audit=parsedAudit.data;
   const kept:Record<string,Block|null>={},reasons:Record<string,string>={};
   for(const [k,b] of Object.entries(blocks)){
     const review=Array.isArray(audit?.reviews)?audit.reviews.find((r:any)=>r.key===k):null;

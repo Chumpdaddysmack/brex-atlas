@@ -152,3 +152,20 @@ test("malformed research draft gets one schema repair, not a relaxed evidence ga
   }),{name:"ZodError"});
   assert.equal(calls,2);assert.ok(phases.some(p=>p.includes("Correcting the research format")));
 });
+test("review format is repaired once and still requires supported identity",async()=>{
+  const identity={text:"The official website identifies Acme Industrial.",evidence:[{source_id:1,quote:pages[1].text}]};
+  let calls=0;
+  await assert.rejects(researchGrowth(pages[1].url,()=>{},{
+    search:async()=>({answer:JSON.stringify({company_name:"Acme Industrial",competitor_urls:[pages[2].url],sources:[]}),citations:[]}),
+    read:async u=>Object.values(pages).find(p=>p.url===u)||null,
+    structure:async()=>{
+      calls++;
+      if(calls===1)return {company_name:"Acme Industrial",identity,summary:[identity],market:null,competitor:null,competitor_url:null,
+        strength:null,weakness:null,opportunity:null,threat:null,strategy:null};
+      if(calls===2)return {reviews:"Malformed review array"};
+      return {reviews:[{key:"identity",supported:false,text:"",reason:"Not established"}],competitor_match:"unsupported",
+        competitor_checks:checks,weakness_check:{deficiency_established:false,basis:"unestablished",logical_error:"none"}};
+    },
+  }),/ENTITY_UNCONFIRMED/);
+  assert.equal(calls,3);
+});

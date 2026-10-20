@@ -25,6 +25,15 @@ export function researchFailureCode(error:unknown){
   return ["STORE_FAILED","RESEARCH_UNAVAILABLE","OFFICIAL_EVIDENCE_MISSING","ENTITY_UNCONFIRMED","UNSUPPORTED_CLAIM"].includes(e?.message)
     ?e.message:"RESEARCH_FAILED";
 }
+export function researchFormatIssues(error:unknown){
+  const e=error as any;
+  if(e?.name!=="ZodError"||!Array.isArray(e.issues))return undefined;
+  return e.issues.slice(0,12).map((i:any)=>({path:i.path,code:i.code,
+    ...(typeof i.expected==="string"?{expected:i.expected}:{}),
+    ...(typeof i.received==="string"&&["undefined","null","string","number","boolean","object","array"].includes(i.received)?{received:i.received}:{}),
+    ...(typeof i.maximum==="number"?{maximum:i.maximum}:{}),
+    ...(typeof i.minimum==="number"?{minimum:i.minimum}:{})}));
+}
 const lifetime=10*86400000,cache=new Map<string,{at:number;data:any}>(),activeTokens=new Set<string>();
 let active=0;const hits=new Map<string,number[]>();
 function rate(key:string,max:number,span:number){
@@ -103,7 +112,7 @@ export function registerWidgetV2Routes(app:Express,deps={research:researchGrowth
       res.end();
     }catch(error){
       const diagnostic={code:researchFailureCode(error),stage:researchStage,
-        elapsedSeconds:Math.round((Date.now()-startedAt)/1000),at:new Date().toISOString()};
+        elapsedSeconds:Math.round((Date.now()-startedAt)/1000),at:new Date().toISOString(),formatIssues:researchFormatIssues(error)};
       // Never store provider messages, prompts, contact details or credentials in diagnostics.
       console.warn("[widget-v2] research stopped",JSON.stringify({snapshotId:id||null,...diagnostic}));
       if(db&&id&&snapshot?.researchStatus!=="ready")
@@ -145,7 +154,7 @@ export async function recoverRequestedWidgetResearch(deps={research:researchGrow
     }catch(error){
       next={...row.snapshot,researchStatus:"unavailable",
         researchRecovery:{version:"v2-research-recovery-v1",state:"failed",at:new Date().toISOString()},
-        researchDiagnostic:{code:researchFailureCode(error),stage,elapsedSeconds:Math.round((Date.now()-started)/1000),at:new Date().toISOString()}};
+        researchDiagnostic:{code:researchFailureCode(error),stage,elapsedSeconds:Math.round((Date.now()-started)/1000),at:new Date().toISOString(),formatIssues:researchFormatIssues(error)}};
     }
     const saved=await db.from("widget_snapshots").update({snapshot:next}).eq("id",row.id).eq("snapshot",JSON.stringify(running));
     if(saved.error)throw Error("RECOVERY_STORE_FAILED");
