@@ -59,6 +59,7 @@ export function weaknessSupported(b:Block|null,audit:any){
 }
 export function competitorSupport(b:Block|null,url:string,candidate:string|null,pages:Pages,audit:any){
   const c=audit?.competitor_checks;
+  if(audit?.competitor_match==="unsupported")return "unsupported";
   if(!b||!candidate||!c||["company_identity_confirmed","competitor_identity_confirmed","offering_overlap","buyer_overlap"].some(k=>c[k]!==true))return "unsupported";
   const hosts=new Set(b.evidence.map(e=>pages[e.source_id]&&domain(pages[e.source_id].url)));
   if(domain(url)===domain(candidate)||!hosts.has(domain(url))||!hosts.has(domain(candidate)))return "unsupported";
@@ -66,6 +67,36 @@ export function competitorSupport(b:Block|null,url:string,candidate:string|null,
   if(potential&&/\bdirect competitor\b/i.test(b.text))return "unsupported";
   return potential?"potential":"direct";
 }
+export function wordingAllowed(key:string,b:Block|null,url:string,pages:Pages){
+  if(!b)return false;
+  if(key==="market"&&/\b(targets?|serves?|focuses? on)\b/i.test(b.text)
+    &&b.evidence.every(e=>/\b(experience|has led|career|previous roles|initiatives across)\b/i.test(e.quote)))return false;
+  if(key==="strength"&&b.evidence.every(e=>domain(pages[e.source_id].url)===domain(url))
+    &&/\b(unlike (?:other|most|competitors)|differing from|better than|most .{0,40}engagements|superior to)\b/i.test(b.text))return false;
+  return true;
+}
+const proposalSchema=z.object({basis:block,action:z.string().min(15).max(600),
+  test:z.string().min(15).max(600),assumptions:z.array(z.string().min(5).max(250)).min(1).max(3)});
+const proposalJsonSchema={type:"object",required:["basis","action","test","assumptions"],properties:{
+  basis:blockJsonSchema,action:{type:"string",minLength:15,maxLength:600},test:{type:"string",minLength:15,maxLength:600},
+  assumptions:{type:"array",minItems:1,maxItems:3,items:{type:"string",minLength:5,maxLength:250}}}};
+const proposalCheckKeys=["basis_supported","action_linked_to_basis","no_invented_company_facts","no_unstated_deficit",
+  "no_guaranteed_outcome","test_measurable","assumptions_explicit"] as const;
+const proposalReviewJsonSchema={type:"object",required:[...proposalCheckKeys,"reason"],properties:{
+  ...Object.fromEntries(proposalCheckKeys.map(k=>[k,{type:"boolean"}])),reason:{type:"string",maxLength:400}}};
+export function approvedProposal(raw:any,review:any,pages:Pages){
+  const parsed=proposalSchema.safeParse(raw);
+  if(!parsed.success||proposalCheckKeys.some(k=>review?.[k]!==true))return null;
+  const p=parsed.data,basis=exactBlock(p.basis,pages);
+  if(!basis||/\b(guarantee[sd]?|will increase|will generate|will deliver)\b/i.test(p.action))return null;
+  return {kind:"proposed_strategy",basis,action:p.action,test:p.test,assumptions:p.assumptions,
+    text:`Evidence basis: ${basis.text}\nProposed test, not a verified outcome: ${p.action}\nMeasure: ${p.test}\nTo confirm: ${p.assumptions.join(" ")}`,
+    evidence:basis.evidence};
+}
+const comparisonJsonSchema={type:"object",required:["competitor","competitor_url","competitor_match","competitor_checks"],properties:{
+  competitor:{anyOf:[blockJsonSchema,{type:"null"}]},competitor_url:{type:["string","null"]},
+  competitor_match:{type:"string",enum:["direct","potential","unsupported"]},
+  competitor_checks:GROWTH_REVIEW_SCHEMA.properties.competitor_checks}};
 export function candidates(raw:any,url:string){
   return [...new Set((Array.isArray(raw?.competitor_urls)?raw.competitor_urls:[]).map(researchUrl)
     .filter((u:any):u is string=>!!u&&domain(u)!==domain(url)))].slice(0,3) as string[];
@@ -100,7 +131,9 @@ Find ONE plausible competitor with overlapping offering, buyer and geography plu
 Preserve local dealership/service page paths; do not substitute parent brands, directories or namesakes.
 Return {"company_name":"...","competitor_urls":["https://..."],"sources":[{"url":"https://..."}]}.
 Include all competitor alternatives in competitor_urls so they can be retrieved in one batch.
-Find at most 3 company pages and 2 paths per competitor. No supported candidate means an empty array.
+Find at most 3 company pages and 2 paths per competitor. Prioritize current services and who-we-serve pages
+that explicitly identify buyers and service territory, rather than biographies or agency-ranking articles.
+No supported candidate means an empty array.
 ${retry?"This is a bounded recovery: avoid the failed URLs and try another named competitor or official path.":""}
 ${JSON.stringify(data)}`,{recency:null,maxTokens:1900,systemPrompt:base,signal});
     signal?.throwIfAborted();if(!r?.answer)throw Error("RESEARCH_UNAVAILABLE");
@@ -150,7 +183,11 @@ Use potential competitor when geography is not confirmed. Don't infer demographi
 SWOT: one concise interpretation per quadrant. Weakness ONLY a documented limitation or truly incompatible statements
 about the SAME entity, offering, territory and period. Brand-specific exclusivity plus competition is NOT a contradiction.
 Broad services, multiple buyers, competition, missing web evidence, or a question do not prove a weakness. Return null instead.
-Opportunity and threat are hypotheses, not proven effects. Strategy is one proposed competitive move and a small test.
+Market must describe explicitly stated CURRENT target customers. A founder's career history or past industry experience
+does NOT establish today's industry targets. Use only the supported target segment if sectors are unconfirmed.
+Strength should describe an evidenced capability or offer, not unverified superiority over competitors.
+Do not turn the company's own "most competitors" marketing claims into independently verified industry facts.
+Opportunity and threat are hypotheses, not proven effects. Return strategy:null here; a separate proposal stage follows.
 Unknown revenue, headcount and ownership must stay unknown. Aim for 250–350 words total, excluding evidence quotes.`,
     {website:url,candidate_competitors:competitors,pages:sourceData},5700,GROWTH_DRAFT_SCHEMA);
   let parsedDraft=draftSchema.safeParse(raw);
@@ -202,7 +239,10 @@ The two identity flags establish DIFFERENT businesses on their respective OWN of
 Capitalization differences or established city qualifiers are not entity conflicts.
 Direct requires offering, buyer and geography overlap. Otherwise potential requires offering AND buyer overlap.
 Weakness requires a documented deficiency or same-scope contradiction. Brand authorization/exclusivity and other-brand competitors
-can coexist. Reject that weakness as scope_mismatch. A named competitor, broad services, missing web content or a question is not a deficiency.`,
+can coexist. Reject that weakness as scope_mismatch. A named competitor, broad services, missing web content or a question is not a deficiency.
+Narrow market to current, explicitly stated buyers; founder experience is not a present-day target-industry list.
+Narrow strength to the supported capability. A company's comparison with "most firms" is self-positioning, not verified
+superiority. Do not retain industry-wide comparisons supported only by the company's own website.`,
     {company_name:draft.company_name,website:url,competitor_url:competitorUrl,
       sources:Object.fromEntries(Object.entries(pages).map(([i,p])=>[i,{url:p.url,official_company:official.includes(Number(i))}])),
       blocks:Object.fromEntries(Object.entries(blocks).filter(([,b])=>b))},5000,GROWTH_REVIEW_SCHEMA);
@@ -231,6 +271,9 @@ Preserve supported findings only if their wording remains entailed by the attach
   if(!kept.identity)throw Error("ENTITY_UNCONFIRMED");
   const summary=Object.entries(kept).filter(([k,b])=>k.startsWith("summary_")&&b).map(([,b])=>b!);
   if(!summary.length)throw Error("UNSUPPORTED_CLAIM");
+  for(const key of ["market","strength"])if(kept[key]&&!wordingAllowed(key,kept[key],url,pages)){
+    kept[key]=null;reasons[key]="The available quotation does not establish this targeting or comparative claim.";
+  }
   if(!weaknessSupported(kept.weakness,audit)){kept.weakness=null;reasons.weakness="A specific supported limitation was not established.";}
   let competitor=kept.competitor,match=competitorSupport(competitor,url,competitorUrl,pages,audit);
   if(match==="unsupported")competitor=null;
@@ -239,20 +282,71 @@ Preserve supported findings only if their wording remains entailed by the attach
     try{
       const r=await model(`Produce ONE supported company/competitor comparison from actual retrieved pages.
 Return {"competitor":${blockShape},"competitor_url":"exact retrieved URL","competitor_checks":{
-"company_identity_confirmed":true,"competitor_identity_confirmed":true,"offering_overlap":true,"buyer_overlap":true,"geographic_overlap":true}}.
+"company_identity_confirmed":true,"competitor_identity_confirmed":true,"offering_overlap":true,"buyer_overlap":true,"geographic_overlap":true},"competitor_match":"direct|potential|unsupported"}.
 Use null competitor if unsupported. Both distinct businesses must be established by THEIR OWN official evidence.
 Cite both websites. Preserve exact continuous quotations. Shared offering AND buyers are required; shared evidenced geography is required for direct.
 Otherwise say potential competitor and geography unconfirmed. Do not infer affluence or demographics, namesakes or parent entities.
+A plausible alternative is not evidence of an actual competitive relationship or superiority.
+Prefer a narrow, evidenced shared buyer segment over a broad claim; explicit B2B or mid-market overlap is sufficient
+even if the two firms have different complete industry lists. Do not use founder experience as current targeting.
+Geographic overlap means overlapping service markets, not merely office addresses.
 Company-named competition is useful but still cite the competitor's own official offering.`,
         {website:url,company_name:draft.company_name,pages:sourceData,candidate_competitors:competitors,
-          previous_block:blocks.competitor,previous_rejection:reasons.competitor},2200);
-      const b=exactBlock(r?.competitor,pages),u=candidateUrl(r?.competitor_url),m=competitorSupport(b,url,u,pages,r);
-      if(b&&m!=="unsupported"){competitor=b;competitorUrl=u;match=m;}
-    }catch{signal?.throwIfAborted();}
+          previous_block:blocks.competitor,previous_rejection:reasons.competitor},3000,comparisonJsonSchema);
+      const b=exactBlock(r?.competitor,pages),u=candidateUrl(r?.competitor_url);
+      if(b&&u){
+        const checked=await model(`Audit this proposed comparison using ONLY the attached verbatim quotes and source URLs.
+Return the supplied comparison schema. Both identities must belong to distinct official businesses.
+Require explicitly overlapping offering AND buyer segment; do not require identical industry lists.
+Geography must be an explicit overlapping service market, never inferred from headquarters.
+If geography is unconfirmed but offering and buyers are supported, narrow to "Potential competitor" and disclose
+that service-market overlap needs confirmation. Never assert an actual rivalry or superior performance.
+If buyers or offering are unsupported, return competitor:null and competitor_match:"unsupported".
+Retain only the supplied evidence passages; do not add facts or quotations.`,{
+          website:url,competitor_url:u,proposed:b,
+          sources:Object.fromEntries(b.evidence.map(e=>[e.source_id,{url:pages[e.source_id].url}]))},2600,comparisonJsonSchema);
+        const verified=exactBlock(checked?.competitor,pages);
+        const sameEvidence=verified?.evidence.every(e=>b.evidence.some(x=>x.source_id===e.source_id&&norm(x.quote)===norm(e.quote)));
+        const m=competitorSupport(verified,url,u,pages,checked);
+        if(verified&&sameEvidence&&m!=="unsupported"){competitor=verified;competitorUrl=u;match=m;}
+      }
+    }catch{signal?.throwIfAborted();reasons.competitor="The bounded comparison check could not establish a supported match.";}
   }
+  if(!competitor)reasons.competitor||="Offering and buyer overlap were not established from both businesses' official evidence.";
+  else delete reasons.competitor;
+  let strategy:any=null;
+  phase("strategy","Developing an evidence-linked strategy to test…");
+  try{
+    const proposal=await model(`Propose ONE small competitive-positioning experiment, not a new fact or guaranteed result.
+Return basis (one source-supported factual block), action, test, assumptions (1–3 explicit unknowns to confirm).
+Use ONLY these already reviewed findings and their quotes as the factual basis. Do not invent company deficiencies,
+missing case studies, staffing, budgets, current conversion rates or unused channels.
+A new proposed action need not already exist on the website: label it as a conditional experiment, not an existing offering.
+Build on a demonstrated capability or buyer need; do not invent a new product or service.
+Test includes an observable metric and comparison to a measured baseline, without invented values or promised lift.
+Assumptions should cover feasibility, capacity or buyer response that research has not established.
+Keep action and test to one concise sentence each; basis should be one concise supported sentence.`,{
+        company_name:draft.company_name,findings:{summary,market:kept.market,strength:kept.strength,competitor}},
+        2600,proposalJsonSchema);
+    const parsed=proposalSchema.safeParse(proposal),basis=parsed.success?exactBlock(parsed.data.basis,pages):null;
+    if(parsed.success&&basis){
+      const review=await model(`Review the proposed experiment, separating its FACTUAL BASIS from its PROPOSED ACTION.
+The basis must be entailed by its exact attached quotes. The action is a recommendation and need not already appear
+on a source page. Approve a conditional experiment grounded in a demonstrated capability, not a claimed proven outcome.
+Reject invented current facts, unproven deficiencies, implied missing assets, new unsupported offerings or guarantees.
+The test must have an observable measure and no fabricated baseline or numerical promise.
+Assumptions must explicitly identify feasibility or response still to confirm.
+Return all schema booleans and a short reason. "action_linked_to_basis" means a logical proposal, not empirical proof.`,{
+          proposal:parsed.data,sources:Object.fromEntries(basis.evidence.map(e=>[e.source_id,{url:pages[e.source_id].url}]))},
+          1600,proposalReviewJsonSchema);
+      strategy=approvedProposal(parsed.data,review,pages);
+      if(!strategy)reasons.strategy=String(review?.reason||"The proposal did not pass its basis and assumption checks.").slice(0,300);
+    }else reasons.strategy="The proposal's factual basis or format could not be established.";
+  }catch{signal?.throwIfAborted();reasons.strategy="A reviewed proposal was not available from this bounded attempt.";}
+  if(strategy)delete reasons.strategy;
   const result:any={company_name:draft.company_name,company_url:url,researched_at:new Date().toISOString(),
     identity:kept.identity,summary,...Object.fromEntries(keys.filter(k=>k!=="competitor").map(k=>[k,kept[k]])),
-    competitor,competitor_url:competitor?competitorUrl:null,competitor_match:competitor?match:"unsupported",
+    strategy,competitor,competitor_url:competitor?competitorUrl:null,competitor_match:competitor?match:"unsupported",
     limitations:["Public-page research with automated passage and semantic checks, not independent verification or human CMO approval.",
       "SWOT and strategy are interpretations and recommendations, not established outcomes.",
       "Internal economics and operational readiness were not independently assessed."]};

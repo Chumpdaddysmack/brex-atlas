@@ -138,7 +138,7 @@ export async function recoverRequestedWidgetResearch(deps={research:researchGrow
     .eq("snapshot->researchRecovery->>version","v2-research-recovery-v1").limit(1);
   if(found.error)throw Error("RECOVERY_READ_FAILED");
   for(const row of found.data||[]){
-    if(row.snapshot?.kind!=="company-growth-v2"||row.snapshot.researchStatus!=="unavailable"
+    if(row.snapshot?.kind!=="company-growth-v2"||!["unavailable","ready"].includes(row.snapshot.researchStatus)
       ||Date.parse(row.expires_at)<=Date.now()||!publicCompanyUrl(row.company_url))continue;
     growthAssessment(row.snapshot.growth.answers);
     const running={...row.snapshot,researchRecovery:{version:"v2-research-recovery-v1",state:"running",at:new Date().toISOString()}};
@@ -152,7 +152,7 @@ export async function recoverRequestedWidgetResearch(deps={research:researchGrow
       next={...v2Snapshot(row.company_url,row.snapshot.growth.answers,research),
         researchRecovery:{version:"v2-research-recovery-v1",state:"complete",at:new Date().toISOString()}};
     }catch(error){
-      next={...row.snapshot,researchStatus:"unavailable",
+      next={...row.snapshot,researchStatus:row.snapshot.researchStatus,
         researchRecovery:{version:"v2-research-recovery-v1",state:"failed",at:new Date().toISOString()},
         researchDiagnostic:{code:researchFailureCode(error),stage,elapsedSeconds:Math.round((Date.now()-started)/1000),at:new Date().toISOString(),formatIssues:researchFormatIssues(error)}};
     }

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import {growthAssessment,storedGrowthAssessment,growthRecap} from "../shared/widget-growth";
-import {exactBlock,competitorSupport,weaknessSupported,retrievalUrls,researchGrowth,GROWTH_DRAFT_SCHEMA,GROWTH_REVIEW_SCHEMA} from "./widget-v2-research";
+import {exactBlock,competitorSupport,weaknessSupported,retrievalUrls,researchGrowth,GROWTH_DRAFT_SCHEMA,GROWTH_REVIEW_SCHEMA,wordingAllowed,approvedProposal} from "./widget-v2-research";
 import {registerWidgetV2Routes,v2Snapshot,researchFailureCode,recoverRequestedWidgetResearch} from "./widget-v2";
 import {assessmentAlertProperties,initialInternalAlert} from "./widget-internal-alert";
 import {LEAD_CAPTURE_NOTICE,privateLeadCapture} from "../shared/widget-lead-capture";
@@ -14,6 +14,25 @@ const pages={1:{url:"https://acmeindustrial.com/",title:"Acme Industrial",text:"
   2:{url:"https://rivalindustrial.com/",title:"Rival Industrial",text:"Rival Industrial supplies industrial equipment to manufacturers in Chicago."}};
 const b={text:"The two businesses serve equipment buyers in Chicago.",evidence:[{source_id:1,quote:pages[1].text},{source_id:2,quote:pages[2].text}]};
 const checks={company_identity_confirmed:true,competitor_identity_confirmed:true,offering_overlap:true,buyer_overlap:true,geographic_overlap:true};
+test("wording guards reject biography-to-targeting and unverified peer superiority",()=>{
+  assert.equal(wordingAllowed("market",{...b,text:"Acme targets nonprofit organizations.",evidence:[
+    {source_id:1,quote:"The founder has led initiatives across nonprofits and government."}]},pages[1].url,pages),false);
+  assert.equal(wordingAllowed("strength",{...b,text:"Acme's report differs, unlike most competing firms.",evidence:[b.evidence[0]]},pages[1].url,pages),false);
+  assert.equal(wordingAllowed("strength",{...b,text:"The company offers a diagnostic before a retainer.",evidence:[b.evidence[0]]},pages[1].url,pages),true);
+});
+test("strategy is a labeled, evidence-based proposal; no invented facts or guarantees",()=>{
+  const proposal={basis:{text:"Acme supplies industrial equipment to manufacturers.",evidence:[b.evidence[0]]},
+    action:"Test an equipment-buyer landing page emphasizing the documented manufacturing offer.",
+    test:"Compare qualified inquiry rate with the measured current page baseline.",
+    assumptions:["Confirm delivery capacity and buyer interest before running the test."]};
+  const review={basis_supported:true,action_linked_to_basis:true,no_invented_company_facts:true,no_unstated_deficit:true,
+    no_guaranteed_outcome:true,test_measurable:true,assumptions_explicit:true};
+  const accepted=approvedProposal(proposal,review,pages);
+  assert.equal(accepted?.kind,"proposed_strategy");assert.match(accepted!.text,/not a verified outcome/);
+  assert.equal(approvedProposal(proposal,{...review,no_unstated_deficit:false},pages),null);
+  assert.equal(approvedProposal({...proposal,action:"This campaign will increase company revenue by 50%."},review,pages),null);
+  assert.equal(approvedProposal({...proposal,basis:{...proposal.basis,evidence:[{source_id:1,quote:"A fabricated statement about existing conversion rates."}]}},review,pages),null);
+});
 test("research diagnostics classify failures without retaining provider messages",()=>{
   assert.equal(researchFailureCode({status:401,message:"secret provider payload"}),"PROVIDER_HTTP_401");
   assert.equal(researchFailureCode({name:"ZodError",issues:[]}),"RESEARCH_FORMAT_INVALID");
@@ -33,6 +52,7 @@ test("competitor must have exact quotes, both entities, offering/buyer and geogr
   assert.deepEqual(exactBlock(b,pages),b);
   assert.equal(exactBlock({...b,evidence:[{source_id:1,quote:"An invented source passage not present on the website."}]},pages),null);
   assert.equal(competitorSupport(b,pages[1].url,pages[2].url,pages,{competitor_checks:checks}),"direct");
+  assert.equal(competitorSupport(b,pages[1].url,pages[2].url,pages,{competitor_checks:checks,competitor_match:"unsupported"}),"unsupported");
   assert.equal(competitorSupport({...b,text:"Potential competitor: Rival Industrial."},pages[1].url,pages[2].url,pages,{competitor_checks:checks}),"potential");
   assert.equal(competitorSupport(b,pages[1].url,pages[2].url,pages,{competitor_checks:{...checks,buyer_overlap:false}}),"unsupported");
   assert.equal(competitorSupport({...b,text:"A direct competitor of Acme Industrial."},pages[1].url,pages[2].url,pages,{competitor_checks:{...checks,geographic_overlap:false}}),"unsupported");
@@ -111,12 +131,13 @@ test("production research provider adapter preserves audit gating and weakness o
       calls++;
       if(calls===1){assert.equal(schema,GROWTH_DRAFT_SCHEMA);return {company_name:"Acme Industrial",identity,summary:[identity],market:identity,competitor:b,competitor_url:pages[2].url,
         strength:identity,weakness:null,opportunity:null,threat:null,strategy:null};}
+      if(calls>2)return null;
       assert.equal(schema,GROWTH_REVIEW_SCHEMA);assert.equal(_tokens,5000);
       return {reviews:["identity","summary_0","market","strength","competitor"].map(key=>({key,supported:true,text:key==="competitor"?b.text:identity.text})),
         competitor_checks:checks,competitor_match:"direct",weakness_check:{deficiency_established:false,basis:"unestablished",logical_error:"none"}};
     },
   });
-  assert.equal(result.competitor_match,"direct");assert.equal(result.weakness,null);assert.equal(calls,2);
+  assert.equal(result.competitor_match,"direct");assert.equal(result.weakness,null);assert.equal(calls,3);
 });
 test("operator-requested recovery runs once and changes only snapshot, never lead, alerts or emails",async()=>{
   const row:any={id:"existing",company_url:pages[1].url,expires_at:new Date(Date.now()+86400000).toISOString(),
@@ -142,6 +163,11 @@ test("operator-requested recovery runs once and changes only snapshot, never lea
   assert.equal(row.snapshot.researchStatus,"ready");assert.equal(row.snapshot.researchRecovery.state,"complete");
   assert.equal(row.snapshot.growth.score,50);assert.equal(JSON.stringify(row.lead_capture),leadBefore);
   await recoverRequestedWidgetResearch({db,research});assert.equal(runs,1);
+  row.snapshot.researchRecovery.state="requested";
+  const previous=structuredClone(row.snapshot.research);
+  await recoverRequestedWidgetResearch({db,research:async()=>{throw Error("provider unavailable")}});
+  assert.equal(row.snapshot.researchStatus,"ready");assert.deepEqual(row.snapshot.research,previous);
+  assert.equal(row.snapshot.researchRecovery.state,"failed");assert.equal(JSON.stringify(row.lead_capture),leadBefore);
 });
 test("malformed research draft gets one schema repair, not a relaxed evidence gate",async()=>{
   let calls=0;const phases:string[]=[];

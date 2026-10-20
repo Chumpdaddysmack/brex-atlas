@@ -78,12 +78,13 @@ function renderResearch(data){
   for(const block of data.summary){const part=document.createElement('div');part.className='summary-claim';renderBlock(part,block,'Public-source finding');$('company-summary').append(part);}
   renderBlock($('market-content'),data.market,'Public-source finding');
   const match=data.competitor_match==='direct'&&/\bpotential competitor\b/i.test(data.competitor?.text||'')?'potential':data.competitor_match;
-  $('competitor-title').textContent=match==='direct'?'One direct competitor':match==='potential'?'One potential competitor':'Competitor not established';
-  renderBlock($('competitor-content'),data.competitor,match==='direct'?'Matched on offering, buyer and geography':'Possible overlap; confirm fit');
+  $('competitor-title').textContent=match==='direct'?'One direct competitor candidate':match==='potential'?'One potential competitor':'Competitor not established';
+  renderBlock($('competitor-content'),data.competitor,match==='direct'?'Offering, buyer and service-market overlap; actual rivalry not verified':'Possible overlap; confirm fit');
   $('swot-content').replaceChildren();
   for(const key of ['strength','weakness','opportunity','threat']){
     const li=document.createElement('li'),label=document.createElement('span'),body=document.createElement('div');
-    label.textContent=key[0].toUpperCase()+key.slice(1);body.dataset.testid=`text-${key}`;renderBlock(body,data[key],'Interpretation');
+    label.textContent=key[0].toUpperCase()+key.slice(1);body.dataset.testid=`text-${key}`;
+    renderBlock(body,data[key],key==='strength'?'Company-described capability':key==='weakness'?'Source-supported limitation':'Hypothesis, not a verified outcome');
     if(key==='weakness'&&!data[key]){
       body.firstElementChild.textContent='Not established from the reviewed public sources.';
       const question=document.createElement('p');question.textContent='Discovery question: Which constraint, if any, currently limits growth?';body.append(question);
@@ -91,6 +92,17 @@ function renderResearch(data){
     li.append(label,body);$('swot-content').append(li);
   }
   renderBlock($('strategy-content'),data.strategy,'Proposed strategy');
+  if(data.strategy?.kind==='proposed_strategy'){
+    renderBlock($('strategy-content'),data.strategy.basis,'Evidence basis');
+    for(const [heading,text] of [['Proposed experiment',data.strategy.action],['How to test it',data.strategy.test],
+      ['Assumptions to confirm',data.strategy.assumptions.join(' ')]]){
+      const h=document.createElement('h3'),p=document.createElement('p');h.textContent=heading;p.textContent=text;
+      $('strategy-content').append(h,p);
+    }
+    const note=document.createElement('p');note.className='helper';
+    note.textContent='This is an automated recommendation to evaluate, not an existing company practice, verified advantage, or promised result.';
+    $('strategy-content').append(note);
+  }
   $('source-details').replaceChildren();
   const timestamp=document.createElement('p');timestamp.textContent=`Researched ${new Date(data.researched_at).toLocaleString()}. ${data.cached?'Reused recent research. ':''}Only retrieved pages are covered.`;$('source-details').append(timestamp);
   for(const text of data.limitations){const p=document.createElement('p');p.textContent=text;$('source-details').append(p);}

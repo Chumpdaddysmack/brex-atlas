@@ -17,6 +17,15 @@
 - Email is requested only after checking snapshot permission; promotional permission stays separate.
 - Discuss My Growth Snapshot opens the established HubSpot meeting page.
 
+## Wording and proposed strategy
+- Market uses explicitly stated current buyers, not the founder's career history.
+- Strength describes a sourced capability without unverified industry-wide superiority.
+- Competitor candidates require both businesses' official evidence of overlapping offering and buyers.
+- Unconfirmed service geography produces a potential label, not an assertion of direct rivalry.
+- Strategy shows Evidence basis, Proposed experiment, How to test it, and Assumptions to confirm.
+- Proposed actions are not presented as current company practices or guaranteed results.
+- Existing ready snapshots survive a failed optional research refresh.
+
 ## Compatibility and launch
 - Verify published email wording, internal workflow recipient and unchanged enrollment.
 - V1 remains reachable at `/excavate-v1`.
