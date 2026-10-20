@@ -76,3 +76,15 @@ The approved copy operator is separate from runtime code; it does not enroll or 
 - TypeScript check and 34 targeted tests passed. This is not yet a successful production research retest.
 - Kenny reports that his run looked successful; asked whether this included company summary, competitor, SWOT and strategy or only the immediate score. Do not dismiss his observation or equate the score screen with completed research.
 - Homepage remains V1. After deployment, retry the existing receipt rather than creating a fresh inquiry; verify resulting research and requested email before cutover.
+
+## October 20 wording and recommendation revision
+
+- `591523e` recovered Brex research successfully at 15:12 UTC. It preserved readiness 75 and did not send emails.
+- Kenny approved correcting market/strength wording and refining competitor/strategy checks.
+- `a686e4f` now narrows targeting to current explicit buyers, disallows biography-to-targeting inference and unverified company-only superiority.
+- Competitor recovery is schema-constrained and separately reviewed against both official sources. Potential vs direct-candidate labels preserve geography and actual-rivalry uncertainty.
+- A separate strategy proposal/review path distinguishes a cited factual basis from a conditional action, measurable test and assumptions; no invented deficits, metrics, offerings or promised results.
+- A failed refresh of a ready result preserves the previous research. No contact/alert/email changes.
+- Typecheck, build, 38 targeted tests and desktop/mobile fixture QA pass; production retest pending.
+- One exact saved Brex snapshot (`4000c425-3394-4ee7-9bd4-fea38be5225a`) has a requested one-shot research refresh.
+- As of 18:21 UTC, main is a686e4f but Railway has not registered a deployment or commit status for it; production still serves the previous frontend. Do not describe these changes as live or change the homepage default until deployed and verified.
