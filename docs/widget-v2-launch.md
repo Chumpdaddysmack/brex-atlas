@@ -88,3 +88,13 @@ The approved copy operator is separate from runtime code; it does not enroll or 
 - Typecheck, build, 38 targeted tests and desktop/mobile fixture QA pass; production retest pending.
 - One exact saved Brex snapshot (`4000c425-3394-4ee7-9bd4-fea38be5225a`) has a requested one-shot research refresh.
 - As of 18:21 UTC, main is a686e4f but Railway has not registered a deployment or commit status for it; production still serves the previous frontend. Do not describe these changes as live or change the homepage default until deployed and verified.
+
+## October 22 post-rotation research-only check
+
+- Kenny created the October 22 workspace-scoped Claude key, installed it in Railway and confirmed disabling the October 13 key.
+- `6121677` deployed successfully and completed research at 20:29 UTC with a potential competitor and proposed strategy.
+- Kenny subsequently explicitly requested a fresh check without another prospect email or internal alert. This checkpoint triggers the existing one-shot startup recovery, not a homepage cutover.
+- Reuse snapshot `4000c425-3394-4ee7-9bd4-fea38be5225a`; do not create a new capture or email request.
+- Baseline: 26 snapshots; this snapshot has 0 email requests; private-capture fingerprint `879b3d86f744dadee4070e499ebed611`.
+- Internal alert was already queued at October 19 23:03:19.344 UTC; its state and timestamp must remain unchanged.
+- No functional code change. `WIDGET_V2_DEFAULT=false` remains in place.
