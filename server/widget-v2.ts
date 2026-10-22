@@ -9,8 +9,9 @@ import {growthAnswersSchema,growthAssessment} from "../shared/widget-growth";
 import {leadCaptureSchema,privateLeadCapture} from "../shared/widget-lead-capture";
 import {initialInternalAlert,internalAlertStatus} from "./widget-internal-alert";
 
-// Kept false until provider, email and live routing checks pass.
-export const WIDGET_V2_DEFAULT=false;
+// Homepage cutover approved October 22 after the post-rotation research-only check.
+// /excavate-v1 remains an explicit fallback regardless of this default.
+export const WIDGET_V2_DEFAULT=true;
 const requestSchema=z.object({website:z.string().max(300),answers:growthAnswersSchema,capture:leadCaptureSchema,
   resumeToken:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict();
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");

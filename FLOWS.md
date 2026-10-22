@@ -1,7 +1,7 @@
 # Widget V2 deployment checks
 
 ## Current production baseline
-- Homepage embeds `/widget`, currently the V1 marketing-health form.
+- Homepage embeds `/widget`; after the approved cutover this serves Growth Snapshot V2.
 - V1 has required inquiry fields, assessment, source research, internal alert, ten-day results and separately requested email.
 - Paid Atlas report routes, executive exports and authentication are unchanged by the widget release.
 
@@ -29,10 +29,12 @@
 ## Compatibility and launch
 - Verify published email wording, internal workflow recipient and unchanged enrollment.
 - V1 remains reachable at `/excavate-v1`.
-- Stage at `/excavate-v2` first; keep default false until production research and delivery checks pass.
+- `/widget`, `/widget.html` and `/excavate` serve V2 after cutover; `/excavate-v1` preserves V1.
 - Verify the homepage iframe displays V2 only after the final switch.
 - Backend authentication and paid report app landing still load; no new paid-report generation or export is part of this change.
 
 ## Limits of completed checks
 - Local browser fixtures and 127 tests passed before deployment; 12 database-dependent tests skipped.
-- These do not prove production model responses, CRM receipt handling or actual email arrival.
+- Production research-only check completed October 22 at 22:38:16 UTC after old Claude key was disabled.
+- Private contact capture fingerprint, existing alert timestamp, 0 email requests, and 26 total snapshots remained unchanged.
+- Delivery configuration checks passed; no new email or notification was sent for this cutover.

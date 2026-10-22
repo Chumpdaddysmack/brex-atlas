@@ -98,3 +98,12 @@ The approved copy operator is separate from runtime code; it does not enroll or 
 - Baseline: 26 snapshots; this snapshot has 0 email requests; private-capture fingerprint `879b3d86f744dadee4070e499ebed611`.
 - Internal alert was already queued at October 19 23:03:19.344 UTC; its state and timestamp must remain unchanged.
 - No functional code change. `WIDGET_V2_DEFAULT=false` remains in place.
+
+## October 22 homepage cutover
+
+- Post-rotation check passed at 22:38:16 UTC on release `bc3dc05`.
+- Snapshot count remained 26; email requests for the test stayed 0; capture fingerprint and October 19 alert timestamp were unchanged.
+- Kenny then explicitly approved switching the homepage to V2 (“lets do it”).
+- Only routing default changes from false to true. Existing homepage iframe is `/widget`; no WordPress edit required.
+- Preserve `/excavate-v1` and remote backup tag. No fresh form submission, email request, notification or database migration for this cutover.
+- Deployment and fresh desktop/mobile homepage verification must complete before reporting live.
