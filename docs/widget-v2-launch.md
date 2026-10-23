@@ -107,3 +107,12 @@ The approved copy operator is separate from runtime code; it does not enroll or 
 - Only routing default changes from false to true. Existing homepage iframe is `/widget`; no WordPress edit required.
 - Preserve `/excavate-v1` and remote backup tag. No fresh form submission, email request, notification or database migration for this cutover.
 - Deployment and fresh desktop/mobile homepage verification must complete before reporting live.
+
+## October 23 Perplexity credential verification
+
+- Kenny reported deploying a replacement `PERPLEXITY_API_KEY` after the Railway security incident.
+- Use the existing one-shot research recovery on the owner's saved Brex snapshot, without a new lead or email request.
+- Baseline snapshot count: 27. Owner snapshot email requests: 0. Existing private-capture fingerprint and alert timestamp remain the same as the October 22 baseline.
+- This documentation-only checkpoint restarts the service to invoke that recovery. No application code, homepage routing, workflow or credential value is changed here.
+- A completed fresh research run requires the production Perplexity discovery response; static page/configuration readiness alone is not provider-key verification.
+- Old Perplexity key revocation remains pending user action after this check.
